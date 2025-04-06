@@ -3570,8 +3570,7 @@ bool can_depart(convoihandle_t cnv, halthandle_t halt, uint32 arrived_time, uint
 		if(  arrived_time==0  ) {
 			// arrived_time is not registered for some reasons. replace it to the current ticks.
 			arrived_time = world()->get_ticks();
-			cnv->set_arrived_time(arrived_time);
-			dbg->warning("can_depart", "%s: arrived time is not registered. replaced to %u", cnv->get_name(), arrived_time);
+			dbg->error("can_depart", "%s: arrived time is not registered. replaced to %u", cnv->get_name(), arrived_time);
 		}
 		// consider spacing
 		// subtract wait_lock (time_to_load) from spacing_shift
