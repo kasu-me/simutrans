@@ -317,7 +317,7 @@ protected:
 public:
 	tool_build_way_t(uint16 const id = TOOL_BUILD_WAY | GENERAL_TOOL) : two_click_tool_t(id), desc() {
 		overtaking_mode = twoway_mode;
-		street_flag = 0;
+		street_flag = 1;
 		height_offset = 0;
 		vehicle_offset = 0;
 	 }
