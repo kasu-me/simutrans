@@ -1376,7 +1376,7 @@ void vehicle_t::calc_friction(const grund_t *gr)
 
 	// curve: higher friction
 	if(previous_direction != direction) {
-		current_friction = 8;
+		current_friction = 3;
 	}
 
 	// or a hill?
@@ -1388,7 +1388,7 @@ void vehicle_t::calc_friction(const grund_t *gr)
 			if(  env_t::use_old_friction  ) {
 				current_friction += 23 * slope_height * slope_height * TILE_HEIGHT_STEP * TILE_HEIGHT_STEP / (16*16);
 			} else {
-				current_friction += 15 * slope_height * slope_height;
+				current_friction += 4 * slope_height * slope_height;
 			}
 		}
 		else {
@@ -1396,7 +1396,7 @@ void vehicle_t::calc_friction(const grund_t *gr)
 			if(  env_t::use_old_friction  ) {
 				current_friction += -13 * slope_height * slope_height * TILE_HEIGHT_STEP * TILE_HEIGHT_STEP / (16*16);
 			} else {
-				current_friction += -7 * slope_height * slope_height;
+				current_friction += -2 * slope_height * slope_height;
 			}
 		}
 	}
