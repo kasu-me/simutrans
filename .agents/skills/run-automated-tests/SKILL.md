@@ -2,7 +2,7 @@
 name: run-automated-tests
 description: Run automated tests for Simutrans OTRP, build the project, and look up pak assets.
 argument-hint: "[test_name] (optional - specific test function to run)"
-allowed-tools: Bash(make *), Bash(WORKDIR=* SIM_BINARY=* tests/run-automated-tests.sh *), Bash(WORKDIR=* SIM_BINARY=* ./sim *), Bash(timeout *), Bash(cp *), Bash(cat *)
+allowed-tools: Bash(MSYSTEM=* /c/msys64/usr/bin/bash.exe *), Bash(WORKDIR=* SIM_BINARY=* tests/run-automated-tests.sh *), Bash(WORKDIR=* SIM_BINARY=* ./sim *), Bash(timeout *), Bash(cp *), Bash(cat *)
 ---
 
 # Run Automated Tests
@@ -11,7 +11,7 @@ You run automated tests for Simutrans OTRP.
 
 ## Basic Commands
 
-- **Build**: `make -j8`
+- **Build**: `MSYSTEM=MINGW64 /c/msys64/usr/bin/bash.exe -lc "cd '$(pwd)' && make -j32"`
 - **Run single test**: `WORKDIR=${SIMUTRANS_TEST_BASE} SIM_BINARY=./sim tests/run-automated-tests.sh <test_func_name>`
 - **Run all tests**: `WORKDIR=${SIMUTRANS_TEST_BASE} SIM_BINARY=./sim tests/run-automated-tests.sh`
 
