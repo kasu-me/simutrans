@@ -48,7 +48,7 @@ bool curiositylist_stats_t::compare(const gui_component_t *aa, const gui_compone
 		{
 			const char* a_name = translator::translate(a->get_tile()->get_desc()->get_name());
 			const char* b_name = translator::translate(b->get_tile()->get_desc()->get_name());
-			cmp = STRICMP(a_name, b_name);
+			cmp = natural_stricmp(a_name, b_name);
 			break;
 		}
 	}

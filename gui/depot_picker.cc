@@ -17,6 +17,7 @@
 #include "../dataobj/translator.h"
 #include "../descriptor/skin_desc.h"
 #include "../utils/cbuffer_t.h"
+#include "../utils/simstring.h"
 #include "../boden/wege/weg.h"
 #include "../unicode.h"
 
@@ -172,8 +173,8 @@ bool depot_picker_item_t::compare(const gui_component_t *aa, const gui_component
 			break;
 	}
 	// Secondary / default: sort by name
-	return strcmp(translator::translate(fa->depot->get_name()),
-	              translator::translate(fb->depot->get_name())) < 0;
+	return natural_strcmp(translator::translate(fa->depot->get_name()),
+	                      translator::translate(fb->depot->get_name())) < 0;
 }
 
 

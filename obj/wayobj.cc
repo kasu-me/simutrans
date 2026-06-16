@@ -415,7 +415,7 @@ static bool compare_wayobj_desc(const way_obj_desc_t* a, const way_obj_desc_t* b
 	}
 	if (diff == 0) {
 		/* Some speed: sort by name */
-		diff = strcmp(a->get_name(), b->get_name());
+		diff = natural_strcmp(a->get_name(), b->get_name());
 	}
 	return diff < 0;
 }

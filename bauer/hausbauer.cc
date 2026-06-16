@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "../descriptor/building_desc.h"
+#include "../utils/simstring.h"
 #include "../descriptor/skin_desc.h"
 #include "../descriptor/spezial_obj_tpl.h"
 
@@ -83,7 +84,7 @@ static bool compare_building_desc(const building_desc_t* a, const building_desc_
 	int diff = a->get_level() - b->get_level();
 	if (diff == 0) {
 		/* As a last resort, sort by name to avoid ambiguity */
-		diff = strcmp(a->get_name(), b->get_name());
+		diff = natural_strcmp(a->get_name(), b->get_name());
 	}
 	return diff < 0;
 }
@@ -105,7 +106,7 @@ static bool compare_hq_desc(const building_desc_t* a, const building_desc_t* b)
 	}
 	if (diff == 0) {
 		/* As a last resort, sort by name to avoid ambiguity */
-		diff = strcmp(a->get_name(), b->get_name());
+		diff = natural_strcmp(a->get_name(), b->get_name());
 	}
 	return diff < 0;
 }
@@ -131,7 +132,7 @@ static bool compare_station_desc(const building_desc_t* a, const building_desc_t
 	}
 	if(  diff == 0  ) {
 		/* As a last resort, sort by name to avoid ambiguity */
-		diff = strcmp(a->get_name(), b->get_name());
+		diff = natural_strcmp(a->get_name(), b->get_name());
 	}
 	return diff < 0;
 }

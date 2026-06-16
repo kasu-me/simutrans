@@ -19,6 +19,7 @@
 #include "../descriptor/intro_dates.h"
 
 #include "../dataobj/translator.h"
+#include "../utils/simstring.h"
 
 #include "citybuilding_edit.h"
 #include "components/gui_label.h"
@@ -33,12 +34,12 @@ bool citybuilding_edit_frame_t::sortreverse = false;
 
 static bool compare_building_desc(const building_desc_t* a, const building_desc_t* b)
 {
-	int diff = strcmp( a->get_name(), b->get_name() );
+	int diff = natural_strcmp( a->get_name(), b->get_name() );
 	return citybuilding_edit_frame_t::sortreverse ? diff > 0 : diff < 0;
 }
 static bool compare_building_desc_name(const building_desc_t* a, const building_desc_t* b)
 {
-	int diff = strcmp( translator::translate(a->get_name()), translator::translate(b->get_name()) );
+	int diff = natural_strcmp( translator::translate(a->get_name()), translator::translate(b->get_name()) );
 	if(  diff==0  ) {
 		diff = strcmp(a->get_name(), b->get_name());
 	}

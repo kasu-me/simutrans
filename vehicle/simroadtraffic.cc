@@ -8,6 +8,7 @@
 #include "../simmesg.h"
 #include "../simworld.h"
 #include "../utils/simrandom.h"
+#include "../utils/simstring.h"
 #include "../display/simimg.h"
 #include "../display/viewport.h"
 #include "../simunits.h"
@@ -268,7 +269,7 @@ static bool compare_stadtauto_desc(const citycar_desc_t* a, const citycar_desc_t
 	if (diff == 0) {
 		/* same Level - we introduce an artificial, but unique resort
 		 * on the induced name. */
-		diff = strcmp(a->get_name(), b->get_name());
+		diff = natural_strcmp(a->get_name(), b->get_name());
 	}
 	return diff < 0;
 }

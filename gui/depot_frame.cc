@@ -137,7 +137,7 @@ private:
 			default: // sb_name and unsupported modes
 				break;
 		}
-		return strcmp(translator::translate(a.tmpl->name.c_str()), translator::translate(b.tmpl->name.c_str())) < 0;
+		return natural_strcmp(translator::translate(a.tmpl->name.c_str()), translator::translate(b.tmpl->name.c_str())) < 0;
 	}
 
 public:

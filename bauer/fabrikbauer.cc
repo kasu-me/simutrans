@@ -12,6 +12,7 @@
 #include "../simfab.h"
 #include "../simmesg.h"
 #include "../utils/simrandom.h"
+#include "../utils/simstring.h"
 #include "../simcity.h"
 #include "../simhalt.h"
 #include "../player/simplay.h"
@@ -210,7 +211,7 @@ stringhashtable_tpl<const factory_desc_t *> factory_builder_t::desc_table;
  */
 static bool compare_fabrik_desc(const factory_desc_t* a, const factory_desc_t* b)
 {
-	const int diff = strcmp( a->get_name(), b->get_name() );
+	const int diff = natural_strcmp( a->get_name(), b->get_name() );
 	return diff < 0;
 }
 

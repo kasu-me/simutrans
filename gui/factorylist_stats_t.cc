@@ -141,7 +141,7 @@ bool factorylist_stats_t::compare(const gui_component_t *aa, const gui_component
 			break;
 		case factorylist::by_desc_name:
 		{	
-			cmp = STRICMP(translator::translate(a->get_desc()->get_name()), translator::translate(b->get_desc()->get_name()));
+			cmp = natural_stricmp(translator::translate(a->get_desc()->get_name()), translator::translate(b->get_desc()->get_name()));
 			break;
 		}
 		case factorylist::by_input:
@@ -189,7 +189,7 @@ bool factorylist_stats_t::compare(const gui_component_t *aa, const gui_component
 			break;
 	}
 	if (cmp == 0) {
-		cmp = STRICMP(a->get_name(), b->get_name());
+		cmp = natural_stricmp(a->get_name(), b->get_name());
 	}
 	return reverse ? cmp > 0 : cmp < 0;
 }

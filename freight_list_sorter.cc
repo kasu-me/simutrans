@@ -14,6 +14,7 @@
 #include "simworld.h"
 
 #include "dataobj/translator.h"
+#include "utils/simstring.h"
 
 #include "tpl/slist_tpl.h"
 #include "tpl/vector_tpl.h"
@@ -60,7 +61,7 @@ bool freight_list_sorter_t::compare_ware(ware_t const& w1, ware_t const& w2)
 			halthandle_t const v1 = w1.get_zwischenziel();
 			halthandle_t const v2 = w2.get_zwischenziel();
 			if(  v1.is_bound() && v2.is_bound()  ) {
-				int const order = strcmp(v1->get_name(), v2->get_name());
+				int const order = natural_strcmp(v1->get_name(), v2->get_name());
 				if(  order != 0) return order < 0;
 			}
 			else if(  v1.is_bound()  ) {
@@ -79,7 +80,7 @@ bool freight_list_sorter_t::compare_ware(ware_t const& w1, ware_t const& w2)
 				const fabrik_t *fab = NULL;
 				const char *const name1 = ( w1.to_factory ? ( (fab=fabrik_t::get_fab(w1.get_zielpos())) ? fab->get_name() : "Invalid Factory" ) : d1->get_name() );
 				const char *const name2 = ( w2.to_factory ? ( (fab=fabrik_t::get_fab(w2.get_zielpos())) ? fab->get_name() : "Invalid Factory" ) : d2->get_name() );
-				return strcmp(name1, name2) < 0;
+				return natural_strcmp(name1, name2) < 0;
 			}
 			else if(  d1.is_bound()  ) {
 				return false;

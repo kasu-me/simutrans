@@ -56,7 +56,7 @@ bool labellist_stats_t::compare(const gui_component_t *aa, const gui_component_t
 		const char* a_name = a->get_text();
 		const char* b_name = b->get_text();
 
-		cmp = strcmp(a_name, b_name);
+		cmp = natural_strcmp(a_name, b_name);
 	}
 	return sortreverse ? cmp > 0 : cmp < 0;
 }

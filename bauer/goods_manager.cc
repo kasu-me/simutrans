@@ -10,6 +10,7 @@
 #include "../simcolor.h"
 #include "goods_manager.h"
 #include "../dataobj/translator.h"
+#include "../utils/simstring.h"
 
 
 stringhashtable_tpl<const goods_desc_t *> goods_manager_t::desc_table;
@@ -109,7 +110,7 @@ bool goods_manager_t::successfully_loaded()
 
 static bool compare_ware_desc(const goods_desc_t* a, const goods_desc_t* b)
 {
-	int diff = strcmp(a->get_name(), b->get_name());
+	int diff = natural_strcmp(a->get_name(), b->get_name());
 	return diff < 0;
 }
 

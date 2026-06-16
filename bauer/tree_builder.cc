@@ -10,6 +10,7 @@
 #include "../obj/groundobj.h"
 #include "../simworld.h"
 #include "../utils/simrandom.h"
+#include "../utils/simstring.h"
 
 #include <cmath>
 
@@ -218,7 +219,7 @@ void tree_builder_t::fill_trees(int dichte, sint16 xtop, sint16 ytop, sint16 xbo
 static bool compare_tree_desc(const tree_desc_t *a, const tree_desc_t *b)
 {
 	// same level - we do an artificial but unique sorting by (untranslated) name
-	return strcmp(a->get_name(), b->get_name())<0;
+	return natural_strcmp(a->get_name(), b->get_name())<0;
 }
 
 

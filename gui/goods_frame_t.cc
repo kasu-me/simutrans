@@ -13,6 +13,7 @@
 #include "../bauer/vehikelbauer.h"
 #include "../descriptor/goods_desc.h"
 #include "../dataobj/translator.h"
+#include "../utils/simstring.h"
 
 #include "../simcolor.h"
 #include "simwin.h"
@@ -180,7 +181,7 @@ bool goods_frame_t::compare_goods(goods_desc_t const* const w1, goods_desc_t con
 	}
 	if(  order==0  ) {
 		// sort by name if not sorted or not unique
-		order = strcmp(translator::translate(w1->get_name()), translator::translate(w2->get_name()));
+		order = natural_strcmp(translator::translate(w1->get_name()), translator::translate(w2->get_name()));
 	}
 	return sortreverse ? order > 0 : order < 0;
 }

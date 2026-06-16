@@ -35,12 +35,12 @@ bool factory_edit_frame_t::sortreverse = false;
 
 static bool compare_factory_desc(const factory_desc_t* a, const factory_desc_t* b)
 {
-	int diff = strcmp( a->get_name(), b->get_name() );
+	int diff = natural_strcmp( a->get_name(), b->get_name() );
 	return factory_edit_frame_t::sortreverse ? diff > 0 : diff < 0;
 }
 static bool compare_factory_desc_name(const factory_desc_t* a, const factory_desc_t* b)
 {
-	int diff = strcmp( translator::translate(a->get_name()), translator::translate(b->get_name()) );
+	int diff = natural_strcmp( translator::translate(a->get_name()), translator::translate(b->get_name()) );
 	if(  diff==0  ) {
 		diff = strcmp(a->get_name(), b->get_name());
 	}

@@ -695,5 +695,5 @@ std::string savegame_frame_t::get_filename(const char *fullpath,const bool with_
 
 bool savegame_frame_t::compare_items ( const dir_entry_t & entry, const char *, const char *name )
 {
-	return (strcmp(name, entry.button->get_text()) < 0);
+	return (natural_strcmp(name, entry.button->get_text()) < 0);
 }

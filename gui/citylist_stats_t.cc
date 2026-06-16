@@ -12,6 +12,7 @@
 #include "../dataobj/translator.h"
 
 #include "../utils/cbuffer_t.h"
+#include "../utils/simstring.h"
 
 
 citylist_stats_t::citylist_stats_t(stadt_t *c)
@@ -113,27 +114,7 @@ bool citylist_stats_t::compare(const gui_component_t *aa, const gui_component_t 
 		// default sorting ...
 	}
 
-	// first: try to sort by number
-	const char *atxt =a->get_text();
-	int aint = 0;
-	// isdigit produces with UTF8 assertions ...
-	if(  atxt[0]>='0'  &&  atxt[0]<='9'  ) {
-		aint = atoi( atxt );
-	}
-	else if(  atxt[0]=='('  &&  atxt[1]>='0'  &&  atxt[1]<='9'  ) {
-		aint = atoi( atxt+1 );
-	}
+	const char *atxt = a->get_text();
 	const char *btxt = b->get_text();
-	int bint = 0;
-	if(  btxt[0]>='0'  &&  btxt[0]<='9'  ) {
-		bint = atoi( btxt );
-	}
-	else if(  btxt[0]=='('  &&  btxt[1]>='0'  &&  btxt[1]<='9'  ) {
-		bint = atoi( btxt+1 );
-	}
-	if(  aint!=bint  ) {
-		return (aint-bint)<0;
-	}
-	// otherwise: sort by name
-	return strcmp(atxt, btxt)<0;
+	return natural_strcmp(atxt, btxt)<0;
 }

@@ -16,6 +16,7 @@
 #include "../dataobj/translator.h"
 
 #include "../utils/cbuffer_t.h"
+#include "../utils/simstring.h"
 
 
 #include "curiosity_edit.h"
@@ -31,12 +32,12 @@ bool curiosity_edit_frame_t::sortreverse = false;
 
 static bool compare_building_desc(const building_desc_t* a, const building_desc_t* b)
 {
-	int diff = strcmp( a->get_name(), b->get_name() );
+	int diff = natural_strcmp( a->get_name(), b->get_name() );
 	return curiosity_edit_frame_t::sortreverse ? diff > 0 : diff < 0;
 }
 static bool compare_building_desc_name(const building_desc_t* a, const building_desc_t* b)
 {
-	int diff = strcmp( translator::translate(a->get_name()), translator::translate(b->get_name()) );
+	int diff = natural_strcmp( translator::translate(a->get_name()), translator::translate(b->get_name()) );
 	if(  diff==0  ) {
 		diff = strcmp(a->get_name(), b->get_name());
 	}

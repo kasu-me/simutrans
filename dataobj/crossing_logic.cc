@@ -15,6 +15,7 @@
 #include "../descriptor/crossing_desc.h"
 
 #include "../utils/cbuffer_t.h"
+#include "../utils/simstring.h"
 
 #include "../tpl/slist_tpl.h"
 
@@ -200,7 +201,7 @@ int compare_crossing(const crossing_desc_t *c0, const crossing_desc_t *c1)
 		diff = c1->get_maxspeed(1) - c0->get_maxspeed(1);
 	}
 	if (diff==0) {
-		diff = strcmp(c0->get_name(), c1->get_name());
+		diff = natural_strcmp(c0->get_name(), c1->get_name());
 	}
 	return diff;
 }

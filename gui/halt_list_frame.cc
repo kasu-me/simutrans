@@ -17,6 +17,7 @@
 #include "../simline.h"
 #include "../simconvoi.h"
 #include "../unicode.h"
+#include "../utils/simstring.h"
 #include "simwin.h"
 #include "../descriptor/skin_desc.h"
 
@@ -171,7 +172,7 @@ bool halt_list_frame_t::compare_halts(halthandle_t const halt1, halthandle_t con
 	 * use name as an additional sort, to make sort more stable.
 	 */
 	if(order == 0) {
-		order = strcmp(halt1->get_name(), halt2->get_name());
+		order = natural_strcmp(halt1->get_name(), halt2->get_name());
 	}
 	/***********************************
 	 * Consider sorting order

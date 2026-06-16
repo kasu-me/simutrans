@@ -811,7 +811,7 @@ static bool compare_roadsign_desc(const roadsign_desc_t* a, const roadsign_desc_
 	}
 	if (diff == 0) {
 		/* Some type: sort by name */
-		diff = strcmp(a->get_name(), b->get_name());
+		diff = natural_strcmp(a->get_name(), b->get_name());
 	}
 	return diff < 0;
 }

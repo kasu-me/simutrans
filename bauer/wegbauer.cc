@@ -43,6 +43,7 @@
 #include "../dataobj/scenario.h"
 
 #include "../utils/simrandom.h"
+#include "../utils/simstring.h"
 
 // binary heap, since we only need insert and pop
 #include "../tpl/binary_heap_tpl.h" // fastest
@@ -287,7 +288,7 @@ static bool compare_ways(const way_desc_t* a, const way_desc_t* b)
 		cmp = (int)a->get_intro_year_month() - (int)b->get_intro_year_month();
 	}
 	if(cmp==0) {
-		cmp = strcmp(a->get_name(), b->get_name());
+		cmp = natural_strcmp(a->get_name(), b->get_name());
 	}
 	return cmp<0;
 }

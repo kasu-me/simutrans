@@ -7876,7 +7876,7 @@ void karte_t::network_disconnect()
 
 static bool sort_ware_by_name(const goods_desc_t* a, const goods_desc_t* b)
 {
-	int diff = strcmp(translator::translate(a->get_name()), translator::translate(b->get_name()));
+	int diff = natural_strcmp(translator::translate(a->get_name()), translator::translate(b->get_name()));
 	return diff < 0;
 }
 

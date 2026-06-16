@@ -137,14 +137,14 @@ class gui_halt_detail_t : public gui_aligned_container_t, private action_listene
 private:
 	static bool compare_connection(haltestelle_t::connection_t const& a, haltestelle_t::connection_t const& b)
 	{
-		return strcmp(a.halt->get_name(), b.halt->get_name()) <=0;
+		return natural_strcmp(a.halt->get_name(), b.halt->get_name()) <=0;
 	}
 
 	static bool compare_line (linehandle_t a, linehandle_t b)
 	{
 		return a->get_linetype() == b->get_linetype() ?
-			strcmp(a->get_name(), b->get_name()) <= 0
-			: strcmp(a->get_linetype_name(a->get_linetype()), b->get_linetype_name(b->get_linetype())) <= 0;
+			natural_strcmp(a->get_name(), b->get_name()) <= 0
+			: natural_strcmp(a->get_linetype_name(a->get_linetype()), b->get_linetype_name(b->get_linetype())) <= 0;
 	}
 
 	uint32 cached_line_count;

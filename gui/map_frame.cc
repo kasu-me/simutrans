@@ -21,6 +21,7 @@
 #include "../bauer/goods_manager.h"
 #include "../dataobj/environment.h"
 #include "../dataobj/translator.h"
+#include "../utils/simstring.h"
 #include "../dataobj/koord.h"
 #include "../dataobj/loadsave.h"
 #include "../descriptor/factory_desc.h"
@@ -404,7 +405,7 @@ static bool compare_factories(const factory_desc_t *const a, const factory_desc_
 	}
 	else {
 		// both of same type, sort by name
-		return strcmp(translator::translate(a->get_name()), translator::translate(b->get_name())) < 0;
+		return natural_strcmp(translator::translate(a->get_name()), translator::translate(b->get_name())) < 0;
 	}
 }
 

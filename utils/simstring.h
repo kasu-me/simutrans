@@ -117,6 +117,19 @@ char const* strstart(char const* str, char const* start);
  */
 static inline bool strempty(char const* const s) { return !s || s[0] == '\0'; }
 
+/**
+ * Natural sort comparison: compares strings with embedded numbers numerically,
+ * so "item2" < "item10" rather than "item10" < "item2".
+ * @return negative if a < b, zero if equal, positive if a > b
+ */
+int natural_strcmp(const char* a, const char* b);
+
+/**
+ * Case-insensitive natural sort comparison.
+ * @return negative if a < b, zero if equal, positive if a > b
+ */
+int natural_stricmp(const char* a, const char* b);
+
 std::string str_get_filename(const char* fullpath, const bool with_extension);
 
 std::string str_get_basename(const char* fullpath);

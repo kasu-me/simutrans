@@ -8,6 +8,7 @@
 #include "../player/simplay.h"
 #include "../simdebug.h"
 #include "../utils/simrandom.h"
+#include "../utils/simstring.h"
 #include "../simtypes.h"
 
 #include "../dataobj/environment.h"
@@ -276,7 +277,7 @@ bool vehicle_builder_t::compare_vehicles(const vehicle_desc_t* a, const vehicle_
 			if (cmp != 0) return cmp < 0;
 			break;
 		case sb_name:
-			cmp = strcmp(translator::translate(a->get_name()), translator::translate(b->get_name()));
+			cmp = natural_strcmp(translator::translate(a->get_name()), translator::translate(b->get_name()));
 			if (cmp != 0) return cmp < 0;
 			break;
 		case sb_price:
@@ -337,7 +338,7 @@ bool vehicle_builder_t::compare_vehicles(const vehicle_desc_t* a, const vehicle_
 	if (cmp != 0) return cmp < 0;
 	cmp = compare_intro_year_month(a, b);
 	if (cmp != 0) return cmp < 0;
-	cmp = strcmp(translator::translate(a->get_name()), translator::translate(b->get_name()));
+	cmp = natural_strcmp(translator::translate(a->get_name()), translator::translate(b->get_name()));
 	return cmp < 0;
 }
 

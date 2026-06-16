@@ -6,6 +6,8 @@
 #include "simstring.h"
 
 #include <assert.h>
+#include <ctype.h>
+#include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 
@@ -303,6 +305,64 @@ std::string str_get_filename(const char* fullpath, const bool with_extension)
 	return path;
 }
 
+
+
+int natural_strcmp(const char* a, const char* b)
+{
+	for (;;) {
+		if (*a == '\0') return *b == '\0' ? 0 : -1;
+		if (*b == '\0') return 1;
+
+		if (isdigit((unsigned char)*a) && isdigit((unsigned char)*b)) {
+			int za = 0, zb = 0;
+			while (a[za] == '0') za++;
+			while (b[zb] == '0') zb++;
+
+			char* ea;
+			char* eb;
+			unsigned long na = strtoul(a, &ea, 10);
+			unsigned long nb = strtoul(b, &eb, 10);
+			if (na != nb) return (na < nb) ? -1 : 1;
+			if (za != zb) return (za > zb) ? -1 : 1;
+			a = ea;
+			b = eb;
+		}
+		else {
+			unsigned char ca = (unsigned char)*a++;
+			unsigned char cb = (unsigned char)*b++;
+			if (ca != cb) return (int)ca - (int)cb;
+		}
+	}
+}
+
+
+int natural_stricmp(const char* a, const char* b)
+{
+	for (;;) {
+		if (*a == '\0') return *b == '\0' ? 0 : -1;
+		if (*b == '\0') return 1;
+
+		if (isdigit((unsigned char)*a) && isdigit((unsigned char)*b)) {
+			int za = 0, zb = 0;
+			while (a[za] == '0') za++;
+			while (b[zb] == '0') zb++;
+
+			char* ea;
+			char* eb;
+			unsigned long na = strtoul(a, &ea, 10);
+			unsigned long nb = strtoul(b, &eb, 10);
+			if (na != nb) return (na < nb) ? -1 : 1;
+			if (za != zb) return (za > zb) ? -1 : 1;
+			a = ea;
+			b = eb;
+		}
+		else {
+			unsigned char ca = (unsigned char)tolower((unsigned char)*a++);
+			unsigned char cb = (unsigned char)tolower((unsigned char)*b++);
+			if (ca != cb) return (int)ca - (int)cb;
+		}
+	}
+}
 
 
 /**

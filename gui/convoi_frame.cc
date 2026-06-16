@@ -138,7 +138,7 @@ bool convoi_frame_t::compare_convois(convoihandle_t const cnv1, convoihandle_t c
 	switch (sortby) {
 		default:
 		case nach_name:
-			result = strcmp(cnv1->get_internal_name(), cnv2->get_internal_name());
+			result = natural_strcmp(cnv1->get_internal_name(), cnv2->get_internal_name());
 			break;
 		case nach_gewinn:
 			result = sgn(cnv1->get_jahresgewinn() - cnv2->get_jahresgewinn());

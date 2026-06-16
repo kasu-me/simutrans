@@ -43,7 +43,7 @@ struct entry_t {
 
 static bool entry_cmp(entry_t a, entry_t b)
 {
-	return strcmp(a.name, b.name) < 0;
+	return natural_strcmp(a.name, b.name) < 0;
 }
 
 

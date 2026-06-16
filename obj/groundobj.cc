@@ -35,7 +35,7 @@ stringhashtable_tpl<groundobj_desc_t *> groundobj_t::desc_table;
 
 bool compare_groundobj_desc(const groundobj_desc_t* a, const groundobj_desc_t* b)
 {
-	return strcmp(a->get_name(), b->get_name())<0;
+	return natural_strcmp(a->get_name(), b->get_name())<0;
 }
 
 // total number of groundobj for a certain climate

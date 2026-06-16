@@ -6,6 +6,7 @@
 #include <stdio.h>
 
 #include "../simdebug.h"
+#include "../utils/simstring.h"
 
 #include "tunnelbauer.h"
 
@@ -104,7 +105,7 @@ static bool compare_tunnels(const tunnel_desc_t* a, const tunnel_desc_t* b)
 		cmp = (int)a->get_intro_year_month() - (int)b->get_intro_year_month();
 	}
 	if(cmp==0) {
-		cmp = strcmp(a->get_name(), b->get_name());
+		cmp = natural_strcmp(a->get_name(), b->get_name());
 	}
 	return cmp<0;
 }
