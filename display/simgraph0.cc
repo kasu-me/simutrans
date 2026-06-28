@@ -185,6 +185,14 @@ void display_base_img(const image_id, scr_coord_val, scr_coord_val, const sint8,
 {
 }
 
+void display_color_img_line(const image_id, scr_coord_val, scr_coord_val, const uint8, const sint8, const bool, const bool  CLIP_NUM_DEF_NOUSE)
+{
+}
+
+void display_base_img_line(const image_id, scr_coord_val, scr_coord_val, const uint8, const sint8, const bool, const bool  CLIP_NUM_DEF_NOUSE)
+{
+}
+
 void display_fit_img_to_width( const image_id, sint16)
 {
 }
