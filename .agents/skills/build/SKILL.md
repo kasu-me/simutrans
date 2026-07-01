@@ -1,10 +1,10 @@
 ---
-name: compile
-description: These are the skills used when compiling this project.
+name: build
+description: These are the skills used when building this project.
 allowed-tools: Bash(git *)
 ---
 
-# Simutrans OTRP コンパイルスキル
+# Simutrans OTRP ビルドスキル
 
 ## 環境
 
@@ -45,7 +45,7 @@ allowed-tools: Bash(git *)
   TEMP='C:/Users/aihara/AppData/Local/Temp' \
   TMP='C:/Users/aihara/AppData/Local/Temp' \
   PATH='/c/msys64/mingw64/bin:/c/msys64/usr/bin:\$PATH' \
-  make -j4 2>&1 | grep -E 'error:|Error'
+  make -j32 2>&1 | grep -E 'error:|Error'
   echo exit=\$?
 "
 ```
@@ -77,6 +77,20 @@ g++ -DPNG_STATIC -DZLIB_STATIC -static -Wno-deprecated-copy
 make 経由で g++ を呼ぶと `Cannot create temporary file in C:\WINDOWS\: Permission denied` が出ることがある。
 
 **解決策**: `TEMP` と `TMP` を明示的に渡す（上記コマンドに含めてある）。
+
+## git checkout 直後の全ファイル再ビルドと windres エラー
+
+`git checkout`/ブランチ切り替えは全ファイルの mtime を更新するため、その直後に `make` を実行すると（実際のソース変更が無くても）全オブジェクトが再ビルド対象になる。この際、`simres.rc`（Windows リソース）のビルドが以下のエラーで失敗することがある：
+
+```
+windres.exe: can't popen `"g++ -E -xc -DRC_INVOKED -MMD -MT build/default/simres.o" -DREVISION=... simres.rc': No error
+```
+
+これは `simhalt.cc` などの実際のソース変更とは無関係な環境要因（windres が内部で g++ をプリプロセッサとして呼び出す際に失敗する）。原因は未特定。`build/default/simres.o` が既に存在し `simres.rc` 自体は変更されていない場合、`touch build/default/simres.o build/default/simres.d` で該当ファイルの再ビルドをスキップできる可能性があるが、**これはビルド成果物への直接操作であり、実行前に必ずユーザーに確認すること**。
+
+## ビルド後、リンクまで走ったか確認する
+
+`make build/default/sim.exe` のようにリンク成果物のパスを直接指定すると、依存関係の再評価が行われず `Nothing to be done for 'build/default/sim.exe'` と表示されてリンクがスキップされることがある（`.o` が実際には新しくても）。**必ずデフォルトターゲット（`make -j32` のみ、ターゲット名なし）でビルドし**、`build/default/sim.exe` が変更した `.o` より新しいことを確認してからテストに進むこと。
 
 ## ビルド対象のパスの指定
 
