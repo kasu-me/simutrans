@@ -2202,6 +2202,13 @@ void display_set_player_color_scheme(const int player, const uint8 col1, const u
 
 void display_set_player_color_scheme_rgb(const int player, uint8 r1, uint8 g1, uint8 b1, uint8 r2, uint8 g2, uint8 b2)
 {
+	// The framebuffer is only 16-bit (RGB565/RGB555), so quantize the incoming
+	// 8-bit colors down to the precision the display can actually reproduce.
+	// This keeps the stored value in sync with what is rendered on screen (and
+	// with the value read back via display_get_player_color_pixval).
+	pixval_to_rgb8(get_system_color(r1, g1, b1), r1, g1, b1);
+	pixval_to_rgb8(get_system_color(r2, g2, b2), r2, g2, b2);
+
 	player_use_custom[player] = true;
 	player_custom_rgb[player][0][0] = r1;
 	player_custom_rgb[player][0][1] = g1;
