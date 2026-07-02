@@ -377,8 +377,15 @@ void simline_t::rdwr(loadsave_t *file)
 	else if(file->get_OTRP_version() >= 51) {
 		// old format: palette index stored as sint32 via rdwr_enum (4 bytes)
 		sint32 old_idx = 0;
+		if(file->is_saving()) {
+			// derive the palette index matching the current colour;
+			// color_rgb_to_idx() returns 0 if colour is a custom RGB with no exact palette match
+			old_idx = (sint32)(uint8)color_rgb_to_idx(colour);
+		}
 		file->rdwr_long(old_idx);
-		colour = color_idx_to_rgb((uint8)old_idx);
+		if(file->is_loading()) {
+			colour = color_idx_to_rgb((uint8)old_idx);
+		}
 	}
 	else {
 		// OTRP < 51: colour not stored; derive from palette index directly

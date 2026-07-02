@@ -696,8 +696,20 @@ void player_t::rdwr(loadsave_t *file)
 		player_color_2 = player_color_1+24;
 	}
 	else {
-		file->rdwr_byte(player_color_1);
-		file->rdwr_byte(player_color_2);
+		uint8 color_1 = player_color_1;
+		uint8 color_2 = player_color_2;
+		if(file->is_saving()  &&  player_color_custom  &&  file->get_OTRP_version() < 56) {
+			// pre-56 saves have no room for custom RGB; fall back to the matching palette index
+			// (0 if the custom colour has no exact match) instead of the stale non-custom index
+			color_1 = (uint8)color_rgb_to_idx(make_rgb_pixval(player_color_rgb[0][0], player_color_rgb[0][1], player_color_rgb[0][2]));
+			color_2 = (uint8)color_rgb_to_idx(make_rgb_pixval(player_color_rgb[1][0], player_color_rgb[1][1], player_color_rgb[1][2]));
+		}
+		file->rdwr_byte(color_1);
+		file->rdwr_byte(color_2);
+		if(file->is_loading()) {
+			player_color_1 = color_1;
+			player_color_2 = color_2;
+		}
 	}
 
 	if(file->get_OTRP_version() >= 56) {
