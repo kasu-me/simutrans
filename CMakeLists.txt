@@ -158,6 +158,15 @@ if (SIMUTRANS_BACKEND STREQUAL "sdl2")
 	endif ()
 	target_compile_definitions(simutrans PRIVATE COLOUR_DEPTH=16)
 
+	# Native OS color picker for the "custom RGB" player/line colors (Windows/GDI
+	# has its own implementation via ChooseColor() in sys/simsys_w.cc).
+	if (APPLE)
+		target_sources(simutrans PRIVATE sys/simsys_color_mac.mm)
+		target_link_libraries(simutrans PRIVATE "-framework Cocoa")
+	elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+		target_sources(simutrans PRIVATE sys/simsys_color_linux.cc)
+	endif ()
+
 elseif (SIMUTRANS_BACKEND STREQUAL "gdi")
 	target_sources(simutrans PRIVATE display/simgraph16.cc sys/simsys_w.cc ${BACKUP_SOUND} )
 	target_link_libraries(simutrans PRIVATE imm32 xaudio2_8)

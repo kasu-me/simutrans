@@ -708,6 +708,8 @@ ifeq ($(BACKEND),sdl2)
         SOURCES += music/core-audio_midi.mm
       endif
     endif
+    SOURCES += sys/simsys_color_mac.mm
+    LIBS    += -framework Cocoa
   else
     SOURCES   += sound/sdl2_sound.cc
     ifneq ($(shell expr $(USE_FLUIDSYNTH_MIDI) \>= 1), 1)
@@ -716,6 +718,9 @@ ifeq ($(BACKEND),sdl2)
       else
         SOURCES += music/w32_midi.cc
       endif
+    endif
+    ifeq ($(OSTYPE),linux)
+      SOURCES += sys/simsys_color_linux.cc
     endif
   endif
 
