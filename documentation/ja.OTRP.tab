@@ -1,4 +1,84 @@
 §################################################################################
+# ja.OTRP.tab
+# カスタム内容
+Waiting for coupling!
+連結相手を待機中
+Toolbar position:
+ツールバーの位置:
+Reselect closes tools
+ツールアイコンを再クリックでツールを閉じる
+Num pad keys always move map
+テンキーを常にマップ移動に利用する
+Date format
+日付のフォーマット
+Industry overlay
+産業ラベルの表示
+Do not show
+表示しない
+On mouseover
+マウスオーバーで表示
+Served by me
+自分が接続している産業のみ表示
+Show always
+常に表示
+Jan.
+1月
+Feb.
+2月
+Mar.
+3月
+Apr.
+4月
+May.
+5月
+Jun.
+6月
+Jul.
+7月
+Aug.
+8月
+Sept.
+9月
+Oct.
+10月
+Nov.
+11月
+Dec.
+12月
+Served by
+参入している企業
+Cannot rotate this building!
+この建物は回転できません
+Manufactured:
+製造/更新年月：
+Available:
+利用可能：
+Depot
+車庫
+The gradient does not fit a tunnel
+トンネルは緩坂に配置できません。
+Missing ground (fatal!)
+駅はここに設置できません。
+Readable by standard.
+standard版で読み書き可能な形式で保存する(OTRP固有の機能は失われます)
+Fullscreen (changed after restart)
+全画面 (再起動後に有効)
+Borderless (disabled on fullscreen)
+ボーダーレス (全画面時には無効)
+Put new toolbar below others
+新しいツールバーを他のツールバーの下に置く
+Select display font
+フォントの選択
+Auto
+自動
+Screen scale: 
+画面スケール
+Infinite mouse scrolling
+無限マウススクロール
+Install
+インストール
+# ja.OTRP.tab
+# オリジナル内容
 show connected directions
 接続方向を表示する
 view masked ribi
@@ -36,7 +116,7 @@ pedestrians do not enter
 Overtaking:
 追越設定:
 Can be cityroad:
-市道化の危機なのだ:
+市道化する:
 Yes
 はい
 No
@@ -579,7 +659,7 @@ overloading revenue reduced
 過積載時に収入を減額(overloading_revenue_reduced)
 overloading runningcost increase
 過積載時に走行費を増額(overloading_runningcost_increase)
-overloaded_acceleration
+overloaded acceleration
 応荷重制御時,常に過積載時の重量を使用(overloaded_acceleration)
 advance_to_end
 ホーム終端まで進む(advance_to_end)
@@ -803,3 +883,13 @@ Halts
 駅数
 TBD
 時刻未定
+Apply
+適用
+Color Picker
+カラーピッカー
+A color picker is already open.
+カラーピッカーは既に開いています。
+Custom primary (R G B):
+カスタム基調色 (R G B):
+Custom secondary (R G B):
+カスタム補助色 (R G B):
