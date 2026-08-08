@@ -102,7 +102,9 @@ gameinfo_t::gameinfo_t(karte_t *welt) :
 		pak_name.erase( pak_name.length()-1 );
 	}
 
-	game_engine_revision = OTRP_VERSION_MAJOR * 10000 + OTRP_VERSION_MINOR * 100 + OTRP_VERSION_PATCH;
+	// AHOZURA_VERSION is included so that an original OTRP build refuses to join this fork
+	// (and vice versa): server_frame_t disables the join button on a revision mismatch.
+	game_engine_revision = AHOZURA_VERSION * 1000000 + OTRP_VERSION_MAJOR * 10000 + OTRP_VERSION_MINOR * 100 + OTRP_VERSION_PATCH;
 	pakset_checksum = *(pakset_info_t::get_checksum());
 }
 

@@ -35,6 +35,13 @@
 #define OTRP_VERSION_PATCH 0
 // NOTE: increment OTRP_VERSION_MAJOR when the save data structure changes.
 
+#define AHOZURA_VERSION 1
+// This fork adds further changes on top of the original OTRP, so it must not be
+// mixed with an original OTRP build in a network game. AHOZURA_VERSION is folded
+// into game_engine_revision (see dataobj/gameinfo.cc) to tell both apart.
+// 0 means "identical to the original OTRP". Increment when a change breaks
+// network compatibility with previous builds of this fork.
+
 #define MAKEOBJ_VERSION "60.5"
 // new factory locations and provisio
 
