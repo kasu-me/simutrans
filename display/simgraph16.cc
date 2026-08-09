@@ -5080,11 +5080,12 @@ void display_ddd_proportional_clip(scr_coord_val xpos, scr_coord_val ypos, FLAGG
 
 	display_fillbox_wh_clip_rgb( xpos+1, ypos - vpadding + 1, width+2*hpadding-2, LINESPACE+2*vpadding-2, ddd_color, dirty CLIP_NUM_PAR);
 
-	display_fillbox_wh_clip_rgb( xpos, ypos - vpadding, width + 2*hpadding - 2, 1, lighter, dirty );
-	display_fillbox_wh_clip_rgb( xpos, ypos + LINESPACE + vpadding - 1, width + 2*hpadding - 2, 1, darker,  dirty );
+	// the box spans [xpos, xpos+width+2*hpadding-1] x [ypos-vpadding, ypos+LINESPACE+vpadding-1]
+	display_fillbox_wh_clip_rgb( xpos, ypos - vpadding, width + 2*hpadding, 1, lighter, dirty );
+	display_fillbox_wh_clip_rgb( xpos, ypos + LINESPACE + vpadding - 1, width + 2*hpadding, 1, darker,  dirty );
 
-	display_vline_wh_clip_rgb( xpos, ypos - vpadding - 1, LINESPACE + vpadding * 2 - 1, lighter, dirty );
-	display_vline_wh_clip_rgb( xpos + width + 2*hpadding, ypos - vpadding - 1, LINESPACE + vpadding * 2 - 1, darker,  dirty );
+	display_vline_wh_clip_rgb( xpos, ypos - vpadding, LINESPACE + vpadding * 2, lighter, dirty );
+	display_vline_wh_clip_rgb( xpos + width + 2*hpadding - 1, ypos - vpadding, LINESPACE + vpadding * 2, darker,  dirty );
 
 	display_text_proportional_len_clip_rgb( xpos+hpadding, ypos+1, text, ALIGN_LEFT | DT_CLIP, text_color, dirty, -1);
 }
