@@ -2039,7 +2039,11 @@ void vehicle_t::display_after(int xpos, int ypos, bool is_global) const
 						snprintf( states_text, states_text_size, translator::translate("Waiting for coupling. %i left!"), time_remain_delay_coupling);
 					}
 					else{
-						snprintf( states_text, states_text_size, translator::translate("Waiting for schedule. %i left!"), time_remain);
+						// append the remaining time in mm:ss. minutes are not wrapped into hours since this is a countdown.
+						const uint32 second_remain = (uint32)max(time_remain, 0) * (86400/world()->get_settings().get_spacing_shift_divisor());
+						char base_text[states_text_size];
+						snprintf( base_text, lengthof(base_text), translator::translate("Waiting for schedule. %i left!"), time_remain);
+						snprintf( states_text, states_text_size, "%s (%02u:%02u)", base_text, second_remain/60, second_remain%60);
 					}
 				}
 				else if(  cnv->is_waiting_for_coupling()  ) {
