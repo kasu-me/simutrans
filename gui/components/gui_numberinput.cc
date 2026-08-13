@@ -93,6 +93,10 @@ void gui_numberinput_t::set_value(sint32 new_value)
 		// final value should be correct, but during editing wrong values are allowed
 		new_value = value;
 	}
+	// Whether the user is typing in this field. Do not use get_focus() here: a dialog may
+	// temporarily disable() the component while refreshing it, and a disabled component is
+	// not focusable and hence never reported as focused.
+	const bool being_edited = textinp.has_focus();
 	// To preserve cursor position if text was edited, only set new text if changed (or empty before)
 	if(  textbuffer[0]<32  ||  new_value != get_text_value()  ) {
 		if(  pad_digits>0  ) {
@@ -101,7 +105,13 @@ void gui_numberinput_t::set_value(sint32 new_value)
 		else {
 			sprintf(textbuffer, "%d", new_value);
 		}
-		textinp.set_text(textbuffer, 20);
+		if(  being_edited  ) {
+			// the user is typing here: selecting the whole text would make the next keystroke overwrite it
+			textinp.set_text_keep_cursor(textbuffer, 20);
+		}
+		else {
+			textinp.set_text(textbuffer, 20);
+		}
 	}
 	textinp.set_color( value == new_value ? (b_enabled ? SYSCOL_EDIT_TEXT : SYSCOL_EDIT_TEXT_DISABLED) : color_idx_to_rgb(COL_RED) );
 	value = new_value;

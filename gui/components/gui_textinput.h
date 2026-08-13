@@ -92,6 +92,12 @@ protected:
 	 */
 	bool remove_selection();
 
+	/**
+	 * Move cursor and selection back inside the text.
+	 * They may point beyond its end after set_text_keep_cursor().
+	 */
+	void clamp_cursor();
+
 public:
 	gui_textinput_t();
 
@@ -99,6 +105,13 @@ public:
 	 * Sets the Text buffer
 	 */
 	void set_text(char *text, size_t max);
+
+	/**
+	 * Sets the Text buffer, leaving cursor and selection untouched.
+	 * Use this when the buffer is refreshed while the user is typing, so that the
+	 * next keystroke neither overwrites the text just entered nor lands elsewhere.
+	 */
+	void set_text_keep_cursor(char *text, size_t max);
 
 	// text which is not yet inputed (i.e. for east asian text), assuming either native or utf8 encoding
 	void set_composition_status( char *composition, int target_start, int target_length );
@@ -120,6 +133,9 @@ public:
 
 	// x position of the current cursor (for IME purposes)
 	scr_coord_val get_current_cursor_x() { return calc_cursor_pos(head_cursor_pos); }
+
+	// true if this field had the keyboard focus when it was last drawn, i.e. the user is typing here
+	bool has_focus() const { return focus_received; }
 
 	/**
 	 * Detect change of focus state and determine whether cursor should be displayed,

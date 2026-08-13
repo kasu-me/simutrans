@@ -85,11 +85,25 @@ bool gui_textinput_t::remove_selection()
 }
 
 
+/**
+ * Move cursor and selection back inside the text.
+ * They may point beyond its end after set_text_keep_cursor().
+ */
+void gui_textinput_t::clamp_cursor()
+{
+	const size_t len = text ? strlen(text) : 0;
+	head_cursor_pos = min( head_cursor_pos, len );
+	tail_cursor_pos = min( tail_cursor_pos, len );
+}
+
+
 void gui_textinput_t::set_composition_status( char *c, int start, int length )
 {
 	composition.clear();
 	if(  win_get_focus()==this  ) {
 		if(  c && c[0]!='\0' ) {
+			// the buffer may have been rewritten since the last event
+			clamp_cursor();
 			if(  head_cursor_pos!=tail_cursor_pos  ) {
 				remove_selection();
 			}
@@ -113,6 +127,9 @@ void gui_textinput_t::set_composition_status( char *c, int start, int length )
  */
 bool gui_textinput_t::infowin_event(const event_t *ev)
 {
+	// the buffer may have been rewritten since the last event
+	clamp_cursor();
+
 	if(  ev->ev_class==EVENT_KEYBOARD  ) {
 		if(  text  ) {
 			size_t len = strlen(text);
@@ -537,6 +554,9 @@ void gui_textinput_t::display_with_cursor(scr_coord offset, bool cursor_active, 
 	display_img_stretch( gui_theme_t::editfield, scr_rect( pos+offset, size ) );
 
 	if(  text  ) {
+		// the buffer may have been rewritten since the last event
+		clamp_cursor();
+
 		// recalculate scroll offset
 		const int text_width = proportional_string_width(text);
 		const scr_coord_val view_width = size.w - 3;
@@ -639,6 +659,18 @@ void gui_textinput_t::set_text(char *text, size_t max)
 	head_cursor_pos = strlen(text);
 	tail_cursor_pos = 0;
 	text_dirty = false;
+}
+
+
+
+void gui_textinput_t::set_text_keep_cursor(char *text, size_t max)
+{
+	this->text = text;
+	this->max = max;
+	// Cursor and selection are deliberately left alone, even if they now point beyond
+	// the end of the text: a caller may rewrite the buffer several times in a row (a
+	// dialog refreshing itself), and a shorter intermediate text must not move the cursor.
+	// clamp_cursor() puts them back in range before they are used.
 }
 
 
