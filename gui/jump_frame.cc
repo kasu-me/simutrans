@@ -29,6 +29,7 @@ jump_frame_t::jump_frame_t() :
 	// Input box for new name
 	sprintf(buf, "%i,%i", welt->get_viewport()->get_world_position().x, welt->get_viewport()->get_world_position().y );
 	input.set_text(buf, 62);
+	input.set_allow_ime(false); // coordinates: digits and commas only
 	input.add_listener(this);
 	add_component(&input);
 

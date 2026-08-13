@@ -77,6 +77,11 @@ protected:
 	bool focus_received;
 
 	/**
+	 * whether the IME may be used in this field; false for digits-only fields
+	 */
+	bool allow_ime;
+
+	/**
 	 * determine new cursor position from event coordinates
 	 */
 	size_t calc_cursor_pos(const int x);
@@ -130,6 +135,10 @@ public:
 
 	// to set text color
 	void set_color(PIXVAL col){ textcol = col;}
+
+	// set to false for fields that accept digits only: the IME is then not
+	// activated while the field is focused
+	void set_allow_ime(bool b){ allow_ime = b;}
 
 	scr_size get_max_size() const OVERRIDE;
 

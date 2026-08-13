@@ -979,8 +979,14 @@ void dr_sleep(uint32 millisec)
 	Sleep(millisec);
 }
 
-void dr_start_textinput()
+void dr_start_textinput(bool allow_ime)
 {
+	if(  !allow_ime  ) {
+		// A digits-only field gained focus: keep the IME detached so it cannot be
+		// switched to Japanese input mode while the field is edited.
+		dr_stop_textinput();
+		return;
+	}
 	// A text input field gained focus: re-attach the IME so the user can type
 	// (and use Japanese conversion) inside the field.
 	textinput_focused = true;

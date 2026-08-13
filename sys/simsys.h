@@ -235,8 +235,10 @@ bool dr_download_pakset( const char *data_dir, bool portable );
 /**
  * Shows the touch keyboard when using systems without a hardware keyboard.
  * Will be ignored if there is an hardware keyboard available.
+ * @param allow_ime false for fields that accept digits only, so the IME
+ * (e.g. Japanese conversion mode) stays detached while they are focused.
  */
-void dr_start_textinput();
+void dr_start_textinput(bool allow_ime = true);
 
 /**
  * Hides the touch keyboard when using systems without a hardware keyboard.

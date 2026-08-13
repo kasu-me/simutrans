@@ -26,7 +26,8 @@ gui_textinput_t::gui_textinput_t() :
 	textcol(SYSCOL_EDIT_TEXT),
 	text_dirty(false),
 	cursor_reference_time(0),
-	focus_received(false)
+	focus_received(false),
+	allow_ime(true)
 { }
 
 
@@ -512,12 +513,14 @@ void gui_textinput_t::display_with_focus(scr_coord offset, bool has_focus)
 			// update reference time for cursor blinking if focus has just been received
 			cursor_reference_time = dr_time();
 
-			dr_start_textinput();
+			dr_start_textinput( allow_ime );
 
-			scr_coord gui_xy = win_get_pos( win_get_top() );
-			int x = pos.x + gui_xy.x + get_current_cursor_x();
-			int y = pos.x + gui_xy.y + D_TITLEBAR_HEIGHT;
-			dr_notify_input_pos( x, y );
+			if(  allow_ime  ) {
+				scr_coord gui_xy = win_get_pos( win_get_top() );
+				int x = pos.x + gui_xy.x + get_current_cursor_x();
+				int y = pos.x + gui_xy.y + D_TITLEBAR_HEIGHT;
+				dr_notify_input_pos( x, y );
+			}
 		}
 		else {
 			dr_stop_textinput();

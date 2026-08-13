@@ -1039,8 +1039,9 @@ void dr_sleep(uint32 usec)
 }
 
 
-void dr_start_textinput()
+void dr_start_textinput(bool)
 {
+	// SDL2 has no way to ask for a digits-only input mode, so allow_ime is ignored here.
 	if(  env_t::hide_keyboard  ) {
 	    SDL_StartTextInput();
 		DBG_MESSAGE("SDL_StartTextInput", "");

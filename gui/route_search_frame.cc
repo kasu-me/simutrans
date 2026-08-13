@@ -118,6 +118,9 @@ dest_koord(koord::invalid)
     {
         from_koord_input.set_text(from_koord_text, lengthof(from_koord_text));
         dest_koord_input.set_text(dest_koord_text, lengthof(dest_koord_text));
+        // coordinates: digits and commas only, so no IME
+        from_koord_input.set_allow_ime(false);
+        dest_koord_input.set_allow_ime(false);
         add_component(&from_koord_label);
         add_component(&from_koord_input);
         add_component(&dest_koord_label);

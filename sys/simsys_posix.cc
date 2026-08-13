@@ -162,7 +162,7 @@ void dr_sleep(uint32 msec)
 #endif
 }
 
-void dr_start_textinput()
+void dr_start_textinput(bool)
 {
 }
 

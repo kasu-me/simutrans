@@ -24,6 +24,7 @@ gui_numberinput_t::gui_numberinput_t() :
 
 	textinp.set_alignment( ALIGN_RIGHT );
 	textinp.set_color( SYSCOL_EDIT_TEXT );
+	textinp.set_allow_ime( false ); // only digits are accepted here, so no IME
 	textinp.add_listener( this );
 
 	bt_right.set_typ(button_t::repeatarrowright );
