@@ -375,6 +375,7 @@ convoihandle_t depot_t::copy_convoi(convoihandle_t old_cnv, bool local_execution
 
 		convoihandle_t new_cnv = add_convoi( false );
 		new_cnv->set_name(old_cnv->get_internal_name());
+		new_cnv->set_reversing_needed(old_cnv->is_reversing_needed()); // copy the reverse flag of the depot dialog
 		int vehicle_count = old_cnv->get_vehicle_count();
 		for (int i = 0; i<vehicle_count; i++) {
 			const int vehicle_index = old_cnv->is_reversed() ? vehicle_count - i - 1 : i; // Always copy in the normal order
