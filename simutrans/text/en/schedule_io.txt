@@ -1,0 +1,39 @@
+<title>Schedule Import/Export</title>
+
+<h1><strong>Schedule Import/Export</strong></h1>
+
+<p>
+<em>Export schedule</em> and <em>Import schedule</em> in <a href="schedule.txt">Schedule Controls</a> write and read a schedule as a plain text file (extension <em>.sch</em>, stored in the <em>schedule</em> folder) or through the system clipboard.
+</p>
+<p>
+The main use is timetabling for network games: build the departure times in a local copy of the server game, export the finished schedule, then import it into the same line on the server. Both dialogs offer the clipboard as an alternative to a file, so a schedule can also be pasted into a text editor or a chat window.
+</p>
+
+<h1><strong>Export</strong></h1>
+<p>
+Type a name and press <em>Ok</em> to write a file, click an existing file to overwrite it, or press <em>Copy to clipboard</em>.<br>
+The exported text contains one block per stop. Stop names, the resulting headway and the departure offset as h:mm:ss are written as comments (lines starting with <em>#</em>) and are ignored when the file is read back. Recorded journey and waiting times are not exported.
+</p>
+
+<h1><strong>Import</strong></h1>
+<p>
+Choose an <em>Import mode</em>, then click a file or press <em>Paste from clipboard</em>.
+</p>
+<p>
+<em>Replace whole schedule:</em> the stop list and every setting are replaced by the ones in the file. Every position in the file must exist on the map and be usable by this kind of vehicle.
+</p>
+<p>
+<em>Apply departure time settings only:</em> the stop list is not touched at all. Only the spacing, the departure offset, the delay tolerance, <em>Wait for time</em> and <em>Load before departure</em> of each stop are overwritten, plus <em>Use same departure time for all stops</em> and the departure slot group of the schedule. This requires the file to have exactly the same stops, in the same order, at the same coordinates as the schedule being edited.
+</p>
+<p>
+An import is rejected as a whole if anything does not match - a different way type, a different <em>spacing_shift_divisor</em> setting, a wrong number of stops, an unknown keyword or a value out of range. The reason is shown and the schedule stays unchanged.
+</p>
+<p>
+The imported schedule is only applied to the convoy or line when the schedule window is closed, so a mistake can be undone with <em>Revert schedule</em> before closing. In a network game the change is sent to the server on close, exactly like any other schedule edit.
+</p>
+<p>
+Lines referenced by the file (the departure slot group and the next line) are stored by name and are looked up among your own lines. If no line of that name exists, the setting is left empty and a note is shown.
+</p>
+<p>
+Note: the clipboard buttons use the system clipboard on Windows and on SDL2 builds. Other builds fall back to an internal buffer that cannot exchange text with other programs; use a file there.
+</p>
