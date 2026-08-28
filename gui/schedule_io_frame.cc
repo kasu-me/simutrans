@@ -19,24 +19,42 @@
 #include "../dataobj/schedule_io.h"
 #include "../dataobj/translator.h"
 #include "../sys/simsys.h"
+#include "../unicode.h"
 
 
 /// generous upper bound for an imported schedule; a 254 stop schedule is well below this
 #define SCHEDULE_IO_MAX_TEXT (256*1024)
 
 
-/// strips the characters that cannot appear in a file name, so a line name can seed the input field
+/**
+ * Turns a line or convoy name into something usable as a file name, so it can seed the
+ * input field. Characters that cannot appear in a file name become '_'.
+ * Copies whole UTF-8 characters only: cutting a name in the middle of a multi-byte
+ * character would leave a broken glyph in the file name.
+ */
 static void sanitize_filename(const char *src, char *dest, size_t dest_size)
 {
 	size_t j = 0;
-	for(  size_t i = 0;  src  &&  src[i]  &&  j+1 < dest_size;  i++  ) {
+	for(  size_t i = 0;  src  &&  src[i];  ) {
+		// length of this (possibly multi-byte) character
+		size_t char_len = 1;
+		while(  is_cont_char((utf8)src[i+char_len])  ) {
+			char_len++;
+		}
+		if(  j + char_len + 1 > dest_size  ) {
+			// does not fit as a whole, rather stop than split it
+			break;
+		}
 		const unsigned char c = (unsigned char)src[i];
-		if(  c < 0x20  ||  strchr("\\/:*?\"<>|", (char)c) != NULL  ) {
+		if(  char_len == 1  &&  (c < 0x20  ||  strchr("\\/:*?\"<>|", (char)c) != NULL)  ) {
 			dest[j++] = '_';
 		}
 		else {
-			dest[j++] = src[i];
+			for(  size_t k = 0;  k < char_len;  k++  ) {
+				dest[j++] = src[i+k];
+			}
 		}
+		i += char_len;
 	}
 	dest[j] = 0;
 }
@@ -54,10 +72,16 @@ schedule_io_frame_t::schedule_io_frame_t(schedule_gui_t *owner_, bool do_export_
 			schedule_export_text(export_buf, schedule, player, source_name);
 		}
 
-		char fname[256];
-		sanitize_filename(source_name, fname, lengthof(fname));
+		// set_filename() expects a name that still carries its extension and drops the last
+		// four bytes, so hand it the name with the suffix rather than the bare name.
+		// It also ignores anything shorter than 8 bytes, hence the length check.
+		char fname[128];
+		sanitize_filename(source_name, fname, lengthof(fname) - 4);
 		if(  fname[0]  ) {
-			set_filename(fname);
+			strcat(fname, ".sch");
+			if(  strlen(fname) >= 8  ) {
+				set_filename(fname);
+			}
 		}
 
 		bt_clipboard.init(button_t::roundbox, "Copy to clipboard");
