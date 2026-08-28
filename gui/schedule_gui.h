@@ -20,6 +20,7 @@
 #include "../convoihandle_t.h"
 #include "../linehandle_t.h"
 #include "simwin.h"
+#include "../dataobj/schedule_io.h"
 #include "../tpl/vector_tpl.h"
 
 
@@ -58,6 +59,7 @@ class schedule_gui_t : public gui_frame_t, public action_listener_t
 	// always needed
 	button_t bt_add, bt_insert, bt_remove; // stop management
 	button_t bt_revert, bt_return;
+	button_t bt_export_schedule, bt_import_schedule;
 	button_t bt_wait_load;
 
 	gui_label_t lb_wait, lb_load, lb_departure_slot_group, lb_max_load;
@@ -136,6 +138,15 @@ public:
 	void init_line_selector();
 	void init_next_line_selector();
 	void init_departure_slot_group_selector();
+
+	/**
+	 * Applies an imported schedule text to the schedule currently being edited.
+	 * The change reaches the convoy/line through the usual "apply on window close" path,
+	 * so it is network safe; until then it can be undone with "Revert schedule".
+	 * @return false when the text was rejected; @p errmsg then holds the reason and
+	 *         the schedule is left untouched.
+	 */
+	bool apply_imported_schedule(const char *text, schedule_import_mode_t mode, cbuffer_t &errmsg, cbuffer_t &warnmsg);
 
 	bool infowin_event(event_t const*) OVERRIDE;
 

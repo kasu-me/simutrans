@@ -31,4 +31,7 @@
 #define SCREENSHOT_PATH     "screenshot"
 #define SCREENSHOT_PATH_X    SCREENSHOT_PATH "/"
 
+#define SCHEDULE_PATH       "schedule"
+#define SCHEDULE_PATH_X     SCHEDULE_PATH "/"
+
 #endif

@@ -921,3 +921,74 @@ No city found!
 都市が見つかりません！
 Depots must be built on flat dead-end way tiles!
 車庫は平坦で行き止まりの道路上に建設してください！
+# schedule import/export
+Export schedule
+スケジュールの書き出し
+Export the schedule to a file or the clipboard
+スケジュールをファイルまたはクリップボードに書き出します．
+Import schedule
+スケジュールの取り込み
+Import a schedule from a file or the clipboard
+ファイルまたはクリップボードからスケジュールを取り込みます．
+This schedule belongs to another player.\n
+このスケジュールは他のプレイヤーのものです．\n
+Copy to clipboard
+クリップボードにコピー
+Copy the schedule to the system clipboard instead of a file
+ファイルではなくクリップボードにスケジュールをコピーします．
+Paste from clipboard
+クリップボードから貼付
+Read the schedule from the system clipboard instead of a file
+ファイルではなくクリップボードからスケジュールを読み込みます．
+Import mode:
+取込方法:
+Replace whole schedule
+スケジュール全体を置き換える
+Apply departure time settings only
+発車時刻設定のみ反映する
+Schedule was exported.\n
+スケジュールを書き出しました．\n
+Schedule was copied to clipboard.\n
+スケジュールをクリップボードにコピーしました．\n
+Schedule was imported.\n
+スケジュールを取り込みました．\n
+Could not read the schedule file.\n
+スケジュールファイルを読み込めませんでした．\n
+Could not write the schedule file.\n
+スケジュールファイルを書き出せませんでした．\n
+The schedule window was closed.\n
+スケジュール画面が閉じられています．\n
+Not a schedule file.\n
+スケジュールのデータではありません．\n
+This file was made by a newer version.\n
+より新しいバージョンで作成されたデータです．\n
+Schedule type does not match.\n
+スケジュールの種類が一致しません．\n
+spacing_shift_divisor does not match.\n
+spacing_shift_divisorの設定値が一致しません．\n
+Number of stops does not match entry_count.\n
+停車地点の数がentry_countと一致しません．\n
+Schedule file has no stop.\n
+停車地点がひとつもありません．\n
+Too many stops in schedule file.\n
+停車地点が多すぎます．\n
+Unknown keyword in schedule file.\n
+解釈できない記述があります．\n
+Bad value in schedule file.\n
+値が不正です．\n
+This stop is not valid on the map.\n
+この停車地点はマップ上で使用できません．\n
+The stops do not match the current schedule.\n
+停車地点が現在のスケジュールと一致しません．\n
+Could not apply the schedule.\n
+スケジュールを適用できませんでした．\n
+Could not find the line of the departure slot group.\n
+発車時刻グループの路線が見つかりませんでした．\n
+Could not find the next line.\n
+次の路線が見つかりませんでした．\n
+More than one line has this name.\n
+同じ名前の路線が複数あります．\n
+Export
+書き出し
+Import
+取り込み

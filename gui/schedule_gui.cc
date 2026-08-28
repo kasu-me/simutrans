@@ -21,6 +21,7 @@
 #include "../obj/zeiger.h"
 
 #include "../dataobj/schedule.h"
+#include "../dataobj/schedule_io.h"
 #include "../dataobj/loadsave.h"
 #include "../dataobj/translator.h"
 #include "../dataobj/environment.h"
@@ -31,6 +32,7 @@
 
 #include "depot_frame.h"
 #include "schedule_gui.h"
+#include "schedule_io_frame.h"
 #include "line_item.h"
 
 #include "components/gui_button.h"
@@ -42,24 +44,8 @@ static karte_ptr_t welt;
 
 // spacing_shift and delay_tolerance are stored as fractions of a month (0..spacing_shift_divisor),
 // which map linearly onto a virtual 24h day (86400 "seconds").
-static void linear_raw_to_hms(uint16 raw, uint16 divisor, uint8 &h, uint8 &m, uint8 &s)
-{
-	uint32 seconds = divisor>0 ? (uint32)( ((uint64)raw * 86400ull) / divisor ) : 0;
-	if(  seconds > 86400  ) {
-		seconds = 86400;
-	}
-	h = (uint8)(seconds / 3600);
-	m = (uint8)((seconds % 3600) / 60);
-	s = (uint8)(seconds % 60);
-}
-
-static uint16 linear_hms_to_raw(uint8 h, uint8 m, uint8 s, uint16 divisor)
-{
-	const uint32 seconds = (uint32)h*3600u + (uint32)m*60u + (uint32)s;
-	// round to nearest, since a divisor step may not evenly divide a second
-	const uint64 raw = ( (uint64)seconds * divisor + 43200ull ) / 86400ull;
-	return (uint16)min(raw, (uint64)0xFFFFu);
-}
+// The conversion itself lives in dataobj/schedule_io.cc, since the export format uses it too:
+// see schedule_linear_raw_to_hms() / schedule_linear_hms_to_raw().
 
 // waiting_time_shift is a frequency: the actual waiting period is (a virtual month)/waiting_time_shift.
 static void wait_raw_to_hms(uint16 raw, uint8 &h, uint8 &m, uint8 &s)
@@ -89,9 +75,9 @@ static uint16 linear_hms_to_raw_monotonic(uint8 h, uint8 m, uint8 s, uint16 divi
 {
 	const uint32 new_seconds = (uint32)h*3600u + (uint32)m*60u + (uint32)s;
 	uint8 oh, om, os;
-	linear_raw_to_hms(old_raw, divisor, oh, om, os);
+	schedule_linear_raw_to_hms(old_raw, divisor, oh, om, os);
 	const uint32 old_seconds = (uint32)oh*3600u + (uint32)om*60u + (uint32)os;
-	uint16 new_raw = linear_hms_to_raw(h, m, s, divisor);
+	uint16 new_raw = schedule_linear_hms_to_raw(h, m, s, divisor);
 	if(  new_seconds > old_seconds  &&  new_raw <= old_raw  ) {
 		new_raw = (uint16)min((uint32)old_raw+1u, (uint32)divisor);
 	}
@@ -416,7 +402,7 @@ void schedule_gui_t::init(schedule_t* schedule_, player_t* player, convoihandle_
 
 	set_table_layout(1,0);
 
-	add_table(3,1);
+	add_table(5,1);
 	{
 		if(  cnv.is_bound()  ) {
 			snprintf(lb_cnv_line_name_str,255,cnv->get_name());
@@ -426,6 +412,14 @@ void schedule_gui_t::init(schedule_t* schedule_, player_t* player, convoihandle_
 		lb_cnv_line_name.set_text(lb_cnv_line_name_str);
 		add_component(&lb_cnv_line_name);
 		new_component<gui_fill_t>();
+		bt_export_schedule.init(button_t::roundbox, "Export");
+		bt_export_schedule.set_tooltip("Export the schedule to a file or the clipboard");
+		bt_export_schedule.add_listener(this);
+		add_component(&bt_export_schedule);
+		bt_import_schedule.init(button_t::roundbox, "Import");
+		bt_import_schedule.set_tooltip("Import a schedule from a file or the clipboard");
+		bt_import_schedule.add_listener(this);
+		add_component(&bt_import_schedule);
 		bt_revert.init(button_t::roundbox, "Revert schedule");
 		bt_revert.set_tooltip("Revert to original schedule");
 		bt_revert.add_listener(this);
@@ -1178,15 +1172,15 @@ void schedule_gui_t::update_labels()
 	const uint16 divisor = world()->get_settings().get_spacing_shift_divisor();
 	uint8 h, m, s;
 
-	linear_raw_to_hms( entry.spacing_shift, divisor, h, m, s );
+	schedule_linear_raw_to_hms( entry.spacing_shift, divisor, h, m, s );
 	numimp_spacing_shift_hms.set_value( pack_hms(h, m, s) );
 
-	linear_raw_to_hms( entry.delay_tolerance, divisor, h, m, s );
+	schedule_linear_raw_to_hms( entry.delay_tolerance, divisor, h, m, s );
 	numimp_delay_tolerance_hms.set_value( pack_hms(h, m, s) );
 
 	wait_raw_to_hms( entry.waiting_time_shift, h, m, s );
 	numimp_wait_load_hms.set_value( pack_hms(h, m, s) );
-	numimp_wait_load_divisor.set_value( linear_hms_to_raw( h, m, s, divisor ) );
+	numimp_wait_load_divisor.set_value( schedule_linear_hms_to_raw( h, m, s, divisor ) );
 }
 
 
@@ -1253,6 +1247,39 @@ bool schedule_gui_t::infowin_event(const event_t *ev)
 	}
 
 	return gui_frame_t::infowin_event(ev);
+}
+
+
+bool schedule_gui_t::apply_imported_schedule(const char *text, schedule_import_mode_t mode, cbuffer_t &errmsg, cbuffer_t &warnmsg)
+{
+	if(  schedule == NULL  ) {
+		return false;
+	}
+	if(  player != welt->get_active_player()  ) {
+		// different player! no action!
+		errmsg.append( translator::translate("This schedule belongs to another player.\n") );
+		return false;
+	}
+
+	// work on a copy, so a rejected import cannot leave the schedule half written
+	schedule_t *imported = schedule->copy();
+	if(  !schedule_import_text(text, imported, mode, player, errmsg, warnmsg)  ) {
+		delete imported;
+		return false;
+	}
+
+	// same swap as "Revert schedule"
+	stats->highlight_schedule( false );
+	delete schedule;
+	schedule = imported;
+	stats->schedule = schedule;
+	init_departure_slot_group_selector();
+	stats->update_schedule();
+	update_selection();
+	update_labels();
+	// the map tools hold a pointer to the schedule, which just changed
+	update_tool( true );
+	return true;
 }
 
 
@@ -1403,7 +1430,7 @@ dbg->message("schedule_gui_t::action_triggered()","comp=%p combo=%p",comp,&line_
 			schedule_entry_t &entry = schedule->at(schedule->get_current_stop());
 			const uint16 divisor = world()->get_settings().get_spacing_shift_divisor();
 			uint8 h, m, s;
-			linear_raw_to_hms( (uint16)p.i, divisor, h, m, s );
+			schedule_linear_raw_to_hms( (uint16)p.i, divisor, h, m, s );
 			entry.waiting_time_shift = wait_hms_to_raw_monotonic( h, m, s, entry.waiting_time_shift );
 			update_selection();
 		}
@@ -1663,6 +1690,13 @@ dbg->message("schedule_gui_t::action_triggered()","comp=%p combo=%p",comp,&line_
 	else if(comp == &bt_full_load_time) {
 		schedule->set_full_load_time(!schedule->is_full_load_time());
 		bt_full_load_time.pressed = schedule->is_full_load_time();
+	}
+	else if(  comp == &bt_export_schedule  ||  comp == &bt_import_schedule  ) {
+		const bool exporting = (comp == &bt_export_schedule);
+		// only one of the two dialogs at a time: create_win() would otherwise just top the
+		// existing window and leak the new one
+		destroy_win( magic_schedule_io );
+		create_win( new schedule_io_frame_t(this, exporting, schedule, player, lb_cnv_line_name_str), w_info, magic_schedule_io );
 	}
 	else if (comp == &bt_revert) {
 		// revert changes and tell listener
