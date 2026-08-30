@@ -35,7 +35,7 @@
 #define OTRP_VERSION_PATCH 0
 // NOTE: increment OTRP_VERSION_MAJOR when the save data structure changes.
 
-#define AHOZURA_VERSION 1
+#define AHOZURA_VERSION 2
 // This fork adds further changes on top of the original OTRP, so it must not be
 // mixed with an original OTRP build in a network game. AHOZURA_VERSION is folded
 // into game_engine_revision (see dataobj/gameinfo.cc) to tell both apart.
@@ -92,7 +92,7 @@
 #else
 #	define OTRP_VERSION_MINOR_STRING
 #endif
-# define OTRP_STRING "Simutrans OTRP v" QUOTEME(OTRP_VERSION_MAJOR) OTRP_VERSION_MINOR_STRING " TUNED EDITION"
+# define OTRP_STRING "Simutrans AHOZURA PATCH v" QUOTEME(AHOZURA_VERSION) " based on OTRP v" QUOTEME(OTRP_VERSION_MAJOR) OTRP_VERSION_MINOR_STRING
 
 # define UNOFFICIAL_MESSAGE " Unofficial_" QUOTEME(UNOFFICIAL_REVISION)
 
