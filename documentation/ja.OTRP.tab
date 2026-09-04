@@ -923,6 +923,8 @@ No city found!
 都市が見つかりません！
 Depots must be built on flat dead-end way tiles!
 車庫は平坦で行き止まりの道路上に建設してください！
+Not allowed to copy object.
+このオブジェクトをコピーすることはできません。
 # schedule import/export
 Export schedule
 スケジュールの書き出し
