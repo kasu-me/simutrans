@@ -787,6 +787,10 @@ show route
 ルートを表示
 show route of this convoy.
 この編成のルートを表示します
+Show Route Cache
+ルートキャッシュを表示
+Show tiles of this line's cached route.
+この路線のキャッシュされたルートを表示します
 Max. wayobj speed:
 架線速度:
 Fetching server list...
