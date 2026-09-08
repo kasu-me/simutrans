@@ -13,9 +13,9 @@
 | キー | 値 |
 | --- | --- |
 | 起点コミット (base) | `d01a02edf26e0faf1c3542d4d854fe6ce52cc9f8` (v58_3) |
-| 追跡済み最新コミット (head) | `d65dc206394d8e76b9c4a3dab627bd0e16e8382a` (add ja.OTRP.tab for v60) |
-| 対象コミット数 | 25 |
-| 最終更新 | 2026-08-30 |
+| 追跡済み最新コミット (head) | `93192762a13f25b625258732e258593c49f9f2b8` (increment OTRP_VERSION_MINOR / v60_2) |
+| 対象コミット数 | 51 |
+| 最終更新 | 2026-09-07 |
 
 > `head` より新しい本家コミットが増えた場合は skill `update-upstream-status` で追記する。
 
@@ -48,12 +48,22 @@
 | FEAT-06 | 新機能追加 | ツールバーのスクロールバー対応 | 未取り込み |
 | FEAT-07 | 新機能追加 | タイル長設定 (`tile_length`) と実距離(m)統計 | 未取り込み |
 | FEAT-08 | 新機能追加 | 道路車両の方向転換(reverse)対応 | 未取り込み |
-| FEAT-09 | 新機能追加 | ミニマップへの路線/編成経路表示 | 未取り込み |
+| FEAT-09 | 新機能追加 | 経路表示の拡充 (ミニマップ表示・スケジュール全経路・所要時間) | 未取り込み |
 | FEAT-10 | 新機能追加 | 路線一覧のメモ欄をフィルタ対象に追加 | 未取り込み |
+| FEAT-11 | 新機能追加 | 財務グラフの収入内訳 (旅客/郵便/貨物) と輸送量内訳 | 未取り込み |
+| FEAT-12 | 新機能追加 | 送金ダイアログの小数点以下入力対応 | 未取り込み |
+| FEAT-13 | 新機能追加 | 一方通行標識の詳細設定に矢印図とコピー/貼り付け | 未取り込み |
+| FEAT-14 | 新機能追加 | MCP サーバに `get_tile_info` ツールを追加 | 未取り込み |
 | FIX-01 | バグ修正 | choose 標識/choose 区間終端が経路上にある場合の判定 | 取り込み済み |
 | FIX-02 | バグ修正 | pak の `clip_below` 設定の読み込み順序 | 取り込み済み |
-| MISC-01 | その他 | 本家バージョン番号のインクリメント (v59〜v60_0_1) | 取り込み不要 |
+| FIX-03 | バグ修正 | 一方通行詳細設定の waytype 判定漏れと経路喪失時の異常終了 | 未取り込み |
+| FIX-04 | バグ修正 | 積込中に「次の停留所へ」を押した際の停車時間等の未更新 | 未取り込み |
+| FIX-05 | バグ修正 | 経路予約解除ツールが連結子編成を解放してしまう | 未取り込み |
+| FIX-06 | バグ修正 | 橋脚が滑走路 (`air_wt`) タイル上に建つ | 未取り込み |
+| FIX-07 | バグ修正 | Windows GDI の DPI スケーリング時のリサイズ処理 | 未取り込み |
+| MISC-01 | その他 | 本家バージョン番号のインクリメント (v59〜v60_2) | 取り込み不要 |
 | MISC-02 | その他 | 日本語訳 `ja.OTRP.tab` の更新 (v59/v60分) | 未取り込み |
+| MISC-03 | その他 | SDL3 バックエンド対応と CI のビルド構成更新 | 未取り込み |
 
 ---
 
@@ -101,6 +111,7 @@
 - **上流コミット**:
   - `9b07e0936` wait for other convoy arrive (#683) — 本体 (待つ側)
   - `6de4593ac` update allow other convoy departure (#694) — 許可を出す側の追加と修正
+  - `5461ae2d2` rename non-selecter departure line (#707) — 後続修正
 - **主な変更箇所**:
   - `dataobj/schedule_entry.h` — 停留所フラグ `WAIT_FOR_OTHER_CONVOY` (1<<20) と `WAIT_ALLOW_DEPARTURE` (1<<21)、
     待ち合わせ相手路線 `linehandle_t allow_depart_line` を追加。`operator==` の比較対象にも追加
@@ -116,6 +127,8 @@
   - 発車許可は1回の呼び出しにつき1編成のみに与えられる。自分自身および自分の連結子編成には許可を出さない。
   - `6de4593ac` で、通過駅 (pass stop) でも許可発行処理が呼ばれるよう修正され、
     「他編成に発車許可を出すまで待つ」側のフラグが分離された (通過駅には設定不可)。
+  - `5461ae2d2` は `allow_depart_line_selector` の未選択時の表示を `<no line>` から
+    「発車許可を出す路線を指定」(`Select Line Allow Departure`) に変更するだけの表記修正。
 - **取り込み時の注意**: `schedule_entry_t` にフラグとフィールドが増えるため、スケジュールのセーブ形式に影響する。
 - **develop-kasumi 側コミット**: —
 - **備考**: `develop-kasumi` にはスケジュールのインポート/エクスポート機能 (`dbe156c0b` ほか) があるため、
@@ -189,11 +202,13 @@
 - **上流コミット**:
   - `dfd7e39c6` update toolbar (#700) — 本体
   - `6cf6f5dd7` BIG FIX: scroll bar position when menubar not on the top (#706) — 後続修正
+  - `fffd2145a` BUG FIX:re-render when move scroll of menubar (#708) — 後続修正
 - **主な変更箇所**:
   - `dataobj/environment.{h,cc}` — `iconsize_set_by_pak` (menuconf.tab の `icon_height` をテーマ再読み込みで上書きさせない)、
     `menu_scrollbar_thickness` (=10px) を追加
   - `gui/tool_selector.{h,cc}` — `is_scrollbar_dragging`, `get_scrollbar_rect()`, `get_scroll_metrics()`,
-    `get_tool_count()`, `get_icon_area_offset()` (`6cf6f5dd7`) を追加。
+    `get_tool_count()`, `get_icon_area_offset()` (`6cf6f5dd7`)、
+    `last_tool_icon_disp_start` / `is_being_dragged()` (`fffd2145a`) を追加。
     1行のみのツールバーは水平、複数行のグリッドは行単位の垂直スクロール
   - `gui/simwin.{h,cc}` — `get_main_menu_scrollbar_extra()` を追加し、メニューバーの実占有量をウィンドウ側とマップ表示側で共有
   - `display/simview.cc`, `display/simgraph16.cc`, `gui/gui_theme.cc`, `gui/welt.cc`, `gui/enlarge_map_frame_t.cc`, `simmenu.cc`
@@ -201,6 +216,10 @@
 - **詳細**:
   - スクロール不要なときはスクロールバーを描画しない。アイコン高さ0による除算を回避。テーマ再読み込み時もアイコンサイズを維持。
   - `6cf6f5dd7` は `env_t::menupos` がメニューバーを画面下端/右端に置いている場合に、スクロールバー帯の分だけアイコン領域を外側にずらす修正。
+  - `fffd2145a` は (a) スクロール位置が変わったフレームでアイコン領域全体を再描画する
+    (空アイコンのセルに前フレームの絵が残る問題)、(b) ドラッグ中は `is_hit()` を外れても
+    `simwin.cc` 側がイベントをツールバーへ回し続ける (ドラッグが途中で止まる問題)、
+    (c) 空メニューがある場合に最後のアイコンまで表示する、の3点の修正。
 - **取り込み時の注意**: 描画・GUI レイアウト全般に影響するため、取り込み後は各 `menupos` 設定で表示確認が必要。
 - **develop-kasumi 側コミット**: —
 - **備考**: —
@@ -247,24 +266,49 @@
 - **develop-kasumi 側コミット**: —
 - **備考**: `develop-kasumi` には車庫内コピーで編成反転状態を保持する独自改造 (`245bcfcc7`) があるため干渉に注意。
 
-### FEAT-09: ミニマップへの路線/編成経路表示
+### FEAT-09: 経路表示の拡充 (ミニマップ表示・スケジュール全経路・所要時間)
 
 - **分類**: 新機能追加
 - **状態**: 未取り込み
-- **概要**: 編成情報/路線一覧の「経路を表示」で、メインマップだけでなくミニマップ上にも経路タイルをハイライト表示する。
+- **概要**: 経路のハイライト表示をミニマップにも広げ、さらに編成/スケジュールの
+  **全区間の経路** をマップ上に表示し、走破に要する推定時間とタイル数を併記する。
 - **上流コミット**:
-  - `abb9c92a0` show route in minimap (#702)
+  - `abb9c92a0` show route in minimap (#702) — 本体 (ミニマップ表示)
+  - `3fa861f6a` show convoy and schedule route (#712) — 機能拡張 (スケジュール全経路 + 所要時間)
+  - `a25a51a31` BUG FIX: the value of route time hours (#718) — 後続修正
 - **主な変更箇所**:
   - `gui/minimap.{h,cc}` — `vector_tpl<koord3d> highlighted_route_tiles` と
     `set_highlighted_route()` / `clear_highlighted_route()` を追加。`draw()` で `COL_SOFT_BLUE` の矩形として描画。`init()` でクリア
-  - `gui/convoi_info_t.cc` — `convoi_info_t::show_route()` からミニマップへ経路を設定/クリア
+  - `gui/convoi_info_t.cc` — `convoi_info_t::show_route()` からミニマップへ経路を設定/クリア。
+    スケジュール全経路の表示中は編成経路を描かずボタンを無効化 (`3fa861f6a`)
   - `gui/schedule_list.cc` — `show_route_cache()` からも同様に設定/クリア。
     経路キャッシュ設定が無効でも、路線所属編成の実経路にフォールバックして表示する。
-    ボタンの有効条件を「経路キャッシュ有効」から「路線に編成が1つ以上ある」に変更
-- **詳細**: —
-- **取り込み時の注意**: —
+    ボタンの有効条件を「経路キャッシュ有効」から「路線に編成が1つ以上ある」に変更。
+    `clear_route_tile_flags(route_t&)` を追加 (`3fa861f6a`)
+  - `gui/route_display.{h,cc}` — `schedule_route_overlay_t` (show/hide/poll/route_ready) と
+    `format_route_time_hours(uint32 ticks)` を追加 (`3fa861f6a`)
+  - `simworld.{h,cc}` — `request_schedule_route()` / `clear_schedule_route()` / `step_schedule_route()` /
+    `get_schedule_route()` / `is_schedule_route_complete()` / `is_schedule_route_active()` /
+    `is_schedule_route_pending()` / `get_schedule_route_count()` (`a25a51a31`) を追加。
+    経路は `karte_t::step()` から **1 step につき停留所間 1 区間ずつ** 計算する (`3fa861f6a`)
+  - `simconvoi.{h,cc}` — `static convoi_t::calc_ticks_until_arrival(cnv, route_tiles, add_stop_time)` を追加 (`3fa861f6a`)
+  - `gui/halt_info.cc` — 発車案内板の到着時刻推定を上記 `convoi_t::calc_ticks_until_arrival()` に移譲 (`3fa861f6a`)
+  - `gui/schedule_gui.{h,cc}` — `bt_show_line_route`, `lb_route_time`, `route_overlay`,
+    `get_route_reference_convoi()` (virtual) を追加 (`3fa861f6a`)
+  - `gui/convoi_stops_list_t.{h,cc}` — `bt_show_whole_route`, `lb_route_time`, `route_overlay` を追加 (`3fa861f6a`)
+  - `gui/line_management_gui.{h,cc}` — `get_route_reference_convoi()` を路線の先頭編成でオーバーライド (`3fa861f6a`)
+- **詳細**:
+  - スケジュール全経路はクライアントローカルな表示専用データで、セーブには残らない。
+    `karte_t::step()` からのみ計算し、GUI からは経路探索を走らせない。
+  - 航空 (`air_wt`) のスケジュールは `calc_route()` が経路を返さないため対象外 (ボタンを出さない)。
+  - 所要時間は `calc_ticks_until_arrival()` の推定値。`a25a51a31` で
+    `ticks × spacing_shift_divisor / ticks_per_world_month` (uint64 演算、0除算回避) に計算式を修正し、
+    表示にタイル数を追加した。
+- **取り込み時の注意**: `karte_t` に表示用の静的状態と `step()` からの呼び出しが増える。
+  セーブ形式には影響しない。
 - **develop-kasumi 側コミット**: —
-- **備考**: 状態確認用の識別子は `gui/minimap.h` の `highlighted_route_tiles`。
+- **備考**: 状態確認用の識別子は `gui/minimap.h` の `highlighted_route_tiles` (本体) と
+  `simworld.h` の `request_schedule_route` (拡張分)。
 
 ### FEAT-10: 路線一覧のメモ欄をフィルタ対象に追加
 
@@ -283,6 +327,91 @@
 - **備考**: 状態確認用の識別子は `gui/schedule_list.h` の `bt_memo_filter`。
   なお路線メモ機能そのもの (`inp_memo` 等) は v58_3 時点で既に存在する。本項目はそれを
   フィルタ条件に加える差分のみ。
+
+### FEAT-11: 財務グラフの収入内訳と輸送量内訳
+
+- **分類**: 新機能追加
+- **状態**: 未取り込み
+- **概要**: 会社の財務ダイアログに、収入の内訳 (旅客/郵便/貨物) と輸送量の内訳 (旅客/郵便/貨物) の
+  行とグラフ曲線を追加する。
+- **上流コミット**:
+  - `bd3a24b48` add income goods category in finance graph (#717) — 収入内訳
+  - `49ca28a97` add transported passenger,post,good graph (#719) — 輸送量内訳
+- **主な変更箇所**:
+  - `gui/money_frame.h` — `MAX_PLAYER_COST_BUTTON` 13 → 16 (`bd3a24b48`) → 19 (`49ca28a97`)
+  - `gui/money_frame.cc` — `cost_type_name` / `cost_type_color` / `cost_type` / `label_type` /
+    `cell_to_buttons` / `cell_to_moneylabel` に `ATV_REVENUE_PASSENGER` / `ATV_REVENUE_MAIL` /
+    `ATV_REVENUE_GOOD` と `ATV_TRANSPORTED_PASSENGER` / `ATV_TRANSPORTED_MAIL` /
+    `ATV_TRANSPORTED_GOOD` の行を追加。`MONEY_FRAME_ROWS` と
+    `FIRST_REVENUE_BREAKDOWN_BUTTON` マクロを新設し、内訳ボタンは親行の下に右寄せで配置
+  - `simcolor.h` — `COL_REVENUE_PAS` / `COL_REVENUE_MAIL` / `COL_REVENUE_GOOD` /
+    `COL_TRANSPORTED_PAS` / `COL_TRANSPORTED_MAIL` / `COL_TRANSPORTED_GOOD` を追加
+- **詳細**: 集計値そのものは既存の `finance_t` の統計 (`ATV_REVENUE_*` / `ATV_TRANSPORTED_*`) を
+  使うだけで、新規の統計項目は追加していない。表示行が9行→15行に増える。
+- **取り込み時の注意**: セーブ形式への影響なし。財務ダイアログの縦幅が大きくなる。
+- **develop-kasumi 側コミット**: —
+- **備考**: 状態確認用の識別子は `simcolor.h` の `COL_TRANSPORTED_PAS`。
+
+### FEAT-12: 送金ダイアログの小数点以下入力対応
+
+- **分類**: 新機能追加
+- **状態**: 未取り込み
+- **概要**: 会社間送金の入力欄を「整数部 . 小数部」の2欄構成にし、円表記 (`show_yen`) の
+  設定を `simuconf.tab` と設定ダイアログからも切り替えられるようにする。
+- **上流コミット**:
+  - `0536cff05` send money update (#709)
+- **主な変更箇所**:
+  - `gui/money_frame.{h,cc}` — `gui_numberinput_t write_money_cents` (0〜99) を追加。
+    `get_balance_divisor()` (円表記なら10、そうでなければ1000) を新設し、上限計算と送金額計算を切り替え。
+    送金後に入力欄を0にリセット
+  - `dataobj/settings.cc` — `settings_t::parse_simuconf()` に `show_yen` を追加
+  - `gui/settings_stats.cc` — 設定ダイアログ「一般」タブに `show_yen` のチェックボックスを追加
+- **詳細**: `env_t::show_yen` が真のときは小数入力欄を隠し、入力値をそのまま最小単位として扱う。
+- **取り込み時の注意**: `env_t::show_yen` 自体は v58_3 時点で既に存在する。セーブ形式への影響なし。
+- **develop-kasumi 側コミット**: —
+- **備考**: 状態確認用の識別子は `gui/money_frame.h` の `write_money_cents`。
+
+### FEAT-13: 一方通行標識の詳細設定に矢印図とコピー/貼り付け
+
+- **分類**: 新機能追加
+- **状態**: 未取り込み
+- **概要**: 一方通行標識の詳細設定 (`detailed_oneway`) を、チェックボックス群だけでなく
+  交差点の矢印図をクリックして切り替えられるようにし、設定を他の標識へコピー/貼り付けできるようにする。
+- **上流コミット**:
+  - `eaae6f8b2` add arrow and copy/paste buttons in one-way detail setting (#715)
+- **主な変更箇所**:
+  - `gui/onewaysign_info.h` — `gui_oneway_diagram_t` (クリック可能な交差点図コンポーネント) を新設。
+    `onewaysign_info_t` に `diagram`, `lb_diagram`, `bt_copy`, `bt_paste`、
+    静的クリップボード `clip_ns` / `clip_ow` / `clip_valid`、`apply_exit_toggle(row, col)` を追加
+  - `gui/onewaysign_info.cc` — 矢印の描画とクリック判定、コピー/貼り付け時のツール発行
+  - `documentation/ja.OTRP.tab` — 「通行方向の詳細設定をコピー/貼り付け」「通行可能な方向」等 (MISC-02 参照)
+- **詳細**: 図の行は進入方向 (S / W / N / E)、列は退出方向 (`ribi_t::nesw` 順)。
+  クリックすると `row*4 + col` の値でリスナが呼ばれ、該当の右左折可否ビットが反転する。
+  コピー/貼り付けはツールの `n` / `e` パラメータと同じパック形式でクラス静的変数に保持する。
+- **取り込み時の注意**: `detailed_oneway` 機能自体は v58_3 時点で既に存在する。セーブ形式への影響なし。
+- **develop-kasumi 側コミット**: —
+- **備考**: 同じ作業ブランチから派生した FIX-03 も参照。
+  状態確認用の識別子は `gui/onewaysign_info.h` の `gui_oneway_diagram_t`。
+
+### FEAT-14: MCP サーバに `get_tile_info` ツールを追加
+
+- **分類**: 新機能追加
+- **状態**: 未取り込み
+- **概要**: 内蔵 MCP サーバに、指定タイルの地形種別・傾斜・載っているオブジェクトを
+  JSON で返すツール `get_tile_info` を追加する。
+- **上流コミット**:
+  - `02ebbec21` mcp server tool update (#711)
+- **主な変更箇所**:
+  - `network/mcp_tools.cc` — `tool_get_tile_info()` と補助関数
+    `json_get_int()` / `obj_type_name()` / `ground_type_name()` / `append_slope_json()` を追加。
+    `TOOL_DEFS[]` に `get_tile_info` の定義 (x, y 必須 / z 任意) を追加
+- **詳細**: 返す内容は `ground_type`、`is_water` / `is_ground` / `is_bridge` / `is_tunnel` /
+  `is_elevated` / `is_underground`、地面と way の `slope` (角の高さと建設可否フラグ)、
+  タイル上のオブジェクト一覧 (index / type / type_name / name / owner)。
+  `z` を省略すると地表 (kartenboden)、指定するとその高さのみを参照しフォールバックしない。
+- **取り込み時の注意**: セーブ形式への影響なし。MCP サーバはデバッグ用途のみ。
+- **develop-kasumi 側コミット**: —
+- **備考**: 状態確認用の識別子は `network/mcp_tools.cc` の `tool_get_tile_info`。
 
 ### FIX-01: choose 標識/choose 区間終端が経路上にある場合の判定
 
@@ -314,6 +443,104 @@
 - **develop-kasumi 側コミット**: `2a8290a43`
 - **備考**: —
 
+### FIX-03: 一方通行詳細設定の waytype 判定漏れと経路喪失時の異常終了
+
+- **分類**: バグ修正
+- **状態**: 未取り込み
+- **概要**: 一方通行の詳細設定 (`detailed_oneway`) を、同じタイルを共有する別 waytype の
+  標識にまで適用してしまう問題と、再経路探索に失敗したときに `route_t::at()` が
+  範囲外参照して異常終了する問題を修正する。
+- **上流コミット**:
+  - `4c3287d11` BUG FIX: fatal when no route (#714)
+- **主な変更箇所**:
+  - `obj/roadsign.h` — `get_governed_waytype()` を追加 (`tram_wt` の標識は `track_wt` を返す)
+  - `dataobj/route.cc` — `find_route()` / `intern_calc_route()` の一方通行判定に
+    `rs->get_governed_waytype() == w->get_waytype()` の条件を追加
+  - `vehicle/simvehicle.{h,cc}` — `hop_check()` と `get_ribi()` に同じ waytype 判定を追加。
+    `vehicle_t::clamp_route_index()` を新設
+  - `vehicle/simroadtraffic.cc` — 市内車 (`private_car_t`) の3箇所にも `road_wt` 判定を追加
+  - `simconvoi.cc` — `drive_to()` で経路探索に失敗したとき、連結子編成も含む全車両の
+    `route_index` を1タイルのスタブ経路に合わせてクランプする
+- **詳細**: 例えば路面電車の線路と道路が同居するタイルで、道路用の一方通行標識が
+  路面電車の経路判定に効いてしまっていた。また `calc_route()` 失敗時は経路が
+  `[start]` の1タイルだけになるのに車両側は以前の大きな `route_index` を保持したままで、
+  25秒後の再試行までの間に `route_t::at()` が範囲外を参照していた。
+- **取り込み時の注意**: `develop-kasumi` の車線制御まわりと同じファイルを触るため、
+  cherry-pick 時は `vehicle/simvehicle.cc` の競合に注意。
+- **develop-kasumi 側コミット**: —
+- **備考**: FEAT-13 と同じ作業ブランチから派生している (コミット本文の履歴が共通)。
+  状態確認用の識別子は `obj/roadsign.h` の `get_governed_waytype`。
+
+### FIX-04: 積込中に「次の停留所へ」を押した際の停車時間等の未更新
+
+- **分類**: バグ修正
+- **状態**: 未取り込み
+- **概要**: 積込中の編成に対して「次の停留所へ」ボタンを押したとき、停車時間や
+  貨物待機時間などの記録・状態リセットが行われずに出発してしまうのを修正する。
+- **上流コミット**:
+  - `785fb44fb` push stopping time and another values when next stop button pressed during loading (#710)
+- **主な変更箇所**:
+  - `simconvoi.cc` — `convoi_t::next_stop_button_pressed()` で、対象編成が `is_loading()` の場合に
+    `push_goods_waiting_time_if_needed()`, `push_convoy_stopping_time()`,
+    `set_coupling_done(false)`, `set_waiting_for_departure_allowance_by_other_convoy(false)`,
+    `reset_departure_time()` を呼ぶ
+- **詳細**: 通常の発車経路では行われる後始末が、ボタンによる強制発車では抜けていた。
+- **取り込み時の注意**: —
+- **develop-kasumi 側コミット**: —
+- **備考**: —
+
+### FIX-05: 経路予約解除ツールが連結子編成を解放してしまう
+
+- **分類**: バグ修正
+- **状態**: 未取り込み
+- **概要**: 予約解除ツールを連結編成の車両に使うと、子編成が単独で `ROUTING_1` にされて
+  連結が壊れる問題を修正する。
+- **上流コミット**:
+  - `033e83a21` Do not release child convoys when clear reservation (#720)
+- **主な変更箇所**:
+  - `simtool.cc` — `tool_clear_reservation_t::work()` で `veh->get_convoi()` ではなく
+    `get_most_parent_convoi()` の状態を見て `set_state()` する
+- **詳細**: —
+- **取り込み時の注意**: —
+- **develop-kasumi 側コミット**: —
+- **備考**: —
+
+### FIX-06: 橋脚が滑走路 (`air_wt`) タイル上に建つ
+
+- **分類**: バグ修正
+- **状態**: 未取り込み
+- **概要**: 橋の橋脚 (`pillar_t`) が滑走路タイルの上に生成されるのを禁止する。
+- **上流コミット**:
+  - `2d93c0086` Prohibit bridge pillars from landing on air_wt tiles (#643)
+- **主な変更箇所**:
+  - `bauer/brueckenbauer.cc` — `build_bridge()` の橋脚生成条件に `!gr->hat_weg(air_wt)` を追加
+- **詳細**: 従来は橋脚の設置間隔が pak の `pillars_every` のみで決まり、
+  エンジン側の waytype 制限が無かった。同ファイルの「滑走路を跨ぐ橋は不可」ルールを補完する形。
+- **取り込み時の注意**: —
+- **develop-kasumi 側コミット**: —
+- **備考**: —
+
+### FIX-07: Windows GDI の DPI スケーリング時のリサイズ処理
+
+- **分類**: バグ修正
+- **状態**: 未取り込み
+- **概要**: Windows GDI バックエンドで、ディスプレイ拡大率が 100% 以外のときに
+  ウィンドウのリサイズが正しく反映されない/取りこぼされる問題を修正する。
+- **上流コミット**:
+  - `221c85198` Fix Windows GDI resize handling under DPI scaling (#721)
+- **主な変更箇所**:
+  - `sys/simsys_w.cc` — `dr_textur_resize()` が既に論理ピクセルの `w`, `h` を
+    さらに `x_scale` で割っていた二重スケーリングを修正。`WM_SIZE` は最新のクライアントサイズのみを保持し、
+    `GetEvents()` が空き次第 `sys_event` スロットへ渡すように変更
+  - `simevent.cc` — `queue_event()` でキュー済みのリサイズイベントを破棄し、
+    古いサイズが後から再適用されないようにする
+- **詳細**: `WM_PAINT` は `WindowSize` を物理ピクセルとして扱うため、拡大率150%では
+  実際の 4/9 程度のサイズになっていた。また `WM_SIZE` が単一の `sys_event` スロットに書くため、
+  直後の `WM_MOUSEMOVE` に上書きされてリサイズが失われることがあった。
+- **取り込み時の注意**: `develop-kasumi` のビルドは GDI バックエンドのため影響が大きい。
+- **develop-kasumi 側コミット**: —
+- **備考**: 状態確認用の識別子は `simevent.cc` / `sys/simsys_w.cc`。フォーラム topic 23805 の報告に関連。
+
 ### MISC-01: 本家バージョン番号のインクリメント
 
 - **分類**: その他
@@ -325,6 +552,9 @@
   - `133e02261` increment OTRP_VERSION_PATCH (v59_0_2)
   - `ad3e3b553` increment OTRP_VERSION_MAJOR (v60)
   - `04c0219d0` increment OTRP_VERSION_PATCH (v60_0_1)
+  - `f3aebc3a7` increment OTRP_VERSION_MINOR (v60_1)
+  - `8ed0304d3` increment OTRP_VERSION_PATCH (v60_1_1)
+  - `93192762a` increment OTRP_VERSION_MINOR (v60_2)
 - **主な変更箇所**: `simversion.h` — `OTRP_VERSION_MAJOR` / `OTRP_VERSION_MINOR` / `OTRP_VERSION_PATCH`
 - **詳細**: —
 - **取り込み時の注意**:
@@ -333,6 +563,8 @@
   取り込む場合は、`OTRP_VERSION_MAJOR` の引き上げ判断が必須**:
   - `OTRP_VERSION_MAJOR >= 59` を要求する項目: FEAT-01 / FEAT-04 / FEAT-05
   - `OTRP_VERSION_MAJOR >= 60` を要求する項目: FEAT-07
+  - v60_1 以降の項目 (FEAT-09 拡張分、FEAT-11〜FEAT-14、FIX-03〜FIX-07、MISC-03) は
+    `get_OTRP_version()` によるセーブ形式の分岐を持たないため、バージョン引き上げは不要。
 - **develop-kasumi 側コミット**: — (独自運用: `cf52a5750` 等)
 - **備考**: バージョン番号自体は取り込まない方針。上記の依存関係のみ管理する。
 
@@ -351,7 +583,40 @@
     `penalty_wait_for_two_month` (FEAT-04)、`base_revenue_from_halt` / 「収入」(FEAT-05)、
     16社以上の保存警告 (FEAT-01)、「キャッシュ中のルートを表示」(FEAT-09 関連)
   - v60分: 「他編成を発車させるまで待機」等 (FEAT-02)、`tile_length` / 「走行距離 (m)」(FEAT-07)
+  - v60_1 以降は翻訳のみのコミットは無く、機能コミットに同梱されている:
+    `5461ae2d2` の「発車許可を出す路線を指定」(FEAT-02)、
+    `eaae6f8b2` の「通行方向の詳細設定をコピー/貼り付け」「通行可能な方向」等 (FEAT-13)
 - **取り込み時の注意**: `develop-kasumi` は独自に `ja.OTRP.tab` を編集している (`dd440ea4b`, `fa91f31fc` 等) ため
   ファイル単位の cherry-pick は競合しやすい。**対応する機能項目を取り込む際に、必要な行だけを追加する**運用とする。
 - **develop-kasumi 側コミット**: —
 - **備考**: —
+
+### MISC-03: SDL3 バックエンド対応と CI のビルド構成更新
+
+- **分類**: その他
+- **状態**: 未取り込み
+- **概要**: 新しいバックエンド `sdl3` を追加し、Linux / macOS / Windows の CI ビルドを
+  SDL3 (Ubuntu は SDL2 と SDL3 の両方) に切り替える。
+- **上流コミット**:
+  - `a7aa63f9e` Merge pull request #716 from teamhimeh/sdl3-support (マージコミット)
+  - `08f9bc0e2` ADD: SDL3 backend support — 本体
+  - `a961e69d8` switch Linux and macOS builds to SDL3
+  - `ac2e2a3b6` ADD: Windows SDL3 build
+  - `a24090e8b` FIX: use the MSYS2 SDL3 package name
+  - `e22d59740` CI: build Ubuntu SDL2 and SDL3 variants
+  - `7235365ca` FIX: support miniupnpc API 18
+  - `713a26cb6` FIX: support the current MSYS2 Brotli layout
+  - `5846222f8` FIX: apply SDL3 display scale to user scaling
+- **主な変更箇所**:
+  - `sys/simsys_s3.cc` (新規, 約1960行), `sys/clipboard_s3.cc` (新規), `sound/sdl3_sound.cc` (新規)
+  - `Makefile`, `config.default.in`, `config.template`, `configure.ac` — `BACKEND := sdl3` と
+    `SDL3_CONFIG` を追加。`configure` は SDL2 より SDL3 を優先して検出する
+  - `network/network.cc` — miniupnpc API 18 対応 (`7235365ca`)
+  - `.github/build64-SDL3.sh` (新規), `.github/build-mac.sh`, `.github/package-mac-app.sh`,
+    `.github/workflows/otrp-{windows-64,ubuntu,macos,automated-tests}.yml`
+- **詳細**: `5846222f8` は SDL3 のディスプレイスケールをユーザ拡大率へ反映する修正。
+- **取り込み時の注意**: `develop-kasumi` のローカルビルドは MSYS2 / MINGW64 の
+  **gdi バックエンド** を使っているため、実行バイナリへの影響は無い。
+  CI ワークフローを取り込む場合のみ検討すればよい。
+- **develop-kasumi 側コミット**: —
+- **備考**: バックエンド追加のみで、ゲームロジック・セーブ形式には影響しない。
