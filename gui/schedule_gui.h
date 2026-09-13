@@ -127,6 +127,13 @@ protected:
 
 	linehandle_t new_line, old_line;
 
+	/**
+	 * true as soon as the user picked "<no line>" in the line selector.
+	 * init_line_selector() must then not silently re-assign a line whose
+	 * schedule happens to match the edited one.
+	 */
+	bool line_deselected;
+
 	void init(schedule_t* schedule, player_t* player, convoihandle_t cnv, const char* cnv_line_name = "");
 
 public:

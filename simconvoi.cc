@@ -4915,6 +4915,21 @@ void convoi_t::set_line(linehandle_t org_line)
 
 
 /**
+* removes the convoy from its line, but keeps its schedule
+* the convoy now has to register itself at the stops, since it is no longer served by the line
+*/
+void convoi_t::leave_line()
+{
+	if(  !line.is_bound()  ) {
+		return;
+	}
+	unset_line();
+	register_stops();
+	welt->set_schedule_counter(); // must trigger refresh
+}
+
+
+/**
 * unset line
 * removes convoy from route without destroying its schedule
 * => no need to recalculate connections!

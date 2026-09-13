@@ -9557,7 +9557,7 @@ bool scenario_check_convoy(karte_t *welt, player_t *player, convoihandle_t cnv, 
  * 'n' : toggle 'no load'
  * 'w' : toggle withdraw
  * 's' : change state to [number] (and maybe set open schedule flag)
- * 'l' : apply new line [number]
+ * 'l' : apply new line [number] (line id 0: leave the line, keeping the schedule)
  * 'L' : create new line
  * 'd' : go to nearest depot
  * 'y' : move to depot immediately
@@ -9686,6 +9686,13 @@ bool tool_change_convoi_t::init( player_t *player )
 					cnv->set_line( l );
 					cnv->get_schedule()->set_current_stop((uint8)current_stop);
 					cnv->get_schedule()->finish_editing();
+				}
+				else if(  count>=1  &&  id==0  ) {
+					// "<no line>" was selected: the convoy keeps its schedule, but leaves the line
+					cnv->leave_line();
+					if(  cnv->get_schedule()  ) {
+						cnv->get_schedule()->finish_editing();
+					}
 				}
 			}
 			break;

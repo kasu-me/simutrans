@@ -619,6 +619,12 @@ public:
 	*/
 	void set_line(linehandle_t );
 
+	/**
+	* removes the convoy from its line, but keeps its schedule
+	* -> the convoy drives the very same schedule on its own from now on
+	*/
+	void leave_line();
+
 	// updates a line schedule and tries to find the best next station to go
 	void check_pending_updates();
 

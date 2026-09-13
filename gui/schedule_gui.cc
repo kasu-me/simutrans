@@ -385,6 +385,7 @@ void schedule_gui_t::init(schedule_t* schedule_, player_t* player, convoihandle_
 	// prepare editing
 	old_schedule->start_editing();
 	schedule = old_schedule->copy();
+	line_deselected = false;
 	if(  !cnv.is_bound()  ) {
 		old_line = new_line = linehandle_t();
 	}
@@ -1221,6 +1222,11 @@ bool schedule_gui_t::infowin_event(const event_t *ev)
 					}
 				}
 				else {
+					if(  cnv->get_line().is_bound()  ) {
+						// "<no line>": leave the line, but keep the schedule
+						// (a plain schedule change would not detach a convoy whose schedule still matches the line)
+						cnv->call_convoi_tool( 'l', "0" );
+					}
 					cbuffer_t buf;
 					schedule->sprintf_schedule( buf );
 					cnv->call_convoi_tool( 'g', buf );
@@ -1449,6 +1455,7 @@ dbg->message("schedule_gui_t::action_triggered()","comp=%p combo=%p",comp,&line_
 		dbg->message("schedule_gui_t::action_triggered()","set_line_selection %p, %i",comp,selection);
 		if(  line_scrollitem_t *li = dynamic_cast<line_scrollitem_t*>(line_selector.get_element(selection))  ) {
 			new_line = li->get_line();
+			line_deselected = false;
 			stats->highlight_schedule( false );
 			schedule->copy_from( new_line->get_schedule() );
 			schedule->start_editing();
@@ -1456,6 +1463,8 @@ dbg->message("schedule_gui_t::action_triggered()","comp=%p combo=%p",comp,&line_
 		else {
 			// remove line
 			new_line = linehandle_t();
+			// the schedule may still match the old line: do not let init_line_selector() re-assign it
+			line_deselected = true;
 			line_selector.set_selection( 0 );
 		}
 	}
@@ -1472,6 +1481,8 @@ dbg->message("schedule_gui_t::action_triggered()","comp=%p combo=%p",comp,&line_
 		}
 	}
 	else if(comp == &bt_promote_to_line) {
+		// the new line is picked up by init_line_selector() once the tool created it
+		line_deselected = false;
 		// update line schedule via tool!
 		tool_t *tool = create_tool( TOOL_CHANGE_LINE | SIMPLE_TOOL );
 		cbuffer_t buf;
@@ -1714,6 +1725,9 @@ dbg->message("schedule_gui_t::action_triggered()","comp=%p combo=%p",comp,&line_
 		}
 		schedule = old_schedule->copy();
 		stats->schedule = schedule;
+		// the original line assignment is part of the original state
+		new_line = old_line;
+		line_deselected = false;
 		init_departure_slot_group_selector();
 		stats->update_schedule();
 		update_selection();
@@ -1790,7 +1804,7 @@ void schedule_gui_t::init_line_selector()
 			}
 		}
 		if(  !new_line.is_bound()  ) {
-			if(  schedule->matches( welt, line->get_schedule() )  ) {
+			if(  !line_deselected  &&  schedule->matches( welt, line->get_schedule() )  ) {
 				selection = line_selector.count_elements()-1;
 				new_line = line;
 			}
