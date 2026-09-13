@@ -93,6 +93,8 @@ void gui_scrollpane_t::recalc_sliders(scr_size size)
  */
 void gui_scrollpane_t::set_size(scr_size size)
 {
+	const bool size_changed = get_size() != size;
+
 	gui_component_t::set_size(size);
 	// automatically increase/decrease slider area
 	scr_coord k = comp->get_size()+comp->get_pos();
@@ -113,7 +115,13 @@ void gui_scrollpane_t::set_size(scr_size size)
 	comp->set_size(c_size);
 
 	recalc_sliders(size);
-	show_focused();
+	// Only scroll the focused component back into view when this pane was really
+	// resized. Some windows re-run their layout on every frame, and scrolling to
+	// the focused component each time would pin the scroll position to it and
+	// make the pane impossible to scroll.
+	if(  size_changed  ) {
+		show_focused();
+	}
 }
 
 
