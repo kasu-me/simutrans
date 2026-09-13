@@ -109,6 +109,8 @@ avoid becoming cityroad
 市道化を禁止する
 no building adjacent
 建物を接道しない
+No buildings along roadside.
+建物を接道しない
 can branch cityroad
 市道の分岐を許可
 Cityroad allow branch from this road
