@@ -6483,6 +6483,14 @@ void convoi_t::next_stop_button_pressed() {
 		if( !c->can_continue_coupling() || schedule->get_current_entry().is_uncouple_child() ) {
 			c->uncouple_convoi();
 		}
+		if(  c->is_loading()  ) {
+			c->push_goods_waiting_time_if_needed();
+			c->push_convoy_stopping_time();
+			c->set_coupling_done(false);
+			// NOTE: set_waiting_for_departure_allowance_by_other_convoy(false) は
+			// 本家 FEAT-02 (発車待ち合わせ) 未取り込みのため省略。
+			c->reset_departure_time();
+		}
 		c->change_line_to_next_if_needed();
 		c->schedule->advance();
 		dbg->message("convoi_t::next_stop_button_pressed()","the next stop is %i",schedule->get_current_entry());
