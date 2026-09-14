@@ -4482,7 +4482,11 @@ void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_ste
 		}
 	}
 
-	if(  scheduled_departure_time==0  &&  state!=SUSPENSION_LOADING  ) {
+	// Only the leading convoy judges the departure and books the departure slot.
+	// A coupled convoy must not book a slot: it departs together with its parent, and
+	// its booking would steal the slot the parent is going to request, which delays the
+	// whole train by one slot when the parent and the child have the same schedule.
+	if(  !is_coupled()  &&  scheduled_departure_time==0  &&  state!=SUSPENSION_LOADING  ) {
 		bool need_coupling_at_this_stop = false;
 		// departure judgement is done in a helper function.
 		departure_cond = can_depart(self, halt, arrived_time,
@@ -6075,10 +6079,25 @@ void convoi_t::calc_crossing_reservation() {
 }
 
 
+void convoi_t::release_departure_slot() {
+	if(  scheduled_departure_time==0  ) {
+		return;
+	}
+	halthandle_t h = haltestelle_t::get_stoppable_halt(get_pos(), get_owner(), front()->get_waytype());
+	if(  h.is_bound()  ) {
+		h->erase_departure(scheduled_departure_time, self);
+	}
+	scheduled_departure_time = 0;
+}
+
+
 bool convoi_t::couple_convoi(convoihandle_t coupled) {
 	convoihandle_t c = coupled;
 	while( c.is_bound() ) {
 		c->set_state(COUPLED_LOADING);
+		// The convoy does not depart by itself anymore. Give the departure slot back
+		// so that the parent convoy can book it instead of being pushed to the next slot.
+		c->release_departure_slot();
 		c = c->get_coupling_convoi();
 	}
 	if(  !is_coupled()  ) {

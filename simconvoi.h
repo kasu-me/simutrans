@@ -1176,6 +1176,12 @@ public:
 	uint32 get_arrived_time() const { return arrived_time; }
 	uint32 get_departure_time() const { return scheduled_departure_time; } // in ticks.
 	void reset_departure_time() { scheduled_departure_time = 0; }
+	/**
+	 * Cancel the departure slot booked at the halt this convoy is standing on
+	 * and reset scheduled_departure_time.
+	 * Used when this convoy stops departing by itself, e.g. when it becomes a coupled convoy.
+	 */
+	void release_departure_slot();
 	uint32 get_coupling_delay_tolerance() const { return scheduled_coupling_delay_tolerance; }
 
 	// register journey time to the current schedule entry
