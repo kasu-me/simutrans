@@ -1212,6 +1212,26 @@ public:
 	// Returns the most child convoi of this convoy.
 	convoihandle_t find_most_child_convoi() const;
 
+	/**
+	 * Returns the first convoy of the coupling chain this convoy belongs to.
+	 * Unlike get_most_parent_convoi() this also works inside a depot, where parent_convoi
+	 * is not maintained and the chain only exists through coupling_convoi.
+	 */
+	convoihandle_t get_coupling_chain_root() const;
+
+	/**
+	 * Collects the whole coupling chain this convoy belongs to, root convoy first.
+	 * A convoy that is not coupled yields a chain of one element (itself).
+	 */
+	void get_coupling_chain( vector_tpl<convoihandle_t> &chain ) const;
+
+	/**
+	 * True when this convoy is coupled with at least one other convoy and every convoy of
+	 * the coupling chain has the same owner, the same line and the same schedule.
+	 * Only then a schedule change may be applied to the coupled train as a whole.
+	 */
+	bool has_uniform_coupling_schedule() const;
+
 	// go to next stop (skip one stops)
 	// only called by tool_change_convoi_t
 	void next_stop_button_pressed();

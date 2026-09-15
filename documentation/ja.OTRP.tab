@@ -231,6 +231,12 @@ A convoy tries to find a waiting convoy to couple with.
 この地点で待機中の編成と連結を試行します．
 Uncouple the back convoy now.
 即時に後ろの編成を解放します．
+Schedule of coupled convoys
+連結編成全体のスケジュール
+Alters the schedule of all coupled convoys at once.
+連結している全ての編成のスケジュールを一括で変更します．
+coupled convoys
+連結編成全体
 Please decouple the other convoy to edit the schedule.
 スケジュールを編集するには連結解除してください．
 Convoys length coupling done

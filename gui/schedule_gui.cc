@@ -406,7 +406,13 @@ void schedule_gui_t::init(schedule_t* schedule_, player_t* player, convoihandle_
 	add_table(5,1);
 	{
 		if(  cnv.is_bound()  ) {
-			snprintf(lb_cnv_line_name_str,255,cnv->get_name());
+			if(  cnv->has_uniform_coupling_schedule()  ) {
+				// the change will be applied to every convoy of the coupled train
+				snprintf(lb_cnv_line_name_str, 255, "%s (%s)", cnv->get_name(), translator::translate("coupled convoys"));
+			}
+			else {
+				snprintf(lb_cnv_line_name_str,255,cnv->get_name());
+			}
 		} else {
 			snprintf(lb_cnv_line_name_str,255,cnv_line_name);
 		}
@@ -1207,29 +1213,45 @@ bool schedule_gui_t::infowin_event(const event_t *ev)
 		if(  cnv.is_bound()  ) {
 			// do not send changes if the convoi is about to be deleted
 			if(  cnv->get_state() != convoi_t::SELF_DESTRUCT  ) {
-				// if a line is selected
-				if(  new_line.is_bound()  ) {
-					// if the selected line is different to the convoi's line, apply it
-					if(  new_line!=cnv->get_line()  ) {
-						char id[16];
-						sprintf( id, "%i,%i", new_line.get_id(), schedule->get_current_stop() );
-						cnv->call_convoi_tool( 'l', id );
-					}
-					else {
-						cbuffer_t buf;
-						schedule->sprintf_schedule( buf );
-						cnv->call_convoi_tool( 'g', buf );
-					}
+				// A coupled train whose convoys all share one schedule is edited as a whole:
+				// the new schedule is then applied to every convoy of the coupling chain.
+				// (the edit was done on a copy, so the convoys still carry the original schedule here)
+				vector_tpl<convoihandle_t> targets;
+				if(  cnv->has_uniform_coupling_schedule()  ) {
+					cnv->get_coupling_chain( targets );
 				}
 				else {
-					if(  cnv->get_line().is_bound()  ) {
-						// "<no line>": leave the line, but keep the schedule
-						// (a plain schedule change would not detach a convoy whose schedule still matches the line)
-						cnv->call_convoi_tool( 'l', "0" );
+					targets.append( cnv );
+				}
+
+				FOR(  vector_tpl<convoihandle_t>, const c, targets  ) {
+					if(  !c.is_bound()  ||  c->get_state() == convoi_t::SELF_DESTRUCT  ) {
+						continue;
 					}
-					cbuffer_t buf;
-					schedule->sprintf_schedule( buf );
-					cnv->call_convoi_tool( 'g', buf );
+					// if a line is selected
+					if(  new_line.is_bound()  ) {
+						// if the selected line is different to the convoi's line, apply it
+						if(  new_line!=c->get_line()  ) {
+							char id[16];
+							sprintf( id, "%i,%i", new_line.get_id(), schedule->get_current_stop() );
+							c->call_convoi_tool( 'l', id );
+						}
+						else {
+							cbuffer_t buf;
+							schedule->sprintf_schedule( buf );
+							c->call_convoi_tool( 'g', buf );
+						}
+					}
+					else {
+						if(  c->get_line().is_bound()  ) {
+							// "<no line>": leave the line, but keep the schedule
+							// (a plain schedule change would not detach a convoy whose schedule still matches the line)
+							c->call_convoi_tool( 'l', "0" );
+						}
+						cbuffer_t buf;
+						schedule->sprintf_schedule( buf );
+						c->call_convoi_tool( 'g', buf );
+					}
 				}
 
 				if(  cnv->in_depot()  ) {

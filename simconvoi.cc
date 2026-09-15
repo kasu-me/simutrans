@@ -6491,6 +6491,66 @@ convoihandle_t convoi_t::find_most_child_convoi() const
 }
 
 
+convoihandle_t convoi_t::get_coupling_chain_root() const
+{
+	if(  parent_convoi.is_bound()  ) {
+		return get_most_parent_convoi();
+	}
+	if(  in_depot()  ) {
+		// inside a depot parent_convoi is not maintained, the depot knows the chain
+		if(  grund_t *gr = welt->lookup( get_pos() )  ) {
+			if(  depot_t *dep = gr->get_depot()  ) {
+				return dep->find_most_parent_convoy_in_depot( self );
+			}
+		}
+	}
+	return self;
+}
+
+
+void convoi_t::get_coupling_chain( vector_tpl<convoihandle_t> &chain ) const
+{
+	chain.clear();
+	convoihandle_t c = get_coupling_chain_root();
+	while(  c.is_bound()  ) {
+		if(  chain.is_contained(c)  ) {
+			// broken (circular) coupling data: stop instead of looping forever
+			dbg->warning( "convoi_t::get_coupling_chain()", "circular coupling detected at %s", c->get_name() );
+			break;
+		}
+		chain.append(c);
+		c = c->get_coupling_convoi();
+	}
+}
+
+
+bool convoi_t::has_uniform_coupling_schedule() const
+{
+	vector_tpl<convoihandle_t> chain;
+	get_coupling_chain(chain);
+	if(  chain.get_count() < 2  ) {
+		// not coupled with anything
+		return false;
+	}
+	const convoihandle_t root = chain[0];
+	schedule_t *ref = root->get_schedule();
+	if(  ref == NULL  ||  ref->empty()  ) {
+		return false;
+	}
+	for(  uint32 i = 1;  i < chain.get_count();  i++  ) {
+		const convoihandle_t c = chain[i];
+		if(  c->get_owner() != root->get_owner()  ||  c->get_line() != root->get_line()  ) {
+			return false;
+		}
+		schedule_t *s = c->get_schedule();
+		if(  s == NULL  ||  s->get_type() != ref->get_type()  ||  !s->matches( welt, ref )  ) {
+			return false;
+		}
+	}
+	return true;
+}
+
+
 void convoi_t::next_stop_button_pressed() {
 	if(  self->is_coupled()  ) {
 		return;

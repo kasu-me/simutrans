@@ -197,6 +197,13 @@ void convoi_info_t::init(convoihandle_t cnv)
 	}
 	end_table();
 
+	// own full width row, only shown when every convoy of the coupled train has the same schedule
+	bt_coupled_schedule.init(button_t::roundbox | button_t::flexible, "Schedule of coupled convoys");
+	bt_coupled_schedule.set_tooltip("Alters the schedule of all coupled convoys at once.");
+	bt_coupled_schedule.add_listener(this);
+	bt_coupled_schedule.set_visible(false);
+	add_component(&bt_coupled_schedule);
+
 	// tab panel: connections, chart panels, details
 	add_component(&switch_mode);
 	switch_mode.add_tab(&scroll_freight, translator::translate("Freight"));
@@ -380,6 +387,15 @@ void convoi_info_t::draw(scr_coord pos, scr_size size)
 	}
 	next_reservation_index = cnv->get_next_reservation_index();
 
+	// the whole coupled train can only be rescheduled at once when all its convoys share one schedule
+	const bool show_coupled_schedule = cnv->get_owner()==welt->get_active_player()
+		&&  welt->player_can_act_unrestricted(welt->get_active_player())
+		&&  cnv->has_uniform_coupling_schedule();
+	if(  show_coupled_schedule != bt_coupled_schedule.is_visible()  ) {
+		bt_coupled_schedule.set_visible( show_coupled_schedule );
+		reset_min_windowsize();
+	}
+
 	// make titlebar dirty to display the correct coordinates
 	if(cnv->get_owner()==welt->get_active_player()  &&  welt->player_can_act_unrestricted(welt->get_active_player())) {
 
@@ -497,7 +513,9 @@ void convoi_info_t::draw(scr_coord pos, scr_size size)
 	route_show_button.enable();
 
 	// update layout before rendering so upper section width matches current window size
-	set_windowsize(size);
+	scr_size new_windowsize = size;
+	new_windowsize.clip_lefttop( get_min_windowsize() );
+	set_windowsize(new_windowsize);
 	// all gui stuff set => display it
 	gui_frame_t::draw(pos, size);
 }
@@ -631,6 +649,15 @@ bool convoi_info_t::action_triggered( gui_action_creator_t *comp,value_t /* */)
 				cnv->call_convoi_tool( 'f', NULL );
 				return true;
 			}
+		}
+
+		if(  comp == &bt_coupled_schedule  ) {
+			// edit the schedule of the coupled train as a whole: the schedule window is opened on
+			// the leading convoy and applies the result to every convoy of the coupling chain
+			if(  cnv->has_uniform_coupling_schedule()  ) {
+				cnv->get_coupling_chain_root()->call_convoi_tool( 'f', NULL );
+			}
+			return true;
 		}
 
 		if(  comp == &no_load_button    &&    !route_search_in_progress  &&  !cnv->is_invalid_convoy()  ) {
