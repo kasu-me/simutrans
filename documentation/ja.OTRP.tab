@@ -869,6 +869,8 @@ No stop found!
 停車場がありません!
 Different player's stop!
 他社の停車場です!
+Stops on slope require a slope-capable descriptor!
+このホームは坂道に設置することができません！
 Unload from longer convoy
 ホーム長が足りなくても下車可能
 Allow unloading when convoy length is longer than this station length
