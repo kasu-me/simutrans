@@ -37,6 +37,9 @@ private:
 	/// aggregated loading of the displayed coupled train, only used when chain_line is bound
 	sint32 chain_loading_level, chain_loading_limit;
 
+	/// 100 while the displayed convoy(s) are overloaded, 0 otherwise. @see update_label()
+	sint32 loading_overload;
+
 	gui_speedbar_t filled_bar;
 	gui_label_buf_t label_name, label_line, label_profit, label_next_halt;
 	button_t pos_next_halt;

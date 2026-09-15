@@ -28,7 +28,12 @@ public:
 		by_amount  = 3
 	};
 
-	static void sort_freight(vector_tpl<ware_t> const& warray, cbuffer_t& buf, sort_mode_t sort_mode, const slist_tpl<ware_t>* full_list, const char* what_doing);
+	/**
+	 * @param overload_list when given, it must have the same entries in the same order as full_list.
+	 *        Its amounts are the capacities including overloading, and they are shown in addition
+	 *        to the regular capacity of full_list.
+	 */
+	static void sort_freight(vector_tpl<ware_t> const& warray, cbuffer_t& buf, sort_mode_t sort_mode, const slist_tpl<ware_t>* full_list, const char* what_doing, const slist_tpl<ware_t>* overload_list = NULL);
 
 private:
 	static karte_ptr_t welt;
@@ -37,7 +42,7 @@ private:
 
 	static bool compare_ware(ware_t const& w1, ware_t const& w2);
 
-	static void add_ware_heading( cbuffer_t &buf, uint64 sum, uint32 max, const ware_t *ware, const char *what_doing );
+	static void add_ware_heading( cbuffer_t &buf, uint64 sum, uint32 max, const ware_t *ware, const char *what_doing, uint32 overload_max = 0 );
 };
 
 

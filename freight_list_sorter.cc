@@ -95,7 +95,7 @@ bool freight_list_sorter_t::compare_ware(ware_t const& w1, ware_t const& w2)
 
 
 
-void freight_list_sorter_t::add_ware_heading( cbuffer_t &buf, uint64 sum, uint32 max, const ware_t *ware, const char *what_doing )
+void freight_list_sorter_t::add_ware_heading( cbuffer_t &buf, uint64 sum, uint32 max, const ware_t *ware, const char *what_doing, uint32 overload_max )
 {
 	uint32 const max_display = ~0;
 
@@ -113,6 +113,10 @@ void freight_list_sorter_t::add_ware_heading( cbuffer_t &buf, uint64 sum, uint32
 	if(  max != 0  ) {
 		// convois
 		buf.printf("/%u", max);
+		if(  overload_max > max  ) {
+			// overloading is allowed: show the capacity including overloading, too
+			buf.printf("(%u)", overload_max);
+		}
 	}
 	goods_desc_t const& desc = *ware->get_desc();
 	char const*  const  unit = translator::translate(desc.get_mass());
@@ -123,7 +127,22 @@ void freight_list_sorter_t::add_ware_heading( cbuffer_t &buf, uint64 sum, uint32
 }
 
 
-void freight_list_sorter_t::sort_freight(vector_tpl<ware_t> const& warray, cbuffer_t& buf, sort_mode_t sort_mode, const slist_tpl<ware_t>* full_list, const char* what_doing)
+/**
+ * Returns the next capacity of the overload list and advances the iterator,
+ * or 0 when the list is exhausted.
+ */
+static uint32 next_overload_max( slist_tpl<ware_t>::const_iterator &i, slist_tpl<ware_t>::const_iterator const &end )
+{
+	if(  i == end  ) {
+		return 0;
+	}
+	uint32 const menge = (*i).menge;
+	++i;
+	return menge;
+}
+
+
+void freight_list_sorter_t::sort_freight(vector_tpl<ware_t> const& warray, cbuffer_t& buf, sort_mode_t sort_mode, const slist_tpl<ware_t>* full_list, const char* what_doing, const slist_tpl<ware_t>* overload_list)
 {
 	sortby = sort_mode;
 
@@ -169,6 +188,10 @@ void freight_list_sorter_t::sort_freight(vector_tpl<ware_t> const& warray, cbuff
 	slist_tpl<ware_t>                 const& list     = full_list ? *full_list : dummy;
 	slist_tpl<ware_t>::const_iterator        full_i   = list.begin();
 	slist_tpl<ware_t>::const_iterator const  full_end = list.end();
+	// the capacities including overloading. This list is parallel to full_list.
+	slist_tpl<ware_t>                 const& over_list = overload_list ? *overload_list : dummy;
+	slist_tpl<ware_t>::const_iterator        over_i    = over_list.begin();
+	slist_tpl<ware_t>::const_iterator const  over_end  = over_list.end();
 
 	// at least some capacity added?
 	if(  pos != 0  ) {
@@ -212,12 +235,13 @@ void freight_list_sorter_t::sort_freight(vector_tpl<ware_t> const& warray, cbuff
 					// display goods from a list of freights
 					while(  full_i != full_end  ) {
 						ware_t const& current = *full_i++;
+						uint32 const overload_max = next_overload_max( over_i, over_end );
 						if(  last_goods_index==current.get_index()  ||  last_ware_catg==current.get_catg()  ) {
-							add_ware_heading( buf, sum, current.menge, &current, what_doing );
+							add_ware_heading( buf, sum, current.menge, &current, what_doing, overload_max );
 							break;
 						}
 						else {
-							add_ware_heading( buf, 0, current.menge, &current, what_doing );
+							add_ware_heading( buf, 0, current.menge, &current, what_doing, overload_max );
 						}
 					}
 				}
@@ -266,7 +290,7 @@ void freight_list_sorter_t::sort_freight(vector_tpl<ware_t> const& warray, cbuff
 	// still entire left?
 	for(  ; full_i != full_end; ++full_i  ) {
 		ware_t const& g = *full_i;
-		add_ware_heading(buf, 0, g.menge, &g, what_doing);
+		add_ware_heading(buf, 0, g.menge, &g, what_doing, next_overload_max( over_i, over_end ));
 	}
 
 	delete[] wlist;

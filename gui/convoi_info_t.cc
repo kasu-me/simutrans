@@ -266,6 +266,9 @@ void convoi_info_t::init(convoihandle_t cnv)
 	// indicator bars
 	filled_bar.add_color_value(&cnv->get_loading_limit(), color_idx_to_rgb(COL_YELLOW));
 	filled_bar.add_color_value(&cnv->get_loading_level(), color_idx_to_rgb(COL_GREEN));
+	loading_overload = 0;
+	// the last added value is drawn first, so this paints over the whole bar while overloaded
+	filled_bar.add_color_value(&loading_overload, color_idx_to_rgb(COL_RED));
 
 	speed_bar.set_base(max_convoi_speed);
 	speed_bar.set_vertical(false);
@@ -318,6 +321,9 @@ void convoi_info_t::update_labels()
 			route_bar.set_state(1);
 			break;
 	}
+	// show the loading bar in red while the convoy is overloaded
+	loading_overload = cnv->get_loading_level() > 100 ? 100 : 0;
+
 	// use median speed to avoid flickering
 	mean_convoi_speed += speed_to_kmh(cnv->get_akt_speed()*4);
 	mean_convoi_speed /= 2;

@@ -91,6 +91,7 @@ gui_convoiinfo_t::gui_convoiinfo_t(convoihandle_t cnv, linehandle_t chain_line)
 	this->chain_line = chain_line;
 	chain_loading_level = 0;
 	chain_loading_limit = 0;
+	loading_overload = 0;
 
 	set_table_layout(2,2);
 	set_alignment(ALIGN_LEFT | ALIGN_TOP);
@@ -122,6 +123,8 @@ gui_convoiinfo_t::gui_convoiinfo_t(convoihandle_t cnv, linehandle_t chain_line)
 			filled_bar.add_color_value(&cnv->get_loading_limit(), color_idx_to_rgb(COL_YELLOW));
 			filled_bar.add_color_value(&cnv->get_loading_level(), color_idx_to_rgb(COL_GREEN));
 		}
+		// the last added value is drawn first, so this paints over the whole bar while overloaded
+		filled_bar.add_color_value(&loading_overload, color_idx_to_rgb(COL_RED));
 		add_component(&filled_bar);
 	}
 	end_table();
@@ -193,10 +196,15 @@ void gui_convoiinfo_t::update_label()
 		loading_limit = max( loading_limit, c->get_loading_limit() );
 		c = next_coupled_convoi( c, chain_line );
 	}
+	sint32 loading_level = cnv->get_loading_level();
 	if(  chain_line.is_bound()  ) {
 		chain_loading_level = cargo_max>0 ? (sint32)((cargo_sum*100)/cargo_max) : 100;
 		chain_loading_limit = loading_limit;
+		loading_level = chain_loading_level;
 	}
+	// show the loading bar in red while overloaded
+	loading_overload = loading_level > 100 ? 100 : 0;
+
 	label_name.set_color(cnv->get_status_color());
 	label_name.update();
 

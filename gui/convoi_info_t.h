@@ -55,6 +55,8 @@ private:
 	gui_label_buf_t speed_label, profit_label, running_cost_label, weight_label, target_label, line_label;
 	gui_textinput_t input;
 	gui_speedbar_t filled_bar;
+	/// 100 while the convoy is overloaded, 0 otherwise. @see update_labels()
+	sint32 loading_overload;
 	gui_speedbar_t speed_bar;
 	gui_routebar_t route_bar;
 	sint32 next_reservation_index;

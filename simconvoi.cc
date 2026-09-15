@@ -3739,6 +3739,27 @@ void convoi_t::set_sortby(uint8 sort_order)
 }
 
 
+/**
+ * Appends the capacity of one good to a capacity list, merging it into the
+ * entry of the same category when there is already one.
+ */
+static void append_capacity_ware( slist_tpl<ware_t> &list, const goods_desc_t *desc, uint32 menge )
+{
+	ware_t ware(desc);
+	ware.menge = menge;
+	// append to category?
+	slist_tpl<ware_t>::iterator j   = list.begin();
+	slist_tpl<ware_t>::iterator end = list.end();
+	while (j != end && j->get_desc()->get_catg_index() < ware.get_desc()->get_catg_index()) ++j;
+	if (j != end && j->get_desc()->get_catg_index() == ware.get_desc()->get_catg_index()) {
+		j->menge += menge;
+	} else {
+		// not yet there
+		list.insert(j, ware);
+	}
+}
+
+
 // caches the last info; resorts only when needed
 void convoi_t::get_freight_info(cbuffer_t & buf)
 {
@@ -3750,6 +3771,9 @@ void convoi_t::get_freight_info(cbuffer_t & buf)
 		size_t const n = goods_manager_t::get_count();
 		ALLOCA(uint32, max_loaded_waren, n);
 		MEMZERON(max_loaded_waren, n);
+		// the same capacities, but including overloading
+		ALLOCA(uint32, max_overloaded_waren, n);
+		MEMZERON(max_overloaded_waren, n);
 
 		for(  uint32 i = 0;  i != anz_vehikel;  ++i  ) {
 			const vehicle_t* v = fahr[i];
@@ -3759,6 +3783,13 @@ void convoi_t::get_freight_info(cbuffer_t & buf)
 			const uint16 menge = v->get_desc()->get_capacity();
 			if(menge>0  &&  ware_desc!=goods_manager_t::none) {
 				max_loaded_waren[ware_desc->get_index()] += menge;
+				// only passenger cars can be overloaded, and only up to the maximum loading of the current schedule entry, @see hat_gehalten()
+				const bool allow_overload_car = (v->get_cargo_type()->get_catg_index()==0)  &&  welt->get_settings().is_allow_overloading();
+				uint16 max_load_percentage = 100;
+				if(  allow_overload_car  &&  schedule  ) {
+					max_load_percentage = (uint16)max( (int)schedule->get_current_entry().maximum_loading, 100 );
+				}
+				max_overloaded_waren[ware_desc->get_index()] += menge*max_load_percentage/100;
 			}
 
 			// then add the actual load
@@ -3787,25 +3818,18 @@ void convoi_t::get_freight_info(cbuffer_t & buf)
 
 		// apend info on total capacity
 		slist_tpl <ware_t>capacity;
+		// the same list, but with the capacities including overloading
+		slist_tpl <ware_t>overloaded_capacity;
 		for (uint16 i = 0; i != n; ++i) {
 			if(max_loaded_waren[i]>0  &&  i!=goods_manager_t::INDEX_NONE) {
-				ware_t ware(goods_manager_t::get_info(i));
-				ware.menge = max_loaded_waren[i];
-				// append to category?
-				slist_tpl<ware_t>::iterator j   = capacity.begin();
-				slist_tpl<ware_t>::iterator end = capacity.end();
-				while (j != end && j->get_desc()->get_catg_index() < ware.get_desc()->get_catg_index()) ++j;
-				if (j != end && j->get_desc()->get_catg_index() == ware.get_desc()->get_catg_index()) {
-					j->menge += max_loaded_waren[i];
-				} else {
-					// not yet there
-					capacity.insert(j, ware);
-				}
+				const goods_desc_t* const desc = goods_manager_t::get_info(i);
+				append_capacity_ware( capacity, desc, max_loaded_waren[i] );
+				append_capacity_ware( overloaded_capacity, desc, max_overloaded_waren[i] );
 			}
 		}
 
 		// show new info
-		freight_list_sorter_t::sort_freight(total_fracht, buf, (freight_list_sorter_t::sort_mode_t)freight_info_order, &capacity, "loaded");
+		freight_list_sorter_t::sort_freight(total_fracht, buf, (freight_list_sorter_t::sort_mode_t)freight_info_order, &capacity, "loaded", &overloaded_capacity);
 	}
 }
 
