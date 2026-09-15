@@ -202,6 +202,7 @@ void convoi_info_t::init(convoihandle_t cnv)
 	bt_coupled_schedule.set_tooltip("Alters the schedule of all coupled convoys at once.");
 	bt_coupled_schedule.add_listener(this);
 	bt_coupled_schedule.set_visible(false);
+	coupled_schedule_extra_h = 0;
 	add_component(&bt_coupled_schedule);
 
 	// tab panel: connections, chart panels, details
@@ -399,7 +400,19 @@ void convoi_info_t::draw(scr_coord pos, scr_size size)
 		&&  cnv->has_uniform_coupling_schedule();
 	if(  show_coupled_schedule != bt_coupled_schedule.is_visible()  ) {
 		bt_coupled_schedule.set_visible( show_coupled_schedule );
-		reset_min_windowsize();
+		// Reserve (or release) the height of the row that just appeared, and grow the window
+		// if needed. reset_min_windowsize() must not be used for this: the minimum size of the
+		// line memo depends on the current window width, so it would pin min_windowsize to that
+		// width and the window could never be made narrower again.
+		scr_size minsize = get_min_windowsize();
+		minsize.h -= coupled_schedule_extra_h;
+		coupled_schedule_extra_h = show_coupled_schedule ? bt_coupled_schedule.get_min_size().h + D_V_SPACE : 0;
+		minsize.h += coupled_schedule_extra_h;
+		set_min_windowsize( minsize );
+
+		scr_size wsize = get_windowsize();
+		wsize.clip_lefttop( minsize );
+		set_windowsize( wsize );
 	}
 
 	// make titlebar dirty to display the correct coordinates
@@ -519,9 +532,7 @@ void convoi_info_t::draw(scr_coord pos, scr_size size)
 	route_show_button.enable();
 
 	// update layout before rendering so upper section width matches current window size
-	scr_size new_windowsize = size;
-	new_windowsize.clip_lefttop( get_min_windowsize() );
-	set_windowsize(new_windowsize);
+	set_windowsize(size);
 	// all gui stuff set => display it
 	gui_frame_t::draw(pos, size);
 }

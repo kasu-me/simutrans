@@ -70,6 +70,8 @@ private:
 	button_t reversed_button;
 	button_t route_show_button;
 	button_t bt_coupled_schedule; // edit the schedule of the whole coupled train
+	// height bt_coupled_schedule currently adds to min_windowsize, 0 while it is hidden
+	scr_coord_val coupled_schedule_extra_h;
 	button_t bt_promote_to_line;
 	bool is_route_show;
 	route_t cnv_route;
