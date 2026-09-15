@@ -2955,7 +2955,14 @@ void convoi_t::vorfahren()
 
 	wait_lock = 0;
 	INT_CHECK("simconvoi 711");
-	reversing_needed = false;
+	// Clear the flag for the whole coupling chain, not only for the leading convoy. When the
+	// XOR test above evaluated to false for a child (reversing_needed and the reverse-by-default
+	// check agreed), reverse_vehicles_at_halt_if_needed() was skipped and the child's flag was
+	// never reset. It would then trigger a spurious reversal the next time that child runs
+	// vorfahren() on its own, e.g. after being uncoupled.
+	for(  convoihandle_t c = self;  c.is_bound();  c = c->get_coupling_convoi()  ) {
+		c->reversing_needed = false;
+	}
 }
 
 // a helper function for convoi_t::vorfahren()
@@ -6142,6 +6149,15 @@ convoihandle_t convoi_t::uncouple_convoi(  bool need_reservation_update  ) {
 	}
 	convoihandle_t ret = coupling_convoi;
 	coupling_convoi->set_state(is_loading() ? LOADING : ROUTING_1);
+	if(  !coupling_convoi->is_loading()  ) {
+		// The child convoy was uncoupled while running and will re-route from its current
+		// position (ROUTING_1 -> drive_to() -> vorfahren()). alte_richtung still holds the
+		// direction recorded when the train entered the previous schedule entry, which is
+		// stale: if the train reversed there, vorfahren() sees the reversed direction and
+		// flips the vehicle order once more. Refresh it, just like set_schedule() and
+		// open_schedule_window() do before they trigger a re-route.
+		coupling_convoi->alte_richtung = coupling_convoi->front()->get_direction();
+	}
 	coupling_convoi->front()->set_leading(true);
 	back()->set_last(true);
 	coupling_convoi->parent_convoi = convoihandle_t();
