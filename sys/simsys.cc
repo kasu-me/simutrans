@@ -129,6 +129,29 @@ char const PATH_SEPARATOR[] = "/";
 #endif
 
 
+// Window position requested via -screenpos, in desktop pixel coordinates.
+// Without that option the position is left to the operating system.
+static bool screen_pos_requested = false;
+static int  screen_pos_x = 0;
+static int  screen_pos_y = 0;
+
+void dr_set_screen_pos(int x, int y)
+{
+	screen_pos_x = x;
+	screen_pos_y = y;
+	screen_pos_requested = true;
+}
+
+bool dr_get_screen_pos(int &x, int &y)
+{
+	if(  !screen_pos_requested  ) {
+		return false;
+	}
+	x = screen_pos_x;
+	y = screen_pos_y;
+	return true;
+}
+
 
 /**
  * Get Mouse X-Position

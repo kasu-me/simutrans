@@ -234,7 +234,11 @@ int dr_os_open(int const w, int const h, sint16 fs)
 		create_window(WS_EX_TOPMOST, WS_POPUP, 0, 0, MaxSize.right, MaxSize.bottom);
 	}
 	else {
-		create_window(0, WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, MaxSize.right, MaxSize.bottom);
+		// -screenpos may ask for a fixed position, otherwise Windows places the window
+		int x = CW_USEDEFAULT;
+		int y = CW_USEDEFAULT;
+		dr_get_screen_pos( x, y );
+		create_window(0, WS_OVERLAPPEDWINDOW, x, y, MaxSize.right, MaxSize.bottom);
 	}
 
 	WindowSize.right  = MaxSize.right;

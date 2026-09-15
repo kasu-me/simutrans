@@ -446,7 +446,14 @@ int dr_os_open(int screen_width, int screen_height, sint16 fs)
 	Uint32 flags = fullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : SDL_WINDOW_RESIZABLE;
 	flags |= SDL_WINDOW_ALLOW_HIGHDPI; // apparently needed for Apple retina displays
 
-	window = SDL_CreateWindow( SIM_TITLE, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, screen_width, screen_height, flags );
+	// -screenpos may ask for a fixed position, otherwise the window manager decides
+	int win_x = SDL_WINDOWPOS_UNDEFINED;
+	int win_y = SDL_WINDOWPOS_UNDEFINED;
+	if(  !fullscreen  ) {
+		dr_get_screen_pos( win_x, win_y );
+	}
+
+	window = SDL_CreateWindow( SIM_TITLE, win_x, win_y, screen_width, screen_height, flags );
 	if(  window == NULL  ) {
 		dbg->error("dr_os_open(SDL2)", "Could not open the window: %s", SDL_GetError() );
 		return 0;

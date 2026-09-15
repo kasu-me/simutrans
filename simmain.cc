@@ -397,6 +397,9 @@ void print_help()
 		"                      1=640x480, 2=800x600, 3=1024x768, 4=1280x1024\n"
 		" -scenario NAME      Load scenario NAME\n"
 		" -screensize WxH     set screensize to width W and height H\n"
+		" -screenpos X,Y      open the window at position X,Y of the desktop\n"
+		"                     (default: left to the operating system;\n"
+		"                      ignored in fullscreen and borderless mode)\n"
 		" -mcp-port PORT      start MCP (Model Context Protocol) server on PORT\n"
 		" -server [PORT]      starts program as server (for network game)\n"
 		"                     without port specified uses 13353\n"
@@ -904,6 +907,26 @@ int simu_main(int argc, char** argv)
 			);
 			return EXIT_FAILURE;
 		}
+	}
+
+	if(args.has_arg("-screenpos")) {
+		const char* pos_str = args.gimme_arg("-screenpos", 1);
+		int x = 0, y = 0;
+		int n = 0;
+
+		if (pos_str != NULL) {
+			n = sscanf(pos_str, "%d,%d", &x, &y);
+		}
+
+		if (n != 2) {
+			fprintf(stderr,
+				"Invalid argument for -screenpos option\n"
+				"Argument must be of format like 100,50\n"
+			);
+			return EXIT_FAILURE;
+		}
+
+		dr_set_screen_pos(x, y);
 	}
 
 	if(  args.has_arg("-autodpi")  ) {

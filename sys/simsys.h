@@ -95,6 +95,20 @@ struct resolution
 };
 resolution dr_query_screen_resolution();
 
+/**
+ * Requests that the window is opened at position (x,y) of the desktop, in
+ * desktop pixel coordinates. Must be called before dr_os_open().
+ * Without this call the position is left to the operating system, which stays
+ * the default. Ignored in fullscreen and borderless mode.
+ */
+void dr_set_screen_pos(int x, int y);
+
+/**
+ * Retrieves the position requested by dr_set_screen_pos().
+ * @returns false if no position was requested; x and y are then untouched.
+ */
+bool dr_get_screen_pos(int &x, int &y);
+
 int dr_os_open(int w, int h, sint16 fullscreen);
 void dr_os_close();
 
