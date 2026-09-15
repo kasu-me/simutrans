@@ -64,6 +64,16 @@ private:
 	uint32 old_line_count;
 	schedule_t *last_schedule;
 	uint32 last_vehicle_count;
+	// signature of the coupling state of the line's convoys,
+	// to detect (un)coupling while this window is open
+	uint32 last_coupling_state;
+	static uint32 calc_coupling_state(linehandle_t l);
+	// number of entries in the convoy list: a coupled train counts as one
+	uint32 effective_convoy_count;
+	// Collects the convoys of line l that run as one train with cnv: the maximal run of
+	// consecutive convoys of cnv's coupling chain that all belong to l and that contains cnv.
+	// run receives them in coupling order, head convoy first, and always contains cnv itself.
+	static void get_coupled_run(convoihandle_t cnv, linehandle_t l, vector_tpl<convoihandle_t> &run);
 
 	// only show schedules containing ...
 	char schedule_filter[512], old_schedule_filter[512];

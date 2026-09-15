@@ -24,11 +24,23 @@
 #include "../../utils/simstring.h"
 
 
+// Returns the convoy coupled behind c if it is displayed together with c, i.e. if it belongs to chain_line.
+static convoihandle_t next_coupled_convoi(convoihandle_t c, linehandle_t chain_line)
+{
+	if(  !chain_line.is_bound()  ) {
+		return convoihandle_t();
+	}
+	const convoihandle_t next = c->get_coupling_convoi();
+	return next.is_bound()  &&  next->get_line() == chain_line ? next : convoihandle_t();
+}
+
+
 class gui_convoi_images_t : public gui_component_t
 {
 	convoihandle_t cnv;
+	linehandle_t chain_line;
 public:
-	gui_convoi_images_t(convoihandle_t cnv) { this->cnv = cnv; }
+	gui_convoi_images_t(convoihandle_t cnv, linehandle_t chain_line) { this->cnv = cnv; this->chain_line = chain_line; }
 
 	scr_size get_min_size() const OVERRIDE
 	{
@@ -42,16 +54,24 @@ public:
 		// we will use their images offsets and width to shift them to their correct position
 		// this should work with any vehicle size ...
 		scr_size s(0,0);
-		unsigned count = cnv.is_bound() ? cnv->get_vehicle_count() : 0;
-		for(unsigned i=0; i<count; i++) {
-			scr_coord_val x, y, w, h;
-			const image_id image = cnv->get_vehikel(i)->get_loaded_image();
-			display_get_base_image_offset(image, &x, &y, &w, &h );
-			if (display_images) {
-				display_base_img(image, p.x + s.w - x, p.y - y - h/2, cnv->get_owner()->get_player_nr(), false, true);
+		convoihandle_t c = cnv;
+		while(  c.is_bound()  ) {
+			const unsigned count = c->get_vehicle_count();
+			for(unsigned i=0; i<count; i++) {
+				scr_coord_val x, y, w, h;
+				const image_id image = c->get_vehikel(i)->get_loaded_image();
+				display_get_base_image_offset(image, &x, &y, &w, &h );
+				if (display_images) {
+					display_base_img(image, p.x + s.w - x, p.y - y - h/2, c->get_owner()->get_player_nr(), false, true);
+				}
+				s.w += (w*2)/3;
+				s.h = max(s.h, h);
 			}
-			s.w += (w*2)/3;
-			s.h = max(s.h, h);
+			c = next_coupled_convoi( c, chain_line );
+			if(  c.is_bound()  ) {
+				// small gap, so that the coupled convoys stay distinguishable
+				s.w += LINESPACE/3;
+			}
 		}
 		return s;
 	}
@@ -65,9 +85,12 @@ public:
 };
 
 
-gui_convoiinfo_t::gui_convoiinfo_t(convoihandle_t cnv)
+gui_convoiinfo_t::gui_convoiinfo_t(convoihandle_t cnv, linehandle_t chain_line)
 {
 	this->cnv = cnv;
+	this->chain_line = chain_line;
+	chain_loading_level = 0;
+	chain_loading_limit = 0;
 
 	set_table_layout(2,2);
 	set_alignment(ALIGN_LEFT | ALIGN_TOP);
@@ -89,9 +112,16 @@ gui_convoiinfo_t::gui_convoiinfo_t(convoihandle_t cnv)
 
 	add_table(1,2);
 	{
-		new_component<gui_convoi_images_t>(cnv);
-		filled_bar.add_color_value(&cnv->get_loading_limit(), color_idx_to_rgb(COL_YELLOW));
-		filled_bar.add_color_value(&cnv->get_loading_level(), color_idx_to_rgb(COL_GREEN));
+		new_component<gui_convoi_images_t>(cnv, chain_line);
+		if(  chain_line.is_bound()  ) {
+			// the values aggregated over the whole train, see update_label()
+			filled_bar.add_color_value(&chain_loading_limit, color_idx_to_rgb(COL_YELLOW));
+			filled_bar.add_color_value(&chain_loading_level, color_idx_to_rgb(COL_GREEN));
+		}
+		else {
+			filled_bar.add_color_value(&cnv->get_loading_limit(), color_idx_to_rgb(COL_YELLOW));
+			filled_bar.add_color_value(&cnv->get_loading_level(), color_idx_to_rgb(COL_GREEN));
+		}
 		add_component(&filled_bar);
 	}
 	end_table();
@@ -143,7 +173,34 @@ const char* gui_convoiinfo_t::get_text() const
 
 void gui_convoiinfo_t::update_label()
 {
-	label_profit.buf().append_money(cnv->get_jahresgewinn() / 100.0);
+	// name, profit and loading are aggregated over all convoys displayed by this element
+	sint64 profit = 0;
+	sint64 cargo_max = 0, cargo_sum = 0;
+	sint32 loading_limit = 0;
+	cbuffer_t &name_buf = label_name.buf();
+	name_buf.clear();
+	convoihandle_t c = cnv;
+	while(  c.is_bound()  ) {
+		profit += c->get_jahresgewinn();
+		if(  name_buf.len() > 0  ) {
+			name_buf.append( " + " );
+		}
+		name_buf.append( c->get_name() );
+		for(  uint16 i=0;  i<c->get_vehicle_count();  i++  ) {
+			cargo_max += c->get_vehikel(i)->get_cargo_max();
+			cargo_sum += c->get_vehikel(i)->get_total_cargo();
+		}
+		loading_limit = max( loading_limit, c->get_loading_limit() );
+		c = next_coupled_convoi( c, chain_line );
+	}
+	if(  chain_line.is_bound()  ) {
+		chain_loading_level = cargo_max>0 ? (sint32)((cargo_sum*100)/cargo_max) : 100;
+		chain_loading_limit = loading_limit;
+	}
+	label_name.set_color(cnv->get_status_color());
+	label_name.update();
+
+	label_profit.buf().append_money(profit / 100.0);
 	label_profit.update();
 	label_line.buf().clear();
 	label_next_halt.buf().clear();
@@ -183,9 +240,6 @@ void gui_convoiinfo_t::update_label()
 		}
 	}
 	label_next_halt.update();
-
-	label_name.set_text_pointer(cnv->get_name());
-	label_name.set_color(cnv->get_status_color());
 
 	set_size(get_size());
 }

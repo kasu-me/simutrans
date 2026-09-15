@@ -149,6 +149,9 @@ schedule_list_gui_t::schedule_list_gui_t(player_t *player_) :
 	schedule_filter[0] = 0;
 	old_schedule_filter[0] = 0;
 	last_schedule = NULL;
+	last_vehicle_count = 0;
+	last_coupling_state = 0;
+	effective_convoy_count = 0;
 	old_player = NULL;
 	current_sort_mode = 0;
 
@@ -702,7 +705,7 @@ void schedule_list_gui_t::draw(scr_coord pos, scr_size size)
 	gui_frame_t::draw(pos, size);
 
 	if(  line.is_bound()  ) {
-		if(  (!line->get_schedule()->empty()  &&  !line->get_schedule()->matches( welt, last_schedule ))  ||  last_vehicle_count != line->count_convoys()  ) {
+		if(  (!line->get_schedule()->empty()  &&  !line->get_schedule()->matches( welt, last_schedule ))  ||  last_vehicle_count != line->count_convoys()  ||  last_coupling_state != calc_coupling_state( line )  ) {
 			update_lineinfo( line );
 		}
 		bt_colour_line.background_color = color_idx_to_rgb(line->get_colour());
@@ -760,6 +763,11 @@ void schedule_list_gui_t::display(scr_coord pos)
 			buf.printf( translator::translate("%d convois"), icnv) ;
 			break;
 		}
+	}
+	if(  icnv > 0  &&  effective_convoy_count != icnv  ) {
+		// coupled convoys run as one train, so fewer trains than convoys are on the way
+		buf.append( " " );
+		buf.printf( translator::translate("(effective: %d)"), effective_convoy_count );
 	}
 	sint16 text_y = D_TITLEBAR_HEIGHT+bt_teleport_line_to_depot.get_pos().y + bt_teleport_line_to_depot.get_size().h + D_V_SPACE;
 	int len=display_proportional_clip_rgb(pos.x+RIGHT_COLUMN_OFFSET,
@@ -835,6 +843,45 @@ void schedule_list_gui_t::build_line_list(int filter)
 }
 
 
+void schedule_list_gui_t::get_coupled_run(convoihandle_t cnv, linehandle_t l, vector_tpl<convoihandle_t> &run)
+{
+	vector_tpl<convoihandle_t> chain;
+	cnv->get_coupling_chain( chain );
+	run.clear();
+	bool contains_cnv = false;
+	for(  uint32 i=0;  i<chain.get_count();  i++  ) {
+		if(  chain[i]->get_line() == l  ) {
+			run.append( chain[i] );
+			contains_cnv |= chain[i] == cnv;
+		}
+		else if(  contains_cnv  ) {
+			// the run containing cnv ends here
+			return;
+		}
+		else {
+			// a convoy of another line interrupts the chain: start a new run behind it
+			run.clear();
+		}
+	}
+}
+
+
+uint32 schedule_list_gui_t::calc_coupling_state(linehandle_t l)
+{
+	uint32 state = 0;
+	if(  l.is_bound()  ) {
+		const uint32 icnv = l->count_convoys();
+		for(  uint32 i=0;  i<icnv;  i++  ) {
+			const convoihandle_t cnv = l->get_convoy(i);
+			state = state*31 + cnv.get_id();
+			state = state*31 + cnv->get_parent_convoi().get_id();
+			state = state*31 + cnv->get_coupling_convoi().get_id();
+		}
+	}
+	return state;
+}
+
+
 /* hides show components */
 void schedule_list_gui_t::update_lineinfo(linehandle_t new_line)
 {
@@ -859,11 +906,33 @@ void schedule_list_gui_t::update_lineinfo(linehandle_t new_line)
 		// refreshed when the user selects a new line
 		uint32 icnv = 0;
 		icnv = new_line->count_convoys();
-		// display convoys of line
+		// display convoys of line.
+		// convoys of this line that are coupled to each other run as one train,
+		// so they get one single entry in the list.
 		scrolly_convois.clear_elements();
+		vector_tpl<convoihandle_t> displayed_convois;
+		vector_tpl<convoihandle_t> coupling_run;
+		uint32 effective_count = 0;
 		for(  uint32 i=0;  i<icnv;  i++  ) {
-			scrolly_convois.new_component<gui_convoiinfo_t>(new_line->get_convoy(i));
+			const convoihandle_t cnv = new_line->get_convoy(i);
+			if(  displayed_convois.is_contained(cnv)  ) {
+				// already displayed as a part of a coupled train
+				continue;
+			}
+			get_coupled_run( cnv, new_line, coupling_run );
+			if(  coupling_run.get_count() > 1  ) {
+				for(  uint32 j=0;  j<coupling_run.get_count();  j++  ) {
+					displayed_convois.append( coupling_run[j] );
+				}
+				scrolly_convois.new_component<gui_convoiinfo_t>( coupling_run[0], new_line );
+			}
+			else {
+				displayed_convois.append( cnv );
+				scrolly_convois.new_component<gui_convoiinfo_t>( cnv );
+			}
+			effective_count++;
 		}
+		effective_convoy_count = effective_count;
 		scrolly_convois.set_size(scrolly_convois.get_size());
 
 		bt_delete_line.disable();
@@ -935,6 +1004,7 @@ void schedule_list_gui_t::update_lineinfo(linehandle_t new_line)
 		delete last_schedule;
 		last_schedule = new_line->get_schedule()->copy();
 		last_vehicle_count = new_line->count_convoys();
+		last_coupling_state = calc_coupling_state( new_line );
 	}
 	else if(  inp_name.is_visible()  ) {
 		// previously a line was visible
@@ -969,6 +1039,8 @@ void schedule_list_gui_t::update_lineinfo(linehandle_t new_line)
 		delete last_schedule;
 		last_schedule = NULL;
 		last_vehicle_count = 0;
+		last_coupling_state = 0;
+		effective_convoy_count = 0;
 	}
 	line = new_line;
 	bt_withdraw_line.set_visible( line.is_bound() );

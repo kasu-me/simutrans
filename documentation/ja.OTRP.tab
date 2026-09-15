@@ -1010,3 +1010,5 @@ Export
 書き出し
 Import
 取り込み
+(effective: %d)
+(実効: %d編成)
