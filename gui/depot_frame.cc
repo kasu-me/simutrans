@@ -2459,7 +2459,10 @@ bool depot_frame_t::action_triggered( gui_action_creator_t *comp, value_t p)
 			}
 			couple_buf.printf("%u", child_convoy_id);
 			depot->call_depot_tool('u',cnv,couple_buf);
-			update_data();
+			// Do not call update_data() here! In network mode the tool is executed
+			// after a server round trip, so rebuilding the list now would restore the
+			// old selection and discard the selection the player has just made.
+			// The window is refreshed by depot_t::update_win() once the tool is executed.
 			return true;
 		}
 		else if(  comp == &bt_uncouple  ) {
@@ -2468,7 +2471,8 @@ bool depot_frame_t::action_triggered( gui_action_creator_t *comp, value_t p)
 				return true;
 			}
 			depot->call_depot_tool('u',cnv,"0");
-			update_data();
+			// show the uncoupled state at once, see the comment above about update_data()
+			child_convoi_selector.set_selection(0);
 			return true;
 		}
 		else if(  comp == &depot_name_input  ) {

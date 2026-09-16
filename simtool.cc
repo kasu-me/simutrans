@@ -10532,12 +10532,20 @@ bool tool_change_depot_t::init( player_t *player )
 			break;
 		}
 		case 'u': { // coupling convoy in depot
+			if(  !cnv.is_bound()  ) {
+				// in network mode the convoy may have been sold or disassembled
+				// while this command was travelling to the server and back
+				break;
+			}
 			convoihandle_t child = convoihandle_t();
 			uint32 coupled_cnv_id = (uint32)strtoul(p, NULL, 10);
 			if( coupled_cnv_id != 0) {
 				child.set_id(coupled_cnv_id);
 			}
 			cnv->set_coupling_convoi(child);
+			// in network mode this runs only after the server round trip,
+			// hence the depot window has to be refreshed here
+			depot->update_win();
 			break;
 		}
 		case 't': { // reverse convoy direction
