@@ -92,6 +92,7 @@ all_tests <- [
 	test_depot_build_on_halt,
 	test_depot_convoy_add_normal,
 	test_depot_convoy_add_nonelectrified,
+	test_depot_teleport_to_depot_clears_schedule,
 	test_dir_is_single,
 	test_dir_is_twoway,
 	test_dir_is_threeway,

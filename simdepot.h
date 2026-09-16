@@ -141,6 +141,13 @@ public:
 	 */
 	bool can_start_convoi(convoihandle_t cnv, bool local_execution); 
 
+	/**
+	 * Remove the first schedule entry pointing at this depot from the convoy's schedule.
+	 * Used when a convoy arrives here, so that an entry which only served to send the
+	 * convoy to this depot does not stay in the schedule.
+	 */
+	void remove_depot_entry_from_schedule(convoihandle_t acnv);
+
 
 	bool start_all_convoys();
 

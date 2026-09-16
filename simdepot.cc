@@ -182,6 +182,29 @@ void replace_cars(convoihandle_t cnv, depot_t* depot) {
 }
 
 
+void depot_t::remove_depot_entry_from_schedule(convoihandle_t acnv)
+{
+	schedule_t *schedule = acnv.is_bound() ? acnv->get_schedule() : NULL;
+	if(  schedule==NULL  ) {
+		return;
+	}
+	for(  int i=0;  i<schedule->get_count();  i++  ) {
+		// only if convoi found
+		if(schedule->at(i).pos==get_pos()) {
+			const bool is_last = i==schedule->get_count()-1;
+			schedule->set_current_stop( i );
+			schedule->remove();
+			if(  is_last  ) {
+				// When the last entry was deleted, index must be 0 to proceed.
+				schedule->set_current_stop( 0 );
+			}
+			acnv->set_schedule(schedule);
+			break;
+		}
+	}
+}
+
+
 /* this is called on two occasions:
  * first a convoy reaches the depot during its journey
  * second during loading a convoi is stored in a depot => only store it again
@@ -206,21 +229,7 @@ void depot_t::convoi_arrived(convoihandle_t acnv, bool schedule_adjust, const bo
 			v->set_last( i+1==acnv->get_vehicle_count() );
 		}
 		// Volker: remove depot from schedule
-		schedule_t *schedule = acnv->get_schedule();
-		for(  int i=0;  i<schedule->get_count();  i++  ) {
-			// only if convoi found
-			if(schedule->at(i).pos==get_pos()) {
-				const bool is_last = i==schedule->get_count()-1;
-				schedule->set_current_stop( i );
-				schedule->remove();
-				if(  is_last  ) {
-					// When the last entry was deleted, index must be 0 to proceed.
-					schedule->set_current_stop( 0 );
-				}
-				acnv->set_schedule(schedule);
-				break;
-			}
-		}
+		remove_depot_entry_from_schedule(acnv);
 	}
 	// this part stores the convoi in the depot
 	convois.append(acnv);
@@ -518,8 +527,17 @@ bool depot_t::start_convoi(convoihandle_t cnv, bool local_execution)
 				convoihandle_t c = cnv;
 				while( c.is_bound() ){
 					remove_convoi(c);
+					// betrete_depot() is called with is_loading=true here, so that arriving at the
+					// destination depot does not trigger the replacement seed. Therefore the entry
+					// which only served to designate the destination has to be removed by hand,
+					// otherwise the convoy would drive back into that depot on the next round.
 					c->betrete_depot(dep, true);
+					dep->remove_depot_entry_from_schedule(c);
 					c=c->get_coupling_convoi();
+				}
+				// the schedule was changed after the destination depot refreshed its window
+				if(  depot_frame_t *dest_frame = dynamic_cast<depot_frame_t *>(win_get_magic( (ptrdiff_t)dep ))  ) {
+					dest_frame->update_data();
 				}
 				return true;
 			}

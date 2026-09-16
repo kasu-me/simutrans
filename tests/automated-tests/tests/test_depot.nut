@@ -577,3 +577,55 @@ function test_depot_convoy_add_nonelectrified()
 	ASSERT_EQUAL(command_x(tool_remove_way).work(pl, coord3d(4, 2, 0), coord3d(4, 4, 0), "" + wt_rail), null)
 	RESET_ALL_PLAYER_FUNDS()
 }
+
+
+// A convoy whose schedule consists of a single entry pointing at another depot is
+// teleported to that depot when started. That entry only designated the destination,
+// so it must not stay in the schedule: otherwise the convoy would drive back into
+// that depot once it reaches the entry again on a later round.
+//
+// The schedule is set through a line here because convoy_x::change_schedule refuses
+// schedules with less than two entries; depot_t::start_convoi reads the very same
+// schedule either way.
+function test_depot_teleport_to_depot_clears_schedule()
+{
+	local pl = player_x(0)
+	local way_desc = way_desc_x.get_available_ways(wt_rail, st_flat)[0]
+
+	ASSERT_EQUAL(command_x.build_way(pl, coord3d(4, 2, 0), coord3d(4, 8, 0), way_desc, true), null)
+	ASSERT_EQUAL(command_x.build_depot(pl, coord3d(4, 2, 0), get_depot_by_wt(wt_rail)), null)
+	ASSERT_EQUAL(command_x.build_depot(pl, coord3d(4, 8, 0), get_depot_by_wt(wt_rail)), null)
+
+	local depot_from = depot_x(4, 2, 0)
+	local depot_to   = depot_x(4, 8, 0)
+
+	ASSERT_TRUE(depot_from.append_vehicle(pl, convoy_x(0), vehicle_desc_x("1Diesellokomotive")))
+	ASSERT_EQUAL(depot_from.get_convoy_list().len(), 1)
+	local cnv = depot_from.get_convoy_list()[0]
+
+	// the only schedule entry is the destination depot
+	ASSERT_EQUAL(pl.create_line(wt_rail), true)
+	local line_list = pl.get_line_list()
+	local line = line_list[line_list.get_count() - 1]
+	line.change_schedule(pl, schedule_x(wt_rail, [
+		schedule_entry_x(coord3d(4, 8, 0), 0, 0)
+	]))
+	cnv.set_line(pl, line)
+	ASSERT_EQUAL(cnv.get_schedule().entries.len(), 1)
+
+	depot_from.start_convoy(pl, cnv)
+
+	// the convoy was teleported, not started
+	ASSERT_EQUAL(depot_from.get_convoy_list().len(), 0)
+	ASSERT_EQUAL(depot_to.get_convoy_list().len(), 1)
+	ASSERT_TRUE(cnv.is_in_depot())
+
+	// the destination depot must not be left in the schedule
+	ASSERT_EQUAL(cnv.get_schedule().entries.len(), 0)
+
+	ASSERT_TRUE(cnv.destroy(pl))
+	ASSERT_EQUAL(command_x(tool_remover).work(pl, coord3d(4, 2, 0)), null)
+	ASSERT_EQUAL(command_x(tool_remover).work(pl, coord3d(4, 8, 0)), null)
+	ASSERT_EQUAL(command_x(tool_remove_way).work(pl, coord3d(4, 2, 0), coord3d(4, 8, 0), "" + wt_rail), null)
+	RESET_ALL_PLAYER_FUNDS()
+}
