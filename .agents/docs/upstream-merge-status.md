@@ -13,9 +13,9 @@
 | キー | 値 |
 | --- | --- |
 | 起点コミット (base) | `d01a02edf26e0faf1c3542d4d854fe6ce52cc9f8` (v58_3) |
-| 追跡済み最新コミット (head) | `39993c64d469447d5cc4e9b85b066d2dc61e2c4a` (increment OTRP_VERSION_PATCH / v61_0_3) |
-| 対象コミット数 | 69 |
-| 最終更新 | 2026-09-14 |
+| 追跡済み最新コミット (head) | `f30c237c5023e0a77d40a452b93fb3b0df1b11ed` (increment OTRP_VERSION_PATCH / v61_0_4) |
+| 対象コミット数 | 72 |
+| 最終更新 | 2026-09-16 |
 
 > `head` より新しい本家コミットが増えた場合は skill `update-upstream-status` で追記する。
 
@@ -67,7 +67,7 @@
 | FIX-06 | バグ修正 | 橋脚が滑走路 (`air_wt`) タイル上に建つ | 取り込み済み |
 | FIX-07 | バグ修正 | Windows GDI の DPI スケーリング時のリサイズ処理 | 取り込み済み |
 | FIX-08 | バグ修正 | 整地ツールが基礎 (`fundament`) タイルで高低差制限を無視する | 取り込み済み |
-| MISC-01 | その他 | 本家バージョン番号のインクリメント (v59〜v61_0_3) | 取り込み不要 |
+| MISC-01 | その他 | 本家バージョン番号のインクリメント (v59〜v61_0_4) | 取り込み不要 |
 | MISC-02 | その他 | 日本語訳 `ja.OTRP.tab` の更新 (v59/v60/v61分) | 未取り込み |
 | MISC-03 | その他 | SDL3 バックエンド対応と CI のビルド構成更新 (Ubuntu 分は後に削除) | 未取り込み |
 | MISC-04 | その他 | `obj_t::finish_rd()` にセーブの OTRP バージョンを渡す基盤変更 | 未取り込み |
@@ -579,6 +579,7 @@
 - **上流コミット**:
   - `85aef1543` Drive without reservation (#713) — 本体
   - `3fc2f3345` BUG FIX: infinite loop when only waypoint (#736) — 後続修正
+  - `8ef07c84b` BUG FIX: reservation tiles when loading savedata (#742) — 後続修正
 - **主な変更箇所**:
   - `dataobj/schedule_entry.h` — 停留所フラグ `WITHOUT_RESERVATION` (1<<22) を追加
     (これに伴い `START_SHIPPED` が 1<<22 → 1<<23 へ移動)
@@ -596,16 +597,20 @@
   `block_reserver()` 内の走査ループが終了せず無限ループになる問題の修正
   (`get_current_stop()` が uint8 のため終了条件 `i_stop != get_current_stop()-1` が成立しない)。
   ループをエントリ数で明示的に打ち切る形に書き換えている。
+  `8ef07c84b` は下記「本家に未修正の不具合」に挙げていた `simconvoi.cc` の `?:` 優先順位バグの修正。
+  `convoi_t::reserve_route()` の予約ループ上限を `(drive_without_reservation ? front()->get_route_index() : next_reservation_index)`
+  と括弧で囲み、意図どおりの上限で予約するようにした。
 - **取り込み時の注意**:
   - `convoi_t::rdwr()` が `get_OTRP_version() >= 61` でゲートされているため **セーブ形式に影響する** (MISC-01 参照)。
   - `schedule_entry_t` にフラグが増えるため、`develop-kasumi` 独自のスケジュール入出力
     (`dataobj/schedule_io.cc` の `stop_flag_names`) に `WITHOUT_RESERVATION` の追加が必要。
-  - **本家に未修正の不具合が同梱されている** (2026-09-13 時点の `origin/OTRP-KUTAv6` でも残存):
+  - **本家に未修正の不具合が同梱されている** (2026-09-16 時点の `origin/OTRP-KUTAv6` でも残存):
     - `simconvoi.cc:1521` — `get_most_parent_convoi()->state==ROUTING_1;` が代入 `=` ではなく比較 `==` になっており、
       連結反転時の状態設定が効いていない (元は `state=ROUTING_1`)
-    - `simconvoi.cc:367` — `idx < drive_without_reservation?A:B && idx < route.get_count()` は
-      `?:` の優先順位が `<` / `&&` より低いため `(idx < drive_without_reservation) ? A : (B && ...)` と解釈される
-    取り込む場合はこの2点を直してから入れること。
+    取り込む場合はこの点を直してから入れること。
+  - `simconvoi.cc:367` の `?:` 優先順位バグ
+    (`idx < drive_without_reservation?A:B && ...` が `(idx < drive_without_reservation) ? A : (B && ...)` と解釈される)
+    は `8ef07c84b` で本家修正済み。**この後続修正も併せて取り込むこと。**
 - **develop-kasumi 側コミット**: —
 - **備考**: 状態確認用の識別子は `simconvoi.h` の `is_drive_without_reservation`。
 
@@ -778,6 +783,7 @@
   - `867f82d5b` increment OTRP_VERSION_PATCH (v61_0_1)
   - `a20bca417` increment OTRP_VERSION_PATCH (v61_0_2)
   - `39993c64d` increment OTRP_VERSION_PATCH (v61_0_3)
+  - `f30c237c5` increment OTRP_VERSION_PATCH (v61_0_4)
 - **主な変更箇所**: `simversion.h` — `OTRP_VERSION_MAJOR` / `OTRP_VERSION_MINOR` / `OTRP_VERSION_PATCH`
 - **詳細**: —
 - **取り込み時の注意**:
@@ -801,6 +807,7 @@
   - `8da4abc3e` update ja.OTRP.tab for v59
   - `d65dc2063` add ja.OTRP.tab for v60
   - `68348e37e` update ja.OTRP.tab for v61
+  - `68d996bca` update ja.OTRP.tab for dummy-goods name
   - (`d272db352` にも v59 訳文の修正が含まれる。FEAT-01 参照)
 - **主な変更箇所**: `documentation/ja.OTRP.tab`
 - **詳細**:
@@ -810,6 +817,8 @@
   - v60分: 「他編成を発車させるまで待機」等 (FEAT-02)、`tile_length` / 「走行距離 (m)」(FEAT-07)
   - v61分 (`68348e37e`): 「航送中」「航送開始待ち」「航送終了予定駅」等の航送関連 (FEAT-18)、
     「無閉塞運行」「全駅に適用」等 (FEAT-19)
+  - `68d996bca`: 航送用ダミー貨物名 `SHIPPING_{ROAD,TRACK,MONORAIL,MAGLEV,NARROWGAUGE,WATER}` の訳
+    (「自動車を航送」「鉄道車両を航送」等) を追加 (FEAT-18 / MISC-05 関連)
   - v60_1 〜 v61 の間は翻訳のみのコミットは無く、機能コミットに同梱されている:
     `5461ae2d2` の「発車許可を出す路線を指定」(FEAT-02)、
     `eaae6f8b2` の「通行方向の詳細設定をコピー/貼り付け」「通行可能な方向」等 (FEAT-13)
