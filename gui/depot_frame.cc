@@ -422,6 +422,9 @@ depot_frame_t::depot_frame_t(depot_t* depot) :
 	,template_panel(NULL)
 	,scrolly_template(NULL)
 {
+	depot_name[0] = 0;
+	old_depot_name[0] = 0;
+	depot_title[0] = 0;
 	if (depot) {
 		init(depot);
 	}
@@ -430,7 +433,7 @@ depot_frame_t::depot_frame_t(depot_t* depot) :
 void depot_frame_t::init(depot_t *dep)
 {
 	depot = dep;
-	set_name(depot->get_name());
+	reset_depot_name();
 	set_owner(depot->get_owner());
 	icnv = depot->convoi_count()-1;
 
@@ -661,8 +664,6 @@ DBG_DEBUG("depot_frame_t::depot_frame_t()","get_max_convoi_length()=%i",depot->g
 	add_component(&name_filter_input);
 	name_filter_input.add_listener(this);
 
-	strncpy(depot_name, depot->get_name(), lengthof(depot_name));
-	depot_name_input.set_text(depot_name, 60);
 	add_component(&depot_name_input);
 	depot_name_input.add_listener(this);
 
@@ -2557,12 +2558,28 @@ bool depot_frame_t::infowin_event(const event_t *ev)
 }
 
 
+void depot_frame_t::reset_depot_name()
+{
+	tstrncpy(old_depot_name, depot->get_name(), sizeof(old_depot_name));
+	tstrncpy(depot_title, depot->get_name(), sizeof(depot_title));
+	set_name(depot_title);
+	tstrncpy(depot_name, depot->get_name(), sizeof(depot_name));
+	depot_name_input.set_text(depot_name, 60);
+	set_dirty();
+}
+
+
 void depot_frame_t::draw(scr_coord pos, scr_size size)
 {
 	const bool action_allowed = welt->get_active_player() == depot->get_owner();
 	const bool player_changed = (action_allowed != last_action_allowed);
 	last_action_allowed = action_allowed;
 	convoihandle_t cnv = depot->get_convoi(icnv);
+
+	// the depot may have been renamed meanwhile (by ourselves or, in network games, by another client)
+	if(  strcmp(old_depot_name, depot->get_name())!=0  ) {
+		reset_depot_name();
+	}
 
 	bt_new_line.enable( action_allowed );
 	bt_change_line.enable( action_allowed );
