@@ -132,24 +132,6 @@ uint16 schedule_linear_hms_to_raw(uint8 h, uint8 m, uint8 s, uint16 divisor)
  * export
  * ---------------------------------------------------------------------------- */
 
-/// plain name of the stop at this entry, without the attribute markers gimme_stop_name() adds
-static const char *plain_stop_name(const schedule_entry_t &entry, const player_t *player, waytype_t wt)
-{
-	halthandle_t halt = haltestelle_t::get_stoppable_halt(entry.pos, player, wt);
-	if(  halt.is_bound()  ) {
-		return halt->get_name();
-	}
-	const grund_t *gr = welt->lookup(entry.pos);
-	if(  gr == NULL  ) {
-		return translator::translate("Invalid coordinate");
-	}
-	if(  gr->get_depot() != NULL  ) {
-		return gr->get_depot()->get_name();
-	}
-	return translator::translate("Wegpunkt");
-}
-
-
 /// appends "  # h:mm:ss\n" for a value given in spacing_shift_divisor units of a month
 static void append_hms_comment(cbuffer_t &buf, uint16 raw, uint16 divisor)
 {
@@ -206,7 +188,7 @@ void schedule_export_text( cbuffer_t &buf, const schedule_t *schedule, const pla
 	for(  uint8 i = 0;  i < schedule->get_count();  i++  ) {
 		const schedule_entry_t &e = schedule->at(i);
 		buf.append("\n[entry]\n");
-		buf.printf("# %s\n", plain_stop_name(e, player, wt));
+		buf.printf("# %s\n", schedule_t::get_stop_name(welt, player, e, wt));
 		buf.printf("pos = %i, %i, %i\n", (int)e.pos.x, (int)e.pos.y, (int)e.pos.z);
 		buf.append("stop_flags = ");
 		append_flag_list(buf, e.get_stop_flags(), stop_flag_names);

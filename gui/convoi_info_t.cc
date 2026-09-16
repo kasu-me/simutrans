@@ -4,6 +4,7 @@
  */
 
 #include <stdio.h>
+#include <string.h>
 
 #include "convoi_info_t.h"
 
@@ -31,6 +32,9 @@
 #include "route_display.h"
 
 #define CHART_HEIGHT (100)
+
+/// characters of a stop name that fit into the destination line
+#define TARGET_NAME_MAX_CHARS (34)
 
 static const char cost_type[convoi_t::MAX_CONVOI_COST][64] =
 {
@@ -349,7 +353,23 @@ void convoi_info_t::update_labels()
 
 	// next stop
 	target_label.buf().append(translator::translate("Fahrtziel"));
-	schedule_t::gimme_stop_name(target_label.buf(), welt, cnv->get_owner(), cnv->get_schedule()->get_current_entry(), 34, cnv->front()->get_waytype());
+	const schedule_t* const schedule = cnv->get_schedule();
+	const waytype_t target_wt = cnv->front()->get_waytype();
+	schedule_t::gimme_stop_name(target_label.buf(), welt, cnv->get_owner(), schedule->get_current_entry(), TARGET_NAME_MAX_CHARS, target_wt);
+	if(  !schedule_t::is_stopping_entry(welt, cnv->get_owner(), schedule->get_current_entry(), target_wt)  ) {
+		// the convoy only passes the next entry, so the stop it is heading for follows behind it
+		const sint32 idx = schedule->get_next_stopping_entry_index(welt, cnv->get_owner(), target_wt);
+		if(  idx >= 0  ) {
+			const char* const name = schedule_t::get_stop_name(welt, cnv->get_owner(), schedule->at((uint8)idx), target_wt);
+			target_label.buf().printf(" %s ", translator::translate("->"));
+			if(  strlen(name) > TARGET_NAME_MAX_CHARS  ) {
+				target_label.buf().printf("%.*s...", TARGET_NAME_MAX_CHARS - 3, name);
+			}
+			else {
+				target_label.buf().append(name);
+			}
+		}
+	}
 	target_label.update();
 
 	// only show assigned line, if there is one!

@@ -262,7 +262,24 @@ public:
 	 * If @p max_chars > 0 then append short version, without loading level and position.
 	 */
 	static void gimme_stop_name(cbuffer_t& buf, karte_t* welt, player_t const* player_, schedule_entry_t const& entry, int max_chars, waytype_t const wt);
-	
+
+	/**
+	 * Plain name of the stop at this entry, without the attribute markers gimme_stop_name() adds.
+	 */
+	static const char* get_stop_name(karte_t* welt, player_t const* player_, schedule_entry_t const& entry, waytype_t const wt);
+
+	/**
+	 * True when a convoy actually stops at this entry. Halts that are passed through and
+	 * waypoints are not stops, depots are.
+	 */
+	static bool is_stopping_entry(karte_t* welt, player_t const* player_, schedule_entry_t const& entry, waytype_t const wt);
+
+	/**
+	 * Index of the first entry behind the current one where a convoy actually stops.
+	 * Returns -1 when the schedule holds no such entry at all, e.g. when it consists of waypoints only.
+	 */
+	sint32 get_next_stopping_entry_index(karte_t* welt, player_t const* player_, waytype_t const wt) const;
+
 	/*
 	 * Get the index of the corresponding entry of this schedule to Nth entry of the other schedule.
 	 * Removes the effect of depot entries.

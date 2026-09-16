@@ -883,6 +883,44 @@ void schedule_t::gimme_stop_name(cbuffer_t& buf, karte_t* welt, player_t const* 
 	}
 }
 
+const char* schedule_t::get_stop_name(karte_t* welt, player_t const* const player_, schedule_entry_t const& entry, waytype_t const wt)
+{
+	halthandle_t halt = haltestelle_t::get_stoppable_halt(entry.pos, player_, wt);
+	if(  halt.is_bound()  ) {
+		return halt->get_name();
+	}
+	const grund_t* gr = welt->lookup(entry.pos);
+	if(  gr == NULL  ) {
+		return translator::translate("Invalid coordinate");
+	}
+	if(  gr->get_depot() != NULL  ) {
+		return gr->get_depot()->get_name();
+	}
+	return translator::translate("Wegpunkt");
+}
+
+bool schedule_t::is_stopping_entry(karte_t* welt, player_t const* const player_, schedule_entry_t const& entry, waytype_t const wt)
+{
+	if(  haltestelle_t::get_stoppable_halt(entry.pos, player_, wt).is_bound()  ) {
+		return !entry.is_pass_stop();
+	}
+	// a depot is a destination, a waypoint or an invalid coordinate is not
+	const grund_t* gr = welt->lookup(entry.pos);
+	return gr != NULL  &&  gr->get_depot() != NULL;
+}
+
+sint32 schedule_t::get_next_stopping_entry_index(karte_t* welt, player_t const* const player_, waytype_t const wt) const
+{
+	const uint8 count = entries.get_count();
+	for(  uint8 i = 1;  i < count;  i++  ) {
+		const uint8 idx = (uint8)((current_stop + i) % count);
+		if(  is_stopping_entry(welt, player_, entries[idx], wt)  ) {
+			return idx;
+		}
+	}
+	return -1;
+}
+
 schedule_entry_t const& schedule_t::get_next_entry() const {
 	if(  entries.empty()  ) {
 		return dummy_entry;
