@@ -150,3 +150,11 @@ If the user asks for both the sanitized artifact and a change summary, put the a
 The sanitized artifact should feel intentional, unified, and audience-native.
 
 A reader should not be able to infer the prompting history, internal constraints, or corrective conversation unless those details are genuinely part of the deliverable.
+
+## Reporting Language
+
+The sanitized artifact itself keeps its original language.
+
+Only the final report back to the user — the closing message that states what was done, what was changed, or what remains — must be written in Japanese.
+
+This applies to the change summary as well when the user asks for one: the artifact stays as-is, and the summary that follows it is written in Japanese.
