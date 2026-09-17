@@ -322,7 +322,8 @@ void convoi_detail_t::init(convoihandle_t cnv)
 
 	container.set_table_layout(1,0);
 	for(unsigned veh=0;  veh<cnv->get_vehicle_count(); veh++ ) {
-		vehicle_t *v = cnv->get_vehikel(veh);
+		// always list the vehicles in their assembled order, even while the convoy runs reversed
+		vehicle_t *v = cnv->get_vehikel_in_normal_order(veh);
 		container.new_component<gui_vehicleinfo_t>(v, cnv_kmh);
 		container.new_component<gui_divider_t>();
 	}

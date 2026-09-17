@@ -61,7 +61,8 @@ public:
 			const unsigned count = c->get_vehicle_count();
 			for(unsigned i=0; i<count; i++) {
 				scr_coord_val x, y, w, h;
-				const image_id image = c->get_vehikel(i)->get_loaded_image();
+				// always draw the convoy in its assembled order, even while it runs reversed
+				const image_id image = c->get_vehikel_in_normal_order(i)->get_loaded_image();
 				display_get_base_image_offset(image, &x, &y, &w, &h );
 				if (display_images) {
 					display_base_img(image, p.x + s.w - x, p.y - y - h/2, c->get_owner()->get_player_nr(), false, true);

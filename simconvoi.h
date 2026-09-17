@@ -859,6 +859,13 @@ public:
 	 */
 	vehicle_t* get_vehikel(uint16 i) const { return fahr[i]; }
 
+	/**
+	 * @return Vehicle at position i counted from the head of the convoy as it was assembled.
+	 * fahr[] is always ordered along the driving direction, so a reversed convoy holds its
+	 * vehicles in the opposite order. Listings should use this to always show a convoy front first.
+	 */
+	vehicle_t* get_vehikel_in_normal_order(uint16 i) const { return fahr[reversed ? anz_vehikel-1-i : i]; }
+
 	vehicle_t* front() const { return fahr[0]; }
 
 	vehicle_t* back() const { return fahr[anz_vehikel - 1]; }
