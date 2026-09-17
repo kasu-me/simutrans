@@ -1142,6 +1142,8 @@ void schedule_list_gui_t::show_lineinfo(linehandle_t line)
 				}
 			}
 		}
+		// scroll the list so that the selected line becomes visible
+		scl.show_selection( scl.get_selection() );
 	}
 }
 
