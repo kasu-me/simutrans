@@ -5155,6 +5155,9 @@ void karte_t::switch_server( bool start_server, bool port_forwarding )
 			}
 		}
 	}
+
+	// networkmode may have changed: refresh tools that depend on it (pause, fast forward, ...)
+	tool_t::update_toolbars();
 }
 
 
@@ -8013,6 +8016,8 @@ void karte_t::network_disconnect()
 	step_mode = NORMAL;
 	reset_timer();
 	clear_command_queue();
+	// networkmode is off now: restore the tools hidden while online (pause, fast forward, ...)
+	tool_t::update_toolbars();
 	create_win( display_get_width()/2-128, 40, new news_img("Lost synchronisation\nwith server."), w_info, magic_none);
 	ticker::add_msg( translator::translate("Lost synchronisation\nwith server."), koord::invalid, color_idx_to_rgb(COL_BLACK) );
 	env_t::last_active_player_nr = active_player_nr;
