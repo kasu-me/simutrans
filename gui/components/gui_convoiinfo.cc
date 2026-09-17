@@ -17,6 +17,8 @@
 #include "../../display/viewport.h"
 #include "../../player/simplay.h"
 #include "../../simline.h"
+#include "../simwin.h"
+#include "../gui_frame.h"
 
 #include "../../dataobj/translator.h"
 #include "../../dataobj/schedule.h"
@@ -157,7 +159,7 @@ bool gui_convoiinfo_t::infowin_event(const event_t *ev)
 			return true;
 		}
 		if(IS_LEFTRELEASE(ev)) {
-			cnv->open_info_window();
+			open_info_windows();
 			return true;
 		}
 		else if(IS_RIGHTRELEASE(ev)) {
@@ -167,6 +169,34 @@ bool gui_convoiinfo_t::infowin_event(const event_t *ev)
 		}
 	}
 	return false;
+}
+
+void gui_convoiinfo_t::open_info_windows() const
+{
+	scr_coord pos;
+	bool first = true;
+	convoihandle_t c = cnv;
+	while(  c.is_bound()  ) {
+		const ptrdiff_t magic = magic_convoi_info + c.get_id();
+		const bool was_open = win_get_magic( magic ) != NULL;
+		c->open_info_window();
+		gui_frame_t *win = win_get_magic( magic );
+		// a convoy in a depot opens the depot window instead, and a window that is
+		// already open keeps the position the user gave it
+		if(  win != NULL  &&  !was_open  ) {
+			if(  first  ) {
+				pos = win_get_pos( win );
+			}
+			else {
+				// cascade, so that the windows of the coupled convoys do not cover each other
+				pos += scr_coord( D_TITLEBAR_HEIGHT, D_TITLEBAR_HEIGHT );
+				win_clamp_xywh_position( pos.x, pos.y, win->get_windowsize(), true );
+				win_set_pos( win, pos.x, pos.y );
+			}
+			first = false;
+		}
+		c = next_coupled_convoi( c, chain_line );
+	}
 }
 
 const char* gui_convoiinfo_t::get_text() const

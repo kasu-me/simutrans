@@ -45,6 +45,12 @@ private:
 	button_t pos_next_halt;
 	gui_aligned_container_t *container_next_halt;
 
+	/**
+	* Opens the info window of each convoy displayed by this element. The windows of a
+	* coupled train are cascaded so that they do not cover each other.
+	*/
+	void open_info_windows() const;
+
 public:
 	/**
 	* @param cnv the handle for the Convoi to be displayed.
