@@ -24,6 +24,7 @@
 #include "../../dataobj/schedule.h"
 
 #include "../../utils/simstring.h"
+#include "../../tpl/vector_tpl.h"
 
 
 // Returns the convoy coupled behind c if it is displayed together with c, i.e. if it belongs to chain_line.
@@ -174,29 +175,41 @@ bool gui_convoiinfo_t::infowin_event(const event_t *ev)
 
 void gui_convoiinfo_t::open_info_windows() const
 {
-	scr_coord pos;
-	bool first = true;
+	// the convoys displayed by this element, the leading one first
+	vector_tpl<convoihandle_t> convoys;
 	convoihandle_t c = cnv;
 	while(  c.is_bound()  ) {
-		const ptrdiff_t magic = magic_convoi_info + c.get_id();
+		convoys.append( c );
+		c = next_coupled_convoi( c, chain_line );
+	}
+
+	// open the windows from the last convoy to the first one, so that the window of the
+	// leading convoy ends up in front of the windows of the coupled convoys
+	vector_tpl<gui_frame_t *> new_windows; // the windows opened here, the leading convoy first
+	for(  sint32 i = (sint32)convoys.get_count()-1;  i >= 0;  i--  ) {
+		const ptrdiff_t magic = magic_convoi_info + convoys[i].get_id();
 		const bool was_open = win_get_magic( magic ) != NULL;
-		c->open_info_window();
-		gui_frame_t *win = win_get_magic( magic );
+		convoys[i]->open_info_window();
+		gui_frame_t *const win = win_get_magic( magic );
 		// a convoy in a depot opens the depot window instead, and a window that is
 		// already open keeps the position the user gave it
 		if(  win != NULL  &&  !was_open  ) {
-			if(  first  ) {
-				pos = win_get_pos( win );
-			}
-			else {
-				// cascade, so that the windows of the coupled convoys do not cover each other
-				pos += scr_coord( D_TITLEBAR_HEIGHT, D_TITLEBAR_HEIGHT );
-				win_clamp_xywh_position( pos.x, pos.y, win->get_windowsize(), true );
-				win_set_pos( win, pos.x, pos.y );
-			}
-			first = false;
+			new_windows.insert_at( 0, win );
 		}
-		c = next_coupled_convoi( c, chain_line );
+	}
+
+	// cascade, so that the windows of the coupled convoys do not cover each other
+	scr_coord pos;
+	for(  uint32 i = 0;  i < new_windows.get_count();  i++  ) {
+		gui_frame_t *const win = new_windows[i];
+		if(  i == 0  ) {
+			pos = win_get_pos( win );
+		}
+		else {
+			pos += scr_coord( D_TITLEBAR_HEIGHT, D_TITLEBAR_HEIGHT );
+			win_clamp_xywh_position( pos.x, pos.y, win->get_windowsize(), true );
+			win_set_pos( win, pos.x, pos.y );
+		}
 	}
 }
 
