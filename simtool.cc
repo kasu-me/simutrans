@@ -4366,33 +4366,43 @@ const char *tool_wayremover_t::do_work( player_t *player, const koord3d &start, 
 		// ground can be missing after deleting a bridge ...
 		if(gr  &&  !gr->is_water()) {
 
-			if(gr->ist_bruecke()) {
-				if(gr->find<bruecke_t>()->get_desc()->get_waytype()==wt) {
-					if(  bridge_builder_t::is_start_of_bridge(gr)  ) {
-						const char *err = NULL;
-						err = bridge_builder_t::remove(player,verbindung.at(i),wt);
-						if(err) {
-							return err;
-						}
-						gr = welt->lookup(verbindung.at(i));
-						if(  !gr  ) {
-							// happens with bridges without ramps
-							continue;
-						}
-					}
-					else {
-						// do not remove asphalt from a bridge ...
-						continue;
-					}
-				}
-			}
-
 			// now the tricky part: delete just part of a way (or everything, if possible)
 			// calculate remaining directions
 			ribi_t::ribi rem = 15 ^ ( verbindung.get_route().get_ribi(i) );
 			// if start=end tile then delete every direction
 			if(  verbindung.get_count() <= 1  ) {
 				rem = 0;
+			}
+
+			if(gr->ist_bruecke()) {
+				const bruecke_t* const br = gr->find<bruecke_t>();
+				if(br->get_desc()->get_waytype()==wt) {
+					// A way on a bridge is always straight, since bridges have no junction images.
+					// Old savegames may nevertheless contain such a junction. In that case only the
+					// surplus directions are removed and the bridge itself is left alone.
+					const weg_t* const w = gr->get_weg(wt);
+					const ribi_t::ribi bridge_ribi = br->get_ribi();
+					const ribi_t::ribi way_ribi = w ? w->get_ribi_unmasked() : (ribi_t::ribi)ribi_t::none;
+					const bool remove_junction_only = (way_ribi & ~bridge_ribi & ~rem)  &&  (way_ribi & bridge_ribi & ~rem)==0;
+					if(  !remove_junction_only  ) {
+						if(  bridge_builder_t::is_start_of_bridge(gr)  ) {
+							const char *err = NULL;
+							err = bridge_builder_t::remove(player,verbindung.at(i),wt);
+							if(err) {
+								return err;
+							}
+							gr = welt->lookup(verbindung.at(i));
+							if(  !gr  ) {
+								// happens with bridges without ramps
+								continue;
+							}
+						}
+						else {
+							// do not remove asphalt from a bridge ...
+							continue;
+						}
+					}
+				}
 			}
 
 			if(  wt!=powerline_wt  ) {

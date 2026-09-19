@@ -686,7 +686,7 @@ bool way_builder_t::is_allowed_step(const grund_t *from, const grund_t *to, sint
 	// universal check for bridges: enter bridges in bridge direction
 	if( to->get_typ()==grund_t::brueckenboden ) {
 		ribi_t::ribi br = ribi_type(zv);
-		br  = to->hat_wege()    ? to->get_weg_nr(0)->get_ribi_unmasked() : (ribi_t::ribi)ribi_t::none;
+		br |= to->hat_wege()    ? to->get_weg_nr(0)->get_ribi_unmasked() : (ribi_t::ribi)ribi_t::none;
 		br |= to->get_leitung() ? to->get_leitung()->get_ribi()          : (ribi_t::ribi)ribi_t::none;
 		if(!ribi_t::is_straight(br)) {
 			return false;
@@ -694,7 +694,7 @@ bool way_builder_t::is_allowed_step(const grund_t *from, const grund_t *to, sint
 	}
 	if( from->get_typ()==grund_t::brueckenboden ) {
 		ribi_t::ribi br = ribi_type(zv);
-		br  = from->hat_wege()    ? from->get_weg_nr(0)->get_ribi_unmasked() : (ribi_t::ribi)ribi_t::none;
+		br |= from->hat_wege()    ? from->get_weg_nr(0)->get_ribi_unmasked() : (ribi_t::ribi)ribi_t::none;
 		br |= from->get_leitung() ? from->get_leitung()->get_ribi()          : (ribi_t::ribi)ribi_t::none;
 		if(!ribi_t::is_straight(br)) {
 			return false;

@@ -53,6 +53,24 @@ static bridge_desc_t::img_t single_img[24]= {
 	bridge_desc_t::NS_Pillar, bridge_desc_t::OW_Pillar
 };
 
+
+ribi_t::ribi bruecke_t::get_ribi() const
+{
+	// single_img[] maps the double height images onto the single height ones
+	switch(  single_img[img]  ) {
+		case bridge_desc_t::NS_Segment:
+		case bridge_desc_t::N_Start:
+		case bridge_desc_t::S_Start:
+		case bridge_desc_t::N_Ramp:
+		case bridge_desc_t::S_Ramp:
+		case bridge_desc_t::NS_Pillar:
+			return ribi_t::northsouth;
+		default:
+			return ribi_t::eastwest;
+	}
+}
+
+
 void bruecke_t::calc_image()
 {
 	grund_t *gr=welt->lookup(get_pos());

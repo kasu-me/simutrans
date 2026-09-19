@@ -40,6 +40,12 @@ public:
 
 	const bridge_desc_t *get_desc() const { return desc; }
 
+	/**
+	 * The axis along which the bridge runs on this tile.
+	 * @return ribi_t::northsouth or ribi_t::eastwest
+	 */
+	ribi_t::ribi get_ribi() const;
+
 	// we will always replace first way image
 	image_id get_image() const OVERRIDE { return IMG_EMPTY; }
 
