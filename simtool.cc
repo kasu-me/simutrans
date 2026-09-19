@@ -3316,6 +3316,11 @@ bool tool_build_way_t::calc_route( way_builder_t &bauigel, const koord3d &start,
 	if(  is_ctrl_pressed()  ||  (env_t::straight_way_without_control  &&  !env_t::networkmode  &&  !is_scripted())  ) {
 		DBG_MESSAGE("tool_build_way_t()", "try straight route");
 		bauigel.calc_straight_route(start,my_end);
+		// calc_straight_route() falls back to searching from the end tile when the
+		// search from the start tile fails (this can happen on diagonal routes, since
+		// the two directions do not visit the same tiles). The route is stored in
+		// reverse order then, so the caller has to be told about it.
+		route_reversed = bauigel.is_route_reversed();
 	}
 	else {
 		route_reversed = bauigel.calc_route(start,my_end);
@@ -3930,7 +3935,7 @@ const char *tool_build_tunnel_t::check_pos( player_t *player, koord3d pos)
 	}
 }
 
-void tool_build_tunnel_t::calc_route( way_builder_t &bauigel, const koord3d &start, const koord3d &end)
+bool tool_build_tunnel_t::calc_route( way_builder_t &bauigel, const koord3d &start, const koord3d &end)
 {
 	const tunnel_desc_t *desc = tunnel_builder_t::get_desc(default_param);
 	way_builder_t::bautyp_t bt = (way_builder_t::bautyp_t)(desc->get_waytype());
@@ -3945,6 +3950,8 @@ void tool_build_tunnel_t::calc_route( way_builder_t &bauigel, const koord3d &sta
 	bauigel.set_keep_existing_faster_ways( !is_ctrl_pressed() );
 	// wegbauer (way builder) tries to find route to 3d coordinate if no ground at end exists or is not kartenboden (map ground)
 	bauigel.calc_straight_route(start,end);
+	// the route may be stored in reverse order, see tool_build_way_t::calc_route()
+	return bauigel.is_route_reversed();
 }
 
 const char *tool_build_tunnel_t::do_work( player_t *player, const koord3d &start, const koord3d &end )
@@ -4053,7 +4060,7 @@ uint8 tool_build_tunnel_t::is_valid_pos(  player_t *player, const koord3d &pos, 
 void tool_build_tunnel_t::mark_tiles(  player_t *player, const koord3d &start, const koord3d &end )
 {
 	way_builder_t bauigel(player);
-	calc_route( bauigel, start, end );
+	bool route_reversed = calc_route( bauigel, start, end );
 
 	const tunnel_desc_t *desc = tunnel_builder_t::get_desc(default_param);
 	// now we search a matching way for the tunnels top speed
@@ -4092,10 +4099,10 @@ void tool_build_tunnel_t::mark_tiles(  player_t *player, const koord3d &start, c
 			}
 			if(  desc->get_wtyp()==road_wt && skinverwaltung_t::ribi_arrow!=NULL  ) {
 				if(overtaking_mode<=oneway_mode) {
-					ribi_t::ribi oneway_ribi = (j!=bauigel.get_count()-1)? ribi_type(bauigel.get_route()[j+1]-bauigel.get_route()[j]): ribi_t::none;
+					ribi_t::ribi oneway_ribi = (!route_reversed? j!=bauigel.get_count()-1: j!=0)? ribi_type(bauigel.get_route()[(!route_reversed)? j+1: j-1]-bauigel.get_route()[j]): ribi_t::none;
 					if( weg_t* road=gr->get_weg(road_wt) ) {
 						dynamic_cast<strasse_t*>(road)->set_way_building(true);
-						if(  j==0  ) {
+						if(  !route_reversed? j==0: j==bauigel.get_count()-1  ) {
 							if( ribi_t::is_single(road->get_ribi_unmasked()) ) {
 								// oneway_ribi already updated
 							}
@@ -4106,7 +4113,7 @@ void tool_build_tunnel_t::mark_tiles(  player_t *player, const koord3d &start, c
 								oneway_ribi |= road->get_ribi();
 							}
 						} else {
-							ribi_t::ribi mask_ribi = ribi_type(bauigel.get_route()[j-1]-bauigel.get_route()[j]);
+							ribi_t::ribi mask_ribi = ribi_type(bauigel.get_route()[!route_reversed? j-1: j+1]-bauigel.get_route()[j]);
 							oneway_ribi |= (road->get_ribi() & ~mask_ribi);
 						}
 					}

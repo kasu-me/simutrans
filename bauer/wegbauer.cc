@@ -2184,6 +2184,7 @@ bool way_builder_t::intern_calc_route_runways(koord3d start3d, const koord3d zie
 void way_builder_t::calc_straight_route(koord3d start, const koord3d ziel)
 {
 	DBG_MESSAGE("way_builder_t::calc_straight_route()","from %d,%d,%d to %d,%d,%d",start.x,start.y,start.z, ziel.x,ziel.y,ziel.z );
+	route_reversed = false;
 	if(bautyp==luft  &&  desc->get_styp()==type_runway) {
 		// these are straight anyway ...
 		intern_calc_route_runways(start, ziel);

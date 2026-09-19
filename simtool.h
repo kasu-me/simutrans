@@ -430,7 +430,7 @@ private:
 	uint8 street_flag;
 	sint8 vehicle_offset;
 
-	void calc_route( way_builder_t &bauigel, const koord3d &, const koord3d &);
+	bool calc_route( way_builder_t &bauigel, const koord3d &, const koord3d &);
 	char const* do_work(player_t*, koord3d const&, koord3d const&) OVERRIDE;
 	void mark_tiles(player_t*, koord3d const&, koord3d const&) OVERRIDE;
 	uint8 is_valid_pos(player_t*, koord3d const&, char const*&, koord3d const&) OVERRIDE;

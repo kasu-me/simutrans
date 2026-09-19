@@ -218,6 +218,13 @@ public:
 	uint32 get_count() const { return route.get_count(); }
 
 	/**
+	 * True when the tiles in get_route() are stored in the opposite order of the
+	 * direction the route was requested in. Callers that care about the orientation
+	 * of the route (e.g. the one-way direction of a road) have to take it into account.
+	 */
+	bool is_route_reversed() const { return route_reversed; }
+
+	/**
 	 * If a way is built on top of another way, should the type
 	 * of the former way be kept or replaced (true == keep)
 	 */
