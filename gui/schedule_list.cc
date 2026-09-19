@@ -1155,6 +1155,8 @@ void schedule_list_gui_t::update_data(linehandle_t changed_line)
 		if(  tabs_to_lineindex[i] == simline_t::line  ||  tabs_to_lineindex[i] == changed_line->get_linetype()  ) {
 			// rebuilds the line list, but does not change selection
 			build_line_list(i);
+			// a renamed line may have moved within the sorted list: follow the selection
+			scl.show_selection( scl.get_selection() );
 		}
 
 		// change text input of selected line
