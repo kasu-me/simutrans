@@ -79,6 +79,16 @@
 
 #define RES_VERSION_NUMBER  0, SIM_VERSION_MAJOR, SIM_VERSION_MINOR, SIM_VERSION_PATCH
 
+// "pak" field written into settings.xml. The marker identifies a file written by this fork,
+// which carries the fork specific env_t entries appended after all standard data
+// (see env_t::rdwr_fork). A settings.xml without the marker is read without those entries,
+// and the original OTRP ignores trailing data it does not know.
+#define SETTINGS_XML_MARKER "settings only ahozura"
+#define SETTINGS_XML_PAK    SETTINGS_XML_MARKER "/"
+
+// version of the fork specific part of settings.xml. Increment whenever entries are added.
+#define SETTINGS_XML_FORK_VERSION 1
+
 #ifdef REVISION
 #	define SIM_TITLE_REVISION_STRING " - r" QUOTEME(REVISION)
 #else

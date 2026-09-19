@@ -230,9 +230,10 @@ static int SDLCALL my_event_filter(void* /*userdata*/, SDL_Event* event)
 		{
 			dr_chdir(env_t::user_dir);
 			loadsave_t settings_file;
-			if (settings_file.wr_open("settings.xml", loadsave_t::xml, 0, "settings only/", SAVEGAME_VER_NR) == loadsave_t::FILE_STATUS_OK) {
+			if (settings_file.wr_open("settings.xml", loadsave_t::xml, 0, SETTINGS_XML_PAK, SAVEGAME_VER_NR) == loadsave_t::FILE_STATUS_OK) {
 				env_t::rdwr(&settings_file);
 				env_t::default_settings.rdwr(&settings_file);
+				env_t::rdwr_fork(&settings_file);
 				settings_file.close();
 			}
 		}
@@ -262,9 +263,10 @@ static int SDLCALL my_event_filter(void* /*userdata*/, SDL_Event* event)
 		{
 			dr_chdir(env_t::user_dir);
 			loadsave_t settings_file;
-			if (settings_file.wr_open("settings.xml", loadsave_t::xml, 0, "settings only/", SAVEGAME_VER_NR) == loadsave_t::FILE_STATUS_OK) {
+			if (settings_file.wr_open("settings.xml", loadsave_t::xml, 0, SETTINGS_XML_PAK, SAVEGAME_VER_NR) == loadsave_t::FILE_STATUS_OK) {
 				env_t::rdwr(&settings_file);
 				env_t::default_settings.rdwr(&settings_file);
+				env_t::rdwr_fork(&settings_file);
 				settings_file.close();
 			}
 		}

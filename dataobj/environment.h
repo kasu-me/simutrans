@@ -295,6 +295,9 @@ public:
 	/// show only own vehicles states
 	static bool show_only_own_vehicle_states;
 
+	/// show vehicle states only for the vehicles displayed in the current underground view
+	static bool show_only_displayed_height_vehicle_states;
+
 	static bool show_line_colors;
 	static bool show_convoy_loadinglevel;
 
@@ -565,6 +568,12 @@ public:
 	 * @see simmain.cc
 	 */
 	static void rdwr(loadsave_t *file);
+
+	/**
+	 * load/saving the entries that only exist in this fork. They are stored after all
+	 * standard data of settings.xml to stay compatible with the original OTRP.
+	 */
+	static void rdwr_fork(loadsave_t *file);
 
 	static uint8 before_active_player_nr;
 	static uint8 last_active_player_nr;

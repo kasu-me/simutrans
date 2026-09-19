@@ -695,6 +695,10 @@ Show convoy loading level
 編成の乗車率を表示
 show only own vehicle states
 自社の車両のみ表示
+show only displayed height vehicle states
+表示中の高度のみ
+Show tooltips only for the vehicles visible in the current underground view.
+スライス地下表示では表示中の高度の車両のみ、それ以外では地上の車両のみツールチップを表示します。
 use_route_cache
 ルートキャッシュを使用(use_route_cache)
 Clip below elevated ways

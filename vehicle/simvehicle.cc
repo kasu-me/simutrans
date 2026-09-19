@@ -1975,6 +1975,15 @@ void vehicle_t::display_after(int xpos, int ypos, bool is_global) const
 #endif
 		return;
 	}
+	if(  env_t::show_only_displayed_height_vehicle_states  &&
+		(  env_t::show_vehicle_states==env_t::ALL_CONVOI_TOOLTIPS  ||  env_t::show_vehicle_states==env_t::LINE_NAME_TOOLTIPS  ||  env_t::show_vehicle_states==env_t::LINE_NAME_AND_STATES_TOOLTIPS  )  ) {
+		// show the tooltip only when the vehicle itself is drawn in the current underground view.
+		// -> in the sliced underground mode only the sliced height, otherwise only the vehicles above the ground.
+		const grund_t* const veh_gr = welt->lookup(get_pos());
+		if(  veh_gr==NULL  ||  !veh_gr->is_visible()  ) {
+			return;
+		}
+	}
 	PIXVAL color = 0; // not used, but stop compiler warning about uninitialized
 	constexpr uint16 tooltip_text_size = 1024;
 	char tooltip_text[tooltip_text_size];

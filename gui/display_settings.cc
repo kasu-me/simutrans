@@ -57,6 +57,7 @@ enum {
 	IDBTN_SHOW_CONVOY_LOADINGLEVEL,
 	IDBTN_SHOW_WAY_OFFSET_LABEL,
 	IDBTN_SHOW_ONLY_OWN_VEHICLE_STATES,
+	IDBTN_SHOW_ONLY_DISPLAYED_HEIGHT_VEHICLE_STATES,
 	COLORS_MAX_BUTTONS, 
 };
 
@@ -490,6 +491,10 @@ traffic_settings_t::traffic_settings_t()
 	buttons[IDBTN_SHOW_ONLY_OWN_VEHICLE_STATES].init(button_t::square_state, "show only own vehicle states");
 	add_component(buttons+IDBTN_SHOW_ONLY_OWN_VEHICLE_STATES,2);
 
+	buttons[IDBTN_SHOW_ONLY_DISPLAYED_HEIGHT_VEHICLE_STATES].init(button_t::square_state, "show only displayed height vehicle states");
+	buttons[IDBTN_SHOW_ONLY_DISPLAYED_HEIGHT_VEHICLE_STATES].set_tooltip("Show tooltips only for the vehicles visible in the current underground view.");
+	add_component(buttons+IDBTN_SHOW_ONLY_DISPLAYED_HEIGHT_VEHICLE_STATES,2);
+
 	buttons[IDBTN_SHOW_LINE_COLOR].init(button_t::square_state, "Show line colors");
 	add_component(buttons+IDBTN_SHOW_LINE_COLOR,2);
 	buttons[IDBTN_SHOW_CONVOY_LOADINGLEVEL].init(button_t::square_state, "Show convoy loading level");
@@ -775,6 +780,9 @@ bool color_gui_t::action_triggered( gui_action_creator_t *comp, value_t p)
 	case IDBTN_SHOW_ONLY_OWN_VEHICLE_STATES:
 		env_t::show_only_own_vehicle_states ^= 1;
 		break;
+	case IDBTN_SHOW_ONLY_DISPLAYED_HEIGHT_VEHICLE_STATES:
+		env_t::show_only_displayed_height_vehicle_states ^= 1;
+		break;
 	default:
 		assert( 0 );
 	}
@@ -814,6 +822,8 @@ void color_gui_t::draw(scr_coord pos, scr_size size)
 	buttons[IDBTN_SHOW_CONVOY_LOADINGLEVEL].enable(env_t::show_vehicle_states==env_t::LINE_NAME_TOOLTIPS||env_t::show_vehicle_states==env_t::LINE_NAME_AND_STATES_TOOLTIPS);
 	buttons[IDBTN_SHOW_ONLY_OWN_VEHICLE_STATES].pressed = env_t::show_only_own_vehicle_states;
 	buttons[IDBTN_SHOW_ONLY_OWN_VEHICLE_STATES].enable();
+	buttons[IDBTN_SHOW_ONLY_DISPLAYED_HEIGHT_VEHICLE_STATES].pressed = env_t::show_only_displayed_height_vehicle_states;
+	buttons[IDBTN_SHOW_ONLY_DISPLAYED_HEIGHT_VEHICLE_STATES].enable(env_t::show_vehicle_states==env_t::ALL_CONVOI_TOOLTIPS||env_t::show_vehicle_states==env_t::LINE_NAME_TOOLTIPS||env_t::show_vehicle_states==env_t::LINE_NAME_AND_STATES_TOOLTIPS);
 	buttons[IDBTN_RIBI_ARROW].pressed = strasse_t::show_masked_ribi;
 	buttons[IDBTN_RIBI_ARROW].enable(skinverwaltung_t::ribi_arrow!=NULL);
 	buttons[IDBTN_ONEWAY_RIBI_ONLY].pressed = env_t::show_oneway_ribi_only;

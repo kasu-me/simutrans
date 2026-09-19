@@ -15,6 +15,7 @@
 #include "koord3d.h"
 
 #include "../utils/simrandom.h"
+#include "../utils/simstring.h"
 void rdwr_win_settings(loadsave_t *file); // simwin
 char env_t::install_dir[PATH_MAX];
 std::string env_t::pak_dir;
@@ -157,6 +158,7 @@ bool env_t::draw_earth_border;
 bool env_t::draw_outside_tile;
 uint8 env_t::show_vehicle_states;
 bool env_t::show_only_own_vehicle_states;
+bool env_t::show_only_displayed_height_vehicle_states;
 bool env_t::show_line_colors;
 bool env_t::show_convoy_loadinglevel;
 sint8 env_t::clip_below;
@@ -315,6 +317,7 @@ void env_t::init()
 
 	show_vehicle_states = 1;
 	show_only_own_vehicle_states = false;
+	show_only_displayed_height_vehicle_states = false;
 	show_line_colors = true;
 	show_convoy_loadinglevel = true;
 	clip_below = CLIP_BELOW_PAK;
@@ -701,6 +704,23 @@ void env_t::rdwr(loadsave_t *file)
 
 	// server settings are not saved, since they are server specific
 	// and could be different on different servers on the same computers
+}
+
+
+void env_t::rdwr_fork(loadsave_t *file)
+{
+	if(  file->is_loading()  &&  !strstart(file->get_pak_extension(), SETTINGS_XML_MARKER)  ) {
+		// written by the original OTRP, hence no fork specific data present
+		return;
+	}
+
+	uint8 fork_version = SETTINGS_XML_FORK_VERSION;
+	file->rdwr_byte(fork_version);
+
+	if(  fork_version>=1  ) {
+		file->rdwr_bool(show_only_displayed_height_vehicle_states);
+	}
+	// entries of a newer version are simply left unread
 }
 
 // Graphical offsets for all vehicles
