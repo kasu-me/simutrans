@@ -1233,8 +1233,8 @@ int simu_main(int argc, char** argv)
 	clear_random_mode( 7 );	// allow all
 	
 	// send launch log (OTRP)
-	otrp_log_sender_t log_sender;
-	log_sender.send_launch_log();
+	// otrp_log_sender_t log_sender;
+	// log_sender.send_launch_log();
 	
 	// THLeaderH: show overlaid_warning only when requested.
 	bool show_overlaid_warning = false;
@@ -1782,7 +1782,7 @@ int simu_main(int argc, char** argv)
 
 	intr_disable();
 	
-	log_sender.save_statistics();
+	// log_sender.save_statistics();
 
 	// save settings
 	{
