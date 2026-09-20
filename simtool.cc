@@ -6834,10 +6834,12 @@ const char *tool_build_depot_t::tool_depot_aux(player_t *player, koord3d pos, co
 				case ribi_t::north:  layout = 2;    break;
 				case ribi_t::west:  layout = 3;    break;
 			}
-		} else if(desc->get_all_layouts() == 2) {
+		} else if(desc->get_all_layouts() == 2  ||  desc->get_all_layouts() >= 8) {
 			if(!ribi_t::is_straight(ribi)) {
 				return "Depots must be built on flat dead-end way tiles!";
 			}
+			// 8 or 16 layouts use the station style layout bits. Only bit 0 (the NS/EW axis)
+			// is set here, the connection bits are added by build_station_extension_depot().
 			layout = ribi_t::is_straight_ew(ribi);
 		} else if(desc->get_all_layouts() == 1) {
 			if(!ribi_t::is_straight(ribi)) {
