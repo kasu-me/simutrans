@@ -13,9 +13,9 @@
 | キー | 値 |
 | --- | --- |
 | 起点コミット (base) | `d01a02edf26e0faf1c3542d4d854fe6ce52cc9f8` (v58_3) |
-| 追跡済み最新コミット (head) | `f30c237c5023e0a77d40a452b93fb3b0df1b11ed` (increment OTRP_VERSION_PATCH / v61_0_4) |
-| 対象コミット数 | 72 |
-| 最終更新 | 2026-09-16 |
+| 追跡済み最新コミット (head) | `e2dd3a237ae55c0071bd6f97e5652d699fae4d46` (Merge branch 'OTRP-KUTAv6' / v62_0_1 時点) |
+| 対象コミット数 | 84 |
+| 最終更新 | 2026-09-20 |
 
 > `head` より新しい本家コミットが増えた場合は skill `update-upstream-status` で追記する。
 
@@ -55,10 +55,15 @@
 | FEAT-13 | 新機能追加 | 一方通行標識の詳細設定に矢印図とコピー/貼り付け | 未取り込み |
 | FEAT-14 | 新機能追加 | MCP サーバに `get_tile_info` ツールを追加 | 未取り込み |
 | FEAT-15 | 新機能追加 | 道路車両の編成連結対応と誘導標識 (guide signal) | 未取り込み |
-| FEAT-16 | 新機能追加 | 異なる waytype を1タイルに斜めで共存させる (交差物不要) | 未取り込み |
+| FEAT-16 | 新機能追加 | 1タイルに2本の way を斜めで共存させる (異なる waytype / 同一 waytype) | 未取り込み |
 | FEAT-17 | 新機能追加 | 保守費・走行費の倍率設定 (`maintenance_cost_multiplier_*` 等) | 未取り込み |
 | FEAT-18 | 新機能追加 | 航送 (編成を他の編成に積載して輸送する) | 未取り込み |
 | FEAT-19 | 新機能追加 | 無閉塞運行 (`drive_without_reservation`) | 未取り込み |
+| FEAT-20 | 新機能追加 | choose 標識の「長さを無視」設定 (`ignore_length`) | 未取り込み |
+| FEAT-21 | 新機能追加 | 停留所の私有化で道・架線の所有権も移転し、費用を精算する | 未取り込み |
+| FEAT-22 | 新機能追加 | 車両オフセット付き線路で対向2編成が同一タイルに進入できる | 未取り込み |
+| FEAT-23 | 新機能追加 | 追越モードに `exclusive_area` / `passing_lane_stop_only` を追加 | 未取り込み |
+| FEAT-24 | 新機能追加 | ミニマップ全体の PNG 出力 | 未取り込み |
 | FIX-01 | バグ修正 | choose 標識/choose 区間終端が経路上にある場合の判定 | 取り込み済み |
 | FIX-02 | バグ修正 | pak の `clip_below` 設定の読み込み順序 | 取り込み済み |
 | FIX-03 | バグ修正 | 一方通行詳細設定の waytype 判定漏れと経路喪失時の異常終了 | 取り込み済み |
@@ -67,8 +72,9 @@
 | FIX-06 | バグ修正 | 橋脚が滑走路 (`air_wt`) タイル上に建つ | 取り込み済み |
 | FIX-07 | バグ修正 | Windows GDI の DPI スケーリング時のリサイズ処理 | 取り込み済み |
 | FIX-08 | バグ修正 | 整地ツールが基礎 (`fundament`) タイルで高低差制限を無視する | 取り込み済み |
+| FIX-09 | バグ修正 | 誘導標識を使わない軌道系連結で、ホーム上の待機編成を見つけられない | 未取り込み |
 | MISC-01 | その他 | 本家バージョン番号のインクリメント (v59〜v61_0_4) | 取り込み不要 |
-| MISC-02 | その他 | 日本語訳 `ja.OTRP.tab` の更新 (v59/v60/v61分) | 未取り込み |
+| MISC-02 | その他 | 日本語訳 `ja.OTRP.tab` の更新 (v59/v60/v61/v62分) | 未取り込み |
 | MISC-03 | その他 | SDL3 バックエンド対応と CI のビルド構成更新 (Ubuntu 分は後に削除) | 未取り込み |
 | MISC-04 | その他 | `obj_t::finish_rd()` にセーブの OTRP バージョンを渡す基盤変更 | 未取り込み |
 | MISC-05 | その他 | OTRP 用アドオン pak (矢印・ダミー貨物) を `documentation/` に同梱 | 未取り込み |
@@ -464,14 +470,18 @@
 - **備考**: 状態確認用の識別子は `simconvoi.h` の `broadcast_lane_to_coupling_convois`、
   または `boden/wege/strasse.h` の `get_reserver`。
 
-### FEAT-16: 異なる waytype を1タイルに斜めで共存させる
+### FEAT-16: 1タイルに2本の way を斜めで共存させる
 
 - **分類**: 新機能追加
 - **状態**: 未取り込み
-- **概要**: 1つのタイル上で2種類の waytype が**互いに交わらない斜め (disjoint bend)** を描く場合、
+- **概要**: 1つのタイル上で2本の way が**互いに交わらない斜め (disjoint bend)** を描く場合、
   交差物 (`crossing_t`) を作らずに両方を敷設できるようにする。
+  当初は異なる waytype 同士のみだったが、後続コミットで**同一 waytype 同士**
+  (互いに接続されない2本の独立した線路/道路) にも拡張された。
 - **上流コミット**:
-  - `c2973aaec` build two different waytype in one tile as disjointed diagonal (#705)
+  - `c2973aaec` build two different waytype in one tile as disjointed diagonal (#705) — 本体 (異なる waytype)
+  - `58bb2b989` make two same waytype as different way (#738) — 機能拡張 (同一 waytype 同士)
+  - `1588dba70` BUG FIX: load failed (#745) — 後続修正 (ロード時の予約処理)
 - **主な変更箇所**:
   - `dataobj/ribi.h` — `ribi_t::are_disjoint_bends(x, y)` を新設
     (両方が2ビットのカーブで、方向ビットを共有しない = NW と SE、NE と SW の組)
@@ -485,13 +495,56 @@
   - `obj/crossing.cc` — `crossing_t::finish_rd()` で、両 way が disjoint bend になっていたら
     画像を `IMG_EMPTY` にして不活性化する (旧セーブに残った `crossing_t` 対策)
   - `tests/automated-tests/tests/test_diagonal_two_waytypes.nut` (新規), `tests/automated-tests/all_tests.nut`
-- **詳細**: 代表的な用途は「線路の NW カーブと誘導路の SE カーブを同じタイルに置く」ような配置。
-  両者はタイル中心を共有しないため、物理的にも視覚的にも交差しない。
-  `crossing_desc` が定義されていない組み合わせ (monorail+track、track+air など) も敷設可能になる。
-- **取り込み時の注意**: セーブ形式への影響はないが、旧セーブに残る `crossing_t` の扱いが変わる。
-  `boden/grund.cc` / `bauer/wegbauer.cc` は基本エンジン部分なので、敷設判定全般への副作用に注意。
+  - **以下は `58bb2b989` (同一 waytype 拡張) の分**:
+  - `boden/grund.h` — `get_weg(waytype_t, ribi_t::ribi dir)` と
+    `get_weg_ribi_unmasked(waytype_t, ribi_t::ribi dir)` を新設。同一 waytype の2本が同居するタイルで、
+    方向ビット `dir` を持つ側の way を選び分ける。`weg_erweitern()` / `neuen_weg_bauen()` に
+    `new_desc` と `allow_same_waytype_dual_leg` 引数を追加
+  - `boden/grund.cc` — `weg_erweitern()` で (a) 両脚にまたがる ribi が来たら2本を1本に統合、
+    (b) どちらの脚を延長すべきかを「追加後も bend/single のままか」で判定、
+    (c) disjoint な bend に対しては延長を拒否して呼び出し側に2本目を作らせる。
+    `weg_entfernen()` で脚が single に退化したら2本を統合し直す (その際に停留所があれば撤去)。
+    `get_neighbour()` を方向考慮の ribi 参照に変更
+  - `bauer/wegbauer.{h,cc}` — `straight_route_mode` を追加。**CTRL 押下 (`calc_straight_route()`) の
+    直線敷設時のみ** 同一 waytype の2本目を許可する。`check_crossing()` に同一 waytype 2本の例外を追加
+  - `dataobj/route.{h,cc}` — `route_t::get_corner_set(index)` を新設
+    (経路上のタイルで占有する2方向ビット = `schiene_t::reserve()` の予約方向)
+  - `vehicle/simvehicle.{h,cc}` — `vehicle_t::get_current_corner_set()` を新設し、
+    way 参照を `get_weg(waytype, corner_set)` に置き換え (`enter_tile()` / `leave_tile()` 含む)
+  - `simconvoi.{h,cc}` — `get_reserved_tiles_corner_set(index)` を新設。予約/解除の way 参照を方向考慮に変更
+  - `obj/wayobj.cc` — 架線が同一 waytype 2本のどちらにも架かるよう `finish_rd()` / `calc_image()` を修正
+  - `boden/wege/weg.cc` — `check_diagonal()` に加え、ホーム長計算ループの無限ループ修正
+    (`get_neighbour()` は失敗時に出力引数を書き換えないため、同変数を受け渡しに使うと抜けられない)。
+    way 情報ウィンドウに「このタイルには同種の別の way がある」旨を表示
+  - `simtool.cc` — way 検査ツール類の ribi 参照を方向考慮に変更
+  - `tests/automated-tests/tests/test_diagonal_two_waytypes_same_desc.nut` (新規),
+    `tests/automated-tests/tests/test_way_road.nut`
+  - `simconvoi.cc` — `convoi_t::rdwr()` のロード時予約で `get_current_corner_set()` を使わず、
+    ロード済みの経路から `route.get_corner_set(route_index-1)` を引く (`1588dba70`)
+- **詳細**:
+  - 代表的な用途は「線路の NW カーブと誘導路の SE カーブを同じタイルに置く」ような配置。
+    両者はタイル中心を共有しないため、物理的にも視覚的にも交差しない。
+    `crossing_desc` が定義されていない組み合わせ (monorail+track、track+air など) も敷設可能になる。
+  - `58bb2b989` は同じ仕組みを**同一 waytype** に広げたもの。同じタイルに互いに接続されない
+    2本の線路 (道路) を置けるようになり、以降 way を引くコードは
+    「waytype だけでは一意に決まらない」前提で `corner_set` (前タイル側ビット + 次タイル側ビット) を
+    渡して選び分ける必要がある。両脚にまたがる ribi を敷設すると2本は1本に統合される。
+  - `1588dba70` は、`convoi_t::rdwr()` のロード時予約で `vehicle_t::get_current_corner_set()` を
+    呼んでいたのが原因のロード失敗の修正。この時点では車両がまだ編成に接続されていない
+    (`set_convoi()` は `finish_rd()` で行われる) ため経路を参照できない。
+- **取り込み時の注意**:
+  - セーブ形式への影響はないが、旧セーブに残る `crossing_t` の扱いが変わる。
+  - `boden/grund.cc` / `bauer/wegbauer.cc` は基本エンジン部分なので、敷設判定全般への副作用に注意。
+  - `58bb2b989` は `get_weg()` の呼び出し規約が変わる広範囲の変更で、`simconvoi.cc` /
+    `vehicle/simvehicle.cc` の予約まわりを大きく書き換えるため、`develop-kasumi` 独自改造との競合に注意。
+  - FEAT-22 (オフセット付き線路の対向同時進入) は `58bb2b989` の `corner_set` 基盤を前提にしているため、
+    FEAT-22 を取り込む場合は本項目が先行する。
+  - `58bb2b989` が追加した英語表示文字列 (`This tile has a second, disconnected way of the same type:` 等) は
+    本家でも `ja.OTRP.tab` に未登録 (MISC-02 参照)。
 - **develop-kasumi 側コミット**: —
-- **備考**: 状態確認用の識別子は `dataobj/ribi.h` の `are_disjoint_bends`。
+- **備考**: 状態確認用の識別子は `dataobj/ribi.h` の `are_disjoint_bends` (本体)、
+  `boden/grund.h` の `get_weg(waytype_t, ribi_t::ribi)` または
+  `dataobj/route.h` の `get_corner_set` (同一 waytype 拡張分)。
 
 ### FEAT-17: 保守費・走行費の倍率設定
 
@@ -529,6 +582,7 @@
   - `62a5675b8` shipping (#722) — 本体
   - `cc6546766` fix can_deliver_shipped_to (#732) — 後続修正
   - `2df43b22c` update shipping toll and freight images (#733) — 後続修正
+  - `8076cc1f8` add shipping income and fix toll shipping (#740) — 機能拡張 (航送の通行料率と収入分配)
 - **主な変更箇所**:
   - `bauer/goods_manager.{h,cc}` — waytype ごとの「航送用ダミー貨物」テーブル `shipping_goods[16]` と
     `get_shipping_goods(waytype_t)` / `is_shipping_goods(desc)` を追加。
@@ -550,6 +604,12 @@
   - `simworld.cc` — 追跡カメラが航送中の編成ではキャリアを追う、過剰在庫の自動整理が航送中編成を消さない、
     航送区間はスケジュール経路オーバーレイ (FEAT-09) の経路計算対象外にする
   - `simtool.cc`, `vehicle/simvehicle.cc` — 予約解除ツールの `SHIPPED` 除外、キャリア車両の積載画像
+  - `dataobj/settings.{h,cc}` — `toll_shipping_percentage` / `shipping_income_percentage` を追加 (`8076cc1f8`)。
+    `simuconf.tab` パラメータと OTRP v62 以上での rdwr。v62 未満のセーブは
+    `toll_shipping_percentage = way_toll_runningcost_percentage` / `shipping_income_percentage = 0` に移行
+  - `gui/settings_stats.cc` — 設定ダイアログ「経済」タブに上記2項目の数値入力を追加 (`8076cc1f8`)
+  - `simconvoi.{h,cc}` — `shipping_income_carrier` (下船後、収入精算が済むまでキャリアを覚えておくハンドル) と
+    `deduct_shipping_income_share()` を追加 (`8076cc1f8`)
 - **詳細**:
   - 積載量は「編成長さ単位」で、航送用ダミー貨物を積める車両の容量合計。
     空きが少しでもあれば乗り込むため、積載量を1編成分だけ超過しうる (デッドロック回避のため意図的)。
@@ -558,10 +618,18 @@
   - キャリアが破壊された/車庫に入った/下船地に到達できなくなった場合は、
     `disembark_all_forced()` で最寄り車庫へテレポート、それも無理なら除去する。
   - `cc6546766` は `can_deliver_shipped_to()` で `NO_LOAD` の停留所を「乗船駅に戻ってきた」と誤判定していた修正。
+  - `8076cc1f8` は課金まわりの拡張。(a) 航送の通行料が道の通行料率 (`way_toll_runningcost_percentage`) を
+    流用していたのを専用の `toll_shipping_percentage` に分離 (既定値は道の通行料率なので従来動作と同じ)、
+    (b) 航送区間の運賃収入のうち `shipping_income_percentage` % をキャリア側の収入として分配する。
+    運賃は下船した**次の**停留所で `last_stop_pos` (=乗船した港) からの区間として計上されるため、
+    そこまでキャリアのハンドルを `shipping_income_carrier` に保持し、精算後にクリアする。
+    分配分はキャリア自身の waytype で計上される (フェリーの収益が水運の列に載る)。
 - **取り込み時の注意**:
   - **セーブ形式に影響する**。`convoi_t::rdwr()` が `get_OTRP_version() >= 61` で
     `carrier_convoi` / `shipped_convois` / `shipping_wait_since` を読み書きし、
     状態 enum の書き出しも v61 でゲートされている (MISC-01 参照)。
+    さらに `8076cc1f8` により `convoi_t::rdwr()` の `shipping_income_carrier` と
+    `settings_t::rdwr()` の2設定が **OTRP v62 以上**でゲートされている。
   - `schedule_entry_t` にフラグが増えるため、`develop-kasumi` 独自のスケジュール入出力
     (`dataobj/schedule_io.cc` の `stop_flag_names`) に `START_SHIPPED` の追加が必要。
   - 動作には pakset 側に航送用ダミー貨物が必要 (MISC-05 参照)。
@@ -613,6 +681,157 @@
     は `8ef07c84b` で本家修正済み。**この後続修正も併せて取り込むこと。**
 - **develop-kasumi 側コミット**: —
 - **備考**: 状態確認用の識別子は `simconvoi.h` の `is_drive_without_reservation`。
+
+### FEAT-20: choose 標識の「長さを無視」設定 (`ignore_length`)
+
+- **分類**: 新機能追加
+- **状態**: 未取り込み
+- **概要**: 軌道系の choose 標識に「長さを無視」フラグを追加し、編成長より短い停留所にも
+  進入させられるようにする。
+- **上流コミット**:
+  - `4c27b3eca` ignore length for choose signal (#743)
+- **主な変更箇所**:
+  - `obj/roadsign.h` — `choose_sign_flag` に `ignore_length` (1<<10) を追加し、
+    `is_ignore_length()` / `set_ignore_length()` を新設
+  - `gui/signal_info.{h,cc}` — choose 標識の情報ウィンドウに `bt_ignore_length` を追加
+  - `simtool.cc` — `tool_change_roadsign_t` に `'i'` (ignore length のトグル) を追加
+  - `dataobj/route.{h,cc}`, `ifc/simtestdriver.h` — `find_route()` / `is_target()` /
+    `is_coupling_target()` に `ignore_length` 引数を追加
+  - `vehicle/simvehicle.{h,cc}` — `rail_vehicle_t::is_target()` / `is_coupling_target()` で、
+    `ignore_length` が立っていれば停留所長のチェックを省く。choose 標識からの
+    `find_route()` 呼び出し4か所に `sig->is_ignore_length()` を渡す
+- **詳細**: 従来は「編成長 ≦ 停留所の有効長 (+ margin)」を満たす停留所しか選ばれなかった。
+  フラグを立てると長さ条件が 0 扱いになり、はみ出す停留所も選択対象になる。
+  連結相手探索 (`is_coupling_target()`) も同様に長さ条件を無視する。
+- **取り込み時の注意**: `choose_sign_flag` は `uint16` で `rdwr_short()` により保存されるため、
+  ビット追加によるセーブ形式の分岐 (バージョン引き上げ) は不要。
+  ただし `find_route()` / `is_target()` のシグネチャが変わるので、
+  同じ関数群を触る他の項目 (FEAT-15 / FIX-09) と取り込み順に注意。
+- **develop-kasumi 側コミット**: —
+- **備考**: 状態確認用の識別子は `obj/roadsign.h` の `is_ignore_length`。
+  表示文字列 `ignore length` は本家でも `ja.OTRP.tab` に未登録 (MISC-02 参照)。
+
+### FEAT-21: 停留所の私有化で道・架線の所有権も移転し、費用を精算する
+
+- **分類**: 新機能追加
+- **状態**: 未取り込み
+- **概要**: 公共停留所を会社の私有停留所にする操作 (SHIFT + 停留所公共化ツール) で、
+  停留所建物だけでなく**同じタイルの道・架線 (wayobj) の所有権も移転**し、その対価を精算するようにする。
+- **上流コミット**:
+  - `a9c90e534` change owner when make halt private (#725)
+- **主な変更箇所**:
+  - `simhalt.{h,cc}` — `change_owner(player, halt_only, no_cost=false)` に引数を追加し、
+    公共化と私有化の両方をこの1関数で扱うよう統合。
+    私有化 (`to_private`) では権限ビット (`HS_ALLOW_OTHER_PLAYER_CONNECTION` / `set_permissions`) を
+    新所有者のみに絞り、建物・道・wayobj の代金を「新所有者 → 旧所有者」方向で計上する。
+    `make_private_and_join()` は統合先の停留所探索のみを担当する形に整理され、
+    探索を所有権移転の**前**に行う (移転後は自分のタイルも一致してしまうため)
+  - `simtool.cc` — `tool_make_stop_public_t::work()` の私有化分岐で、
+    停留所の維持費だけでなく引き取る道・トンネル・wayobj の維持費も含めて所持金チェックを行う。
+    公共化側の所持金チェックにも wayobj の維持費を加算 (漏れの修正)
+  - `documentation/ja.OTRP.tab` — 「(%s) は私有化されました．」を追加 (MISC-02 参照)
+- **詳細**:
+  - `is_shift_pressed()` で私有化、`is_ctrl_pressed()` を併用すると公共事業モード (費用なし)。
+  - ネットワークモードでは公共化・私有化の両方でメッセージを出す
+    (従来は公共化のみ)。道については1タイル分だけ通知する。
+- **取り込み時の注意**: 停留所の私有化機能自体は v58_3 時点で存在する (`[mod : shingoushori]`)。
+  セーブ形式への影響はないが、権限ビットの扱いが変わるため既存セーブでの挙動確認が必要。
+- **develop-kasumi 側コミット**: —
+- **備考**: 状態確認用の識別子は `simhalt.h` の `change_owner( player_t *player, bool halt_only, bool no_cost )`
+  (第3引数の有無)。
+
+### FEAT-22: 車両オフセット付き線路で対向2編成が同一タイルに進入できる
+
+- **分類**: 新機能追加
+- **状態**: 未取り込み
+- **概要**: 車両オフセット (`vehicle_offset`) が設定された線路では左右にずれて描画されるため、
+  対向する2編成が同じタイルを同時に予約・通過できるようにする。
+- **上流コミット**:
+  - `d61963fed` allow enter two convoys in one track when offset (#737)
+- **主な変更箇所**:
+  - `boden/wege/schiene.{h,cc}` — `reserved_travel_dir` / `reserved2_travel_dir` を追加し、
+    `reserve()` / `can_reserve()` / `can_co_reserve_with()` に `travel_dir` 引数を追加。
+    `can_co_reserve_offset(travel_dir)` を新設
+  - `dataobj/route.{h,cc}` — `route_t::get_travel_dir(index)` を新設
+    (タイルに進入する向き。`corner_set` と違い正反対の2方向を区別できる)
+  - `simconvoi.{h,cc}` — `get_reserved_tiles_travel_dir(index)` を新設。
+    `reserve_route()` / `vorfahren()` / `uncouple_convoi()` / `finish_rd()` の予約呼び出しに向きを渡す
+  - `vehicle/simvehicle.{h,cc}` — `vehicle_t::get_current_travel_dir()` を新設し、予約系の呼び出しに反映
+- **詳細**:
+  - 同時進入が許されるのは、(a) 2つの向きが厳密に正反対の single ribi、
+    (b) `vehicle_offset_mode == 0` (絶対オフセット) かつ `vehicle_offset != 0`、
+    (c) タイルが直線または斜め (`is_twoway`) で分岐・交差でない、をすべて満たす場合のみ。
+    オフセットモード1 (方向依存) は向きを `d%4` に畳むため両編成が同じ側になり、許可しない。
+  - 予約方向 (`corner_set`) は正反対の2つの走行方向を区別できないため、走行方向を別フィールドで持つ。
+  - `finish_rd()` (ロード直後) でも走行方向を渡さないと `reserved_travel_dir` が
+    `ribi_t::none` のままになり、以後この機能が効かなくなるため併せて修正されている。
+- **取り込み時の注意**:
+  - `schiene_t::reserve()` の呼び出し規約が FEAT-16 の `corner_set` 対応を前提にしている
+    (`gr->get_weg(waytype, corner_set)` 経由で way を引く形)。**FEAT-16 (特に `58bb2b989`) が先行する**。
+  - `reserved_travel_dir` はセーブ対象ではなく、ロード後に `finish_rd()` で再計算される。
+    セーブ形式への影響はない。
+- **develop-kasumi 側コミット**: —
+- **備考**: 状態確認用の識別子は `boden/wege/schiene.h` の `can_co_reserve_offset`。
+
+### FEAT-23: 追越モードに `exclusive_area` / `passing_lane_stop_only` を追加
+
+- **分類**: 新機能追加
+- **状態**: 未取り込み
+- **概要**: 道路の追越モードに2種類を追加する。`exclusive_area` は連続した該当区間に
+  同時に1編成しか入れない一編成専用区間、`passing_lane_stop_only` は追越車線を停車にのみ使える区間。
+- **上流コミット**:
+  - `b78c3685c` add new OTRP mode: only_one_car and stop_only_halt (#735)
+- **主な変更箇所**:
+  - `simtypes.h` — `overtaking_mode_t` に `exclusive_area_mode` (5) と
+    `passing_lane_stop_only_mode` (6) を追加。両者を `prohibited_mode` に写す
+    `effective_overtaking_mode()` を新設
+  - `boden/wege/strasse.{h,cc}` — `get_overtaking_mode()` は写像後の値を返し、
+    表示・保存・敷設用に `get_overtaking_mode_raw()` を新設
+  - `gui/overtaking_mode.{h,cc}` — モード選択ボタンを6個→8個に拡張
+  - `simconvoi.{h,cc}` — `can_stop_on_passing_lane()` を新設
+  - `vehicle/simvehicle.{h,cc}` — `get_blocking_convoi_in_exclusive_area()` と
+    `holds_passing_lane_to_stop()` を新設
+  - `bauer/wegbauer.cc`, `boden/grund.cc`, `boden/wege/weg.cc`, `simtool.cc`,
+    `vehicle/simroadtraffic.cc`, `script/api/api_map_objects.cc` — `get_overtaking_mode_raw()` への置き換え
+  - `script/api/api_const.cc` — Squirrel 定数 `exclusive_area_mode` / `passing_lane_stop_only_mode` を追加
+  - `documentation/ja.OTRP.tab` — 「一編成専用区間」「追越車線は停車のみ可」(MISC-02 参照)
+- **詳細**: 追越モードは走行ロジック全体で**大小比較**されている
+  (`<=oneway_mode`, `>twoway_mode` 等) ため、新モードは走行判定に渡る前に
+  `prohibited_mode` へ写像し、追加ルールだけを別途チェックする設計になっている。
+  連結待ちの相手編成は `exclusive_area` の占有相手とみなさない。
+- **取り込み時の注意**:
+  - `strasse_t::rdwr()` は `get_overtaking_mode_raw()` の値をそのまま保存するため
+    セーブ形式のバージョン分岐は無いが、新モードを設定したセーブを**旧バイナリで読むと未知の値**になる。
+  - `get_overtaking_mode()` の意味が変わるので、`develop-kasumi` 独自の車線制御改造がある箇所は
+    `raw` を使うべきかどうか個別に確認が必要。
+- **develop-kasumi 側コミット**: —
+- **備考**: 状態確認用の識別子は `simtypes.h` の `effective_overtaking_mode`、
+  または `boden/wege/strasse.h` の `get_overtaking_mode_raw`。
+
+### FEAT-24: ミニマップ全体の PNG 出力
+
+- **分類**: 新機能追加
+- **状態**: 未取り込み
+- **概要**: ミニマップ (地図) ウィンドウに「マップ画像を出力」ボタンを追加し、
+  現在の表示設定・ズームでマップ全体を PNG ファイルに書き出せるようにする。
+- **上流コミット**:
+  - `859a2244d` Add full minimap PNG export (#744)
+- **主な変更箇所**:
+  - `io/raw_image.h`, `io/raw_image_png.cc` — `raw_image_png_writer_t` (行単位に書き出す
+    逐次 PNG ライタ) を新設。メモリに載らない大きさの画像に対応する
+  - `display/simgraph.h`, `display/simgraph16.cc`, `display/simgraph0.cc` —
+    画面領域を `raw_image_t` の指定位置へ写す `display_snapshot(area, image, destination)` を追加
+  - `gui/minimap.{h,cc}` — `minimap_t::export_to_png(std::string &filename)` を新設。
+    画面サイズ単位のタイルに分けて描画しつつ、最大32MBの帯 (strip) 単位で PNG へ流し込む
+  - `gui/map_frame.{h,cc}` — `b_export_map` ボタンと結果通知 (`news_img`) を追加
+  - `documentation/ja.OTRP.tab` — 「マップ画像を出力」等 (MISC-02 参照)
+- **詳細**: 出力先はスクリーンショットフォルダ (`simmap00.png` から連番)。
+  出力中はミニマップのオフセット/サイズとクリップ領域を一時的に差し替え、終了後に復元する。
+- **取り込み時の注意**: セーブ形式への影響なし。`display_snapshot()` のオーバーロード追加のため
+  バックエンド側 (`simgraph16.cc` / `simgraph0.cc`) の追従が必要。
+- **develop-kasumi 側コミット**: —
+- **備考**: 状態確認用の識別子は `io/raw_image.h` の `raw_image_png_writer_t`、
+  または `gui/minimap.h` の `export_to_png`。
 
 ### FIX-01: choose 標識/choose 区間終端が経路上にある場合の判定
 
@@ -765,6 +984,36 @@
 - **develop-kasumi 側コミット**: `6ae1d7c88`
 - **備考**: 状態確認用の識別子は `simtool.cc` の `grund_t::fundament` を含む条件式。
 
+### FIX-09: 誘導標識を使わない軌道系連結で、ホーム上の待機編成を見つけられない
+
+- **分類**: バグ修正
+- **状態**: 未取り込み
+- **概要**: 誘導標識 (guide signal) を使わずに軌道系の編成を連結する場合、
+  ホームの奥で待っている編成が連結相手として検出されず、連結が成立しない問題を修正する。
+- **上流コミット**:
+  - `4980770e6` BUG FIX: coupling target find method for non-using guide signal (#739)
+- **主な変更箇所**:
+  - `vehicle/simvehicle.{h,cc}` — `rail_vehicle_t` に `get_next_coupling_stop()`,
+    `get_coupling_halt()`, `get_platform_tiles_behind_route()`, `check_platform_coupling()` を追加。
+    `can_couple()` を `const` 化。`can_enter_tile()` と `block_reserver()` から
+    `check_platform_coupling()` を呼ぶ
+  - `dataobj/schedule.cc` — `get_next_halt()` のデバッグ出力を削除
+- **詳細**:
+  - 自編成の経路は「自分に割り当てられた停留所位置」で終わるため、ホームのさらに奥に
+    停まっている編成は経路上に現れない。修正後は経路末尾から線路をたどって
+    **同じ停留所に属するタイル**を集め、ホーム全体を連結相手の探索対象にする。
+    たどる際は `check_next_tile()` (架線・速度・私有道路等) と `ribi_maske` (信号・一方通行) を見る。
+  - 経路全体が予約済みになると新たな予約契機 (信号) が無くなるため、
+    連結停留所へ接近中は**タイルを進むたび**に探索し直す。
+    無駄な探索を避けるため「進入するタイルが連結先停留所に属する」ことを先に確認する。
+  - 併せて、`drive_to()` による経路再構築で `next_coupling_index` が経路範囲外に取り残される
+    ケースを検出し、破棄して通常編成として走行を続けるようにしている。
+- **取り込み時の注意**: 連結 (coupling) 機能自体は v58_3 時点から存在する。セーブ形式への影響なし。
+  ただし `vehicle/simvehicle.cc` の `can_enter_tile()` / `block_reserver()` を触るため、
+  同領域を変更する FEAT-15 / FEAT-20 との取り込み順に注意。
+- **develop-kasumi 側コミット**: —
+- **備考**: 状態確認用の識別子は `vehicle/simvehicle.h` の `check_platform_coupling`。
+
 ### MISC-01: 本家バージョン番号のインクリメント
 
 - **分類**: その他
@@ -784,6 +1033,8 @@
   - `a20bca417` increment OTRP_VERSION_PATCH (v61_0_2)
   - `39993c64d` increment OTRP_VERSION_PATCH (v61_0_3)
   - `f30c237c5` increment OTRP_VERSION_PATCH (v61_0_4)
+  - `559d52c2a` increment OTRP_VERSION_MAJOR (v62)
+  - `252e90dfa` increment OTRP_VERSION_PATCH (v62_0_1)
 - **主な変更箇所**: `simversion.h` — `OTRP_VERSION_MAJOR` / `OTRP_VERSION_MINOR` / `OTRP_VERSION_PATCH`
 - **詳細**: —
 - **取り込み時の注意**:
@@ -793,8 +1044,9 @@
   - `OTRP_VERSION_MAJOR >= 59` を要求する項目: FEAT-01 / FEAT-04 / FEAT-05
   - `OTRP_VERSION_MAJOR >= 60` を要求する項目: FEAT-07
   - `OTRP_VERSION_MAJOR >= 61` を要求する項目: FEAT-17 / FEAT-18 / FEAT-19 / MISC-04
-  - 上記以外の項目 (FEAT-09 拡張分、FEAT-11〜FEAT-16、FIX-03〜FIX-08、MISC-03 / MISC-05) は
-    `get_OTRP_version()` によるセーブ形式の分岐を持たないため、バージョン引き上げは不要。
+  - `OTRP_VERSION_MAJOR >= 62` を要求する項目: FEAT-18 (`8076cc1f8` の航送収入・通行料設定の分)
+  - 上記以外の項目 (FEAT-09 拡張分、FEAT-11〜FEAT-16、FEAT-20〜FEAT-24、FIX-03〜FIX-09、
+    MISC-03 / MISC-05) は `get_OTRP_version()` によるセーブ形式の分岐を持たないため、バージョン引き上げは不要。
 - **develop-kasumi 側コミット**: — (独自運用: `cf52a5750` 等)
 - **備考**: バージョン番号自体は取り込まない方針。上記の依存関係のみ管理する。
 
@@ -802,7 +1054,7 @@
 
 - **分類**: その他
 - **状態**: 未取り込み
-- **概要**: v59 / v60 / v61 で追加された機能に対応する日本語訳の追加。
+- **概要**: v59 / v60 / v61 / v62 で追加された機能に対応する日本語訳の追加。
 - **上流コミット**:
   - `8da4abc3e` update ja.OTRP.tab for v59
   - `d65dc2063` add ja.OTRP.tab for v60
@@ -819,6 +1071,13 @@
     「無閉塞運行」「全駅に適用」等 (FEAT-19)
   - `68d996bca`: 航送用ダミー貨物名 `SHIPPING_{ROAD,TRACK,MONORAIL,MAGLEV,NARROWGAUGE,WATER}` の訳
     (「自動車を航送」「鉄道車両を航送」等) を追加 (FEAT-18 / MISC-05 関連)
+  - v62分も翻訳のみのコミットは無く、機能コミットに同梱されている:
+    `a9c90e534` の「(%s) は私有化されました．」(FEAT-21)、
+    `859a2244d` の「マップ画像を出力」等 (FEAT-24)、
+    `b78c3685c` の「一編成専用区間」「追越車線は停車のみ可」(FEAT-23)
+  - **本家でも未登録の文字列**: `ignore length` / `ignore length. Convoy can enter shorter stop` (FEAT-20)、
+    `This tile has a second, disconnected way of the same type:` (FEAT-16 の `58bb2b989`)。
+    これらの項目を取り込む場合は訳文を自前で追加する必要がある。
   - v60_1 〜 v61 の間は翻訳のみのコミットは無く、機能コミットに同梱されている:
     `5461ae2d2` の「発車許可を出す路線を指定」(FEAT-02)、
     `eaae6f8b2` の「通行方向の詳細設定をコピー/貼り付け」「通行可能な方向」等 (FEAT-13)
