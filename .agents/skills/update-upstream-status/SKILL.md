@@ -1,17 +1,25 @@
 ---
 name: update-upstream-status
-description: Update .agents/docs/upstream-merge-status.md - the document tracking which OTRP-KUTAv6 (upstream) changes have been cherry-picked into develop-kasumi. Use when new upstream commits have landed, when something was merged into develop-kasumi, or when the merge status needs re-verification.
+description: Update .agents/docs/upstream-merge-status.md (and its archive .agents/docs/upstream-merge-archive.md) - the documents tracking which OTRP-KUTAv6 (upstream) changes have been cherry-picked into develop-kasumi. Use when new upstream commits have landed, when something was merged into develop-kasumi, or when the merge status needs re-verification.
 argument-hint: "[--scan-upstream | --recheck-status | --all] (default: --all)"
 allowed-tools: Bash(git *), Read, Edit, Write, Grep, Glob
 ---
 
 # 本家取り込み状況ドキュメントの更新
 
-管理対象ファイル: `.agents/docs/upstream-merge-status.md`
+管理対象ファイル:
+
+- `.agents/docs/upstream-merge-status.md` … 本体 (一覧表 + 未取り込み/取り込み不要 項目の詳細)
+- `.agents/docs/upstream-merge-archive.md` … アーカイブ (`取り込み済み` 項目の詳細)
 
 このドキュメントは、本家ブランチ `OTRP-KUTAv6` の変更のうち何を `develop-kasumi`
 に取り込んだか/取り込んでいないかを、**意味ベースでグループ化した項目単位**で管理する。
 まず対象ファイルを読み、冒頭の「追跡範囲」と「編集ルール」に従うこと。
+
+**アーカイブ運用**: 状態が `取り込み済み` になった項目は、一覧表の行だけを本体に残し、
+「詳細」セクションを `upstream-merge-archive.md` へ移設する。
+既存項目を調べるときは本体とアーカイブの両方を対象にすること
+(ある項目の詳細は必ずどちらか一方にだけ存在する)。
 
 ## モード
 
@@ -62,6 +70,8 @@ git show <sha> -- <主要なファイル> | cat
    同じ機能に対する後続バグ修正・機能拡張であれば、新規項目を作らず
    既存項目の「上流コミット」に `- \`<短縮sha>\` <件名> — 後続修正` の形式で追記し、
    必要なら「主な変更箇所」「詳細」も更新する。
+   対象がアーカイブ済み (`取り込み済み`) の項目だった場合は、
+   詳細セクションをアーカイブから本体へ戻したうえで追記し、状態を `一部取り込み` にする。
    判断材料: PR タイトル、変更ファイルの重なり、コミットメッセージ本文に含まれる
    元 PR のコミット列 (本家は squash merge でブランチ全体の履歴が本文に残る)。
 2. **v58_3 より後に追加された機能に対するバグ修正か?**
@@ -134,7 +144,8 @@ FEAT-07 なら `tile_length`)
 ### B-3. 状態の更新
 
 - コードが存在し、対応するコミットが特定できた
-  → `状態` を `取り込み済み` にし、`develop-kasumi 側コミット` に短縮sha を記入
+  → `状態` を `取り込み済み` にし、`develop-kasumi 側コミット` に短縮sha を記入。
+  そのうえで**詳細セクションを `upstream-merge-archive.md` へ移設する** (下記 B-4)
 - 項目内の一部の上流コミットのみ取り込まれている
   → `一部取り込み` にし、`備考` に取り込み済み/未取り込みの内訳を書く
 - コードが無い → `未取り込み` のまま
@@ -145,11 +156,28 @@ FEAT-07 なら `tile_length`)
 矛盾 (ドキュメントは `取り込み済み` だがコードが無い、等) を見つけた場合は、
 勝手に書き換えず `備考` に `**要確認**` として記載し、ユーザーに報告する。
 
+### B-4. 取り込み済み項目のアーカイブ
+
+`取り込み済み` になった項目は、詳細を本体から切り離してアーカイブへ移す。
+
+1. `upstream-merge-status.md` の「詳細」から、その項目の `### <ID>: ...` セクションを
+   **本文そのまま (状態行や develop-kasumi 側コミットも含めて) 切り取る**。
+2. `upstream-merge-archive.md` の「詳細 (取り込み済み)」へ、**ID順を保って**貼り付ける。
+   内容は書き換えない。
+3. `upstream-merge-status.md` の**一覧表の行はそのまま残す** (状態 = `取り込み済み`)。
+   一覧表から削除してはいけない。
+
+逆方向 (アーカイブ済み項目に本家の後続コミットが現れた場合) は、
+詳細セクションを本体の「詳細」へID順で戻し、状態を `一部取り込み` にして内訳を `備考` に書く。
+
 ---
 
 ## 作業後
 
-1. ドキュメント全体を読み直し、一覧表と詳細セクションの項目数・状態が一致していることを確認する。
+1. ドキュメント全体を読み直し、次を確認する:
+   - 一覧表の項目数 = 本体の詳細セクション数 + アーカイブの詳細セクション数
+   - 一覧表で `取り込み済み` の項目の詳細が**アーカイブ側にのみ**存在する
+   - それ以外の状態の項目の詳細が**本体側にのみ**存在する
 2. 変更内容 (追加した項目、状態を変えた項目、要確認事項) をユーザーに簡潔に報告する。
 3. **コミットはしない。** `develop-kasumi` は直接コミット禁止ブランチ (`CLAUDE.md` 参照)。
    コミットが必要な場合はユーザーの明示的な指示を待つ。
