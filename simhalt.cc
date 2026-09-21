@@ -1203,7 +1203,11 @@ char* haltestelle_t::create_name(koord const k, char const* const typ)
 			// check for other special building (townhall, monument, tourist attraction)
 			for (int i=0; i<24; i++) {
 				grund_t *gr = welt->lookup_kartenboden( next_building[i] + k);
-				if(gr==NULL  ||  gr->get_typ()!=grund_t::fundament) {
+				if(gr==NULL) {
+					// tile is outside the map
+					continue;
+				}
+				if(gr->get_typ()!=grund_t::fundament) {
 					// no building here
 					if (gr->get_depot()!=NULL) {
 						// we find depot, we set depot name
