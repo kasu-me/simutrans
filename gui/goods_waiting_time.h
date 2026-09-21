@@ -15,10 +15,10 @@ class player_t;
 class gui_goods_waiting_time_stat_t : public gui_aligned_container_t {
 private:
     player_t* player;
-    schedule_t* schedule;
+    linehandle_t line;
 
 public:
-    gui_goods_waiting_time_stat_t(player_t* player, schedule_t* schedule): player(player), schedule(schedule) {};
+    gui_goods_waiting_time_stat_t(player_t* player, linehandle_t line): player(player), line(line) {};
     void update();
 };
 
@@ -28,13 +28,16 @@ private:
     gui_goods_waiting_time_stat_t stat;
     gui_scrollpane_t scrolly;
 
-    schedule_t* schedule;
+    linehandle_t line;
+    schedule_t* schedule; // the schedule the shown data was taken from
     cbuffer_t title_buf;
 
 public:
     gui_goods_waiting_time_t(linehandle_t, player_t*);
 
-    void update() { stat.update(); }
+    void update();
+    void update_title();
+    void draw(scr_coord pos, scr_size size) OVERRIDE;
 };
 
 

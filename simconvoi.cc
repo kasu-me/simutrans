@@ -4641,7 +4641,7 @@ void convoi_t::push_goods_waiting_time_if_needed() {
 
 
 	// update journey time window
-	gui_goods_waiting_time_t* window = dynamic_cast<gui_goods_waiting_time_t*>(win_get_magic((ptrdiff_t)line.get_rep()));
+	gui_goods_waiting_time_t* window = dynamic_cast<gui_goods_waiting_time_t*>(win_get_magic(magic_line_goods_waiting(line)));
 	if(  window  ) {
 		window->update();
 	}
@@ -6335,7 +6335,7 @@ void convoi_t::register_journey_time() {
 		}
 		if(  c->get_line().is_bound()  ) {
 			// update journey time window
-			gui_journey_time_info_t* window = dynamic_cast<gui_journey_time_info_t*>(win_get_magic((ptrdiff_t)c->get_line().get_rep()));
+			gui_journey_time_info_t* window = dynamic_cast<gui_journey_time_info_t*>(win_get_magic(magic_line_journey_time(c->get_line())));
 			if(  window  ) {
 				window->update();
 			}

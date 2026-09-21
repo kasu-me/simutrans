@@ -104,7 +104,7 @@ void line_management_gui_t::rdwr(loadsave_t *file)
 
 			set_windowsize(size);
 
-			win_set_magic(this, (ptrdiff_t)line.get_rep());
+			win_set_magic(this, magic_line_schedule(line));
 		}
 		else {
 			line = linehandle_t();

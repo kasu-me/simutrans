@@ -46,6 +46,10 @@ private:
   vector_tpl<uint32*> stopping_times; // in divisor time unit
   uint32 journey_time_sum;
   
+  // Refetches the line's schedule and refreshes the display if it was replaced.
+  // Returns false if the line does not exist anymore.
+  bool sync_schedule();
+
 public:
 	gui_journey_time_info_t(linehandle_t, player_t*);
   ~gui_journey_time_info_t();
@@ -53,6 +57,7 @@ public:
 	bool action_triggered(gui_action_creator_t*, value_t) OVERRIDE;
 
 	void update();
+  void update_title();
   void draw(scr_coord pos, scr_size size);
 
 	//void rdwr( loadsave_t *file );

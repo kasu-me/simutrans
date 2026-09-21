@@ -221,8 +221,7 @@ gui_journey_time_info_t::gui_journey_time_info_t(linehandle_t line, player_t* pl
   is_unit_hhmmss_time = false;
   
   title_buf = new cbuffer_t();
-  title_buf->printf(translator::translate("Journey time of %s"), line->get_name());
-  set_name(*title_buf);
+  update_title();
   
   set_table_layout(1,0);
   insufficient_cnv_label.set_color(color_idx_to_rgb(COL_ORANGE));
@@ -276,6 +275,9 @@ gui_journey_time_info_t::gui_journey_time_info_t(linehandle_t line, player_t* pl
 }
 
 bool gui_journey_time_info_t::action_triggered(gui_action_creator_t* comp, value_t) {
+  if(  !sync_schedule()  ) {
+    return true;
+  }
   if(  comp==&bt_copy_names  ) {
     copy_stations_to_clipboard(schedule, player, true);
   }
@@ -303,7 +305,32 @@ gui_journey_time_info_t::~gui_journey_time_info_t() {
 }
 
 
+void gui_journey_time_info_t::update_title() {
+  title_buf->clear();
+  title_buf->printf(translator::translate("Journey time of %s"), line.is_bound() ? line->get_name() : "");
+  set_name(*title_buf);
+}
+
+
+bool gui_journey_time_info_t::sync_schedule() {
+  if(  !line.is_bound()  ) {
+    return false;
+  }
+  if(  schedule!=line->get_schedule()  ) {
+    // the schedule was replaced by an edit while this window was open
+    update();
+  }
+  return true;
+}
+
+
 void gui_journey_time_info_t::update() {
+  if(  !line.is_bound()  ) {
+    return;
+  }
+  // the line's schedule object is replaced whenever the schedule is edited
+  schedule = line->get_schedule();
+  
   // append journey_times entries if required.
   for(uint8 i=journey_times.get_count(); i<schedule->get_count(); i++) {
     journey_times.append(new uint32[NUM_ARRIVAL_TIME_STORED+1]);
@@ -371,7 +398,7 @@ void gui_journey_time_info_t::update() {
 
 void gui_journey_time_info_t::draw(scr_coord pos, scr_size size)
 {
-  if(schedule->empty()) {
+  if(  !sync_schedule()  ||  schedule->empty()  ) {
     destroy_win(this);
     return;
   }

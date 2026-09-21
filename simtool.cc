@@ -10002,7 +10002,7 @@ bool tool_change_line_t::init( player_t *player )
 					}
 					// no schedule window open => then open one
 					if(  fg==NULL  ) {
-						create_win( new line_management_gui_t(line, player), w_info, (ptrdiff_t)line.get_rep() );
+						create_win( new line_management_gui_t(line, player), w_info, magic_line_schedule(line) );
 					}
 				}
 			}
@@ -10011,10 +10011,12 @@ bool tool_change_line_t::init( player_t *player )
 		case 'd': // delete line
 			{
 				if (line.is_bound()) {
-					// close a schedule window, if still active
-					gui_frame_t *w = win_get_magic( (ptrdiff_t)line.get_rep() );
-					if(w) {
-						destroy_win( w );
+					// close the windows of this line, if still active
+					const ptrdiff_t line_magics[] = { magic_line_schedule(line), magic_line_journey_time(line), magic_line_goods_waiting(line) };
+					for(  uint8 i=0;  i<lengthof(line_magics);  i++  ) {
+						if(  gui_frame_t *w = win_get_magic( line_magics[i] )  ) {
+							destroy_win( w );
+						}
 					}
 					// If the departure slot group changed, cascade-update all lines that were following this line.
 					linehandle_t new_group = linehandle_t();
@@ -10338,7 +10340,7 @@ bool tool_change_depot_t::init( player_t *player )
 			depot_frame_t *depot_frame = dynamic_cast<depot_frame_t *>(win_get_magic( (ptrdiff_t)depot ));
 			if(  can_use_gui()  ) {
 				if(  welt->get_active_player()==player  &&  depot_frame  ) {
-					create_win( new line_management_gui_t( selected_line, depot->get_owner() ), w_info, (ptrdiff_t)selected_line.get_rep() );
+					create_win( new line_management_gui_t( selected_line, depot->get_owner() ), w_info, magic_line_schedule(selected_line) );
 				}
 			}
 

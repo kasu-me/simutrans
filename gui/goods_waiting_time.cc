@@ -4,15 +4,16 @@
 #include "../simhalt.h"
 #include "../simline.h"
 #include "../simworld.h"
+#include "simwin.h"
 
 gui_goods_waiting_time_t::gui_goods_waiting_time_t(linehandle_t line, player_t* player) :
     gui_frame_t(NULL, player),
-    stat(player, line->get_schedule()),
+    stat(player, line),
     scrolly(&stat),
+    line(line),
     schedule(line->get_schedule())
 {
-    title_buf.printf(translator::translate("Goods waiting time of %s"), line->get_name());
-    set_name(title_buf);
+    update_title();
 
     update();
 
@@ -37,8 +38,45 @@ gui_goods_waiting_time_t::gui_goods_waiting_time_t(linehandle_t line, player_t* 
 }
 
 
+void gui_goods_waiting_time_t::update_title()
+{
+    title_buf.clear();
+    title_buf.printf(translator::translate("Goods waiting time of %s"), line.is_bound() ? line->get_name() : "");
+    set_name(title_buf);
+}
+
+
+void gui_goods_waiting_time_t::update()
+{
+    if(  !line.is_bound()  ) {
+        return;
+    }
+    // the line's schedule object is replaced whenever the schedule is edited
+    schedule = line->get_schedule();
+    stat.update();
+}
+
+
+void gui_goods_waiting_time_t::draw(scr_coord pos, scr_size size)
+{
+    if(  !line.is_bound()  ) {
+        destroy_win(this);
+        return;
+    }
+    if(  schedule!=line->get_schedule()  ) {
+        // the schedule was replaced by an edit while this window was open
+        update();
+    }
+    gui_frame_t::draw(pos, size);
+}
+
+
 void gui_goods_waiting_time_stat_t::update()
 {
+    if(  !line.is_bound()  ) {
+        return;
+    }
+    const schedule_t* schedule = line->get_schedule();
     const scr_size size = get_size();
     remove_all();
     set_table_layout(NUM_WAITING_TIME_STORED+2,0);

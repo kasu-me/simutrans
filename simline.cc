@@ -22,6 +22,8 @@
 #include "simlinemgmt.h"
 #include "gui/simwin.h"
 #include "gui/gui_frame.h"
+#include "gui/journey_time_info.h"
+#include "gui/goods_waiting_time.h"
 
 
 uint8 convoi_to_line_catgory_[convoi_t::MAX_CONVOI_COST] = {
@@ -135,10 +137,18 @@ void simline_t::set_name(const char *new_name)
 	name = new_name;
 
 	/// Update window title if window is open
-	gui_frame_t *line_info = win_get_magic((ptrdiff_t)self.get_rep());
+	gui_frame_t *line_info = win_get_magic(magic_line_schedule(self));
 
 	if (line_info) {
 		line_info->set_name(name);
+	}
+
+	// the other windows of this line show the line name in their title, too
+	if(  gui_journey_time_info_t *jt = dynamic_cast<gui_journey_time_info_t *>(win_get_magic(magic_line_journey_time(self)))  ) {
+		jt->update_title();
+	}
+	if(  gui_goods_waiting_time_t *gw = dynamic_cast<gui_goods_waiting_time_t *>(win_get_magic(magic_line_goods_waiting(self)))  ) {
+		gw->update_title();
 	}
 }
 

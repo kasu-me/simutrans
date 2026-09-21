@@ -133,6 +133,17 @@ enum magic_numbers {
 	magic_max
 };
 
+/* Magic numbers of the windows that belong to a single line.
+ * They are derived from the address of the simline_t object, which is unique per line.
+ * Each of these windows needs its own magic number, otherwise create_win() would only
+ * raise the window that is already open instead of opening the requested one.
+ * A simline_t is far larger than the offsets used here and it is aligned, so the offset
+ * values can never collide with the address of another line.
+ */
+#define magic_line_schedule(line)      ((ptrdiff_t)(line).get_rep() + 0)
+#define magic_line_journey_time(line)  ((ptrdiff_t)(line).get_rep() + 1)
+#define magic_line_goods_waiting(line) ((ptrdiff_t)(line).get_rep() + 2)
+
 // Holding time for auto-closing windows
 #define MESG_WAIT 80
 

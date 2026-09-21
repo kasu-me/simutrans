@@ -490,7 +490,7 @@ bool schedule_list_gui_t::action_triggered( gui_action_creator_t *comp, value_t 
 {
 	if(  comp == &bt_edit_line  ) {
 		if(  line.is_bound()  ) {
-			create_win( new line_management_gui_t(line, player), w_info, (ptrdiff_t)line.get_rep() );
+			create_win( new line_management_gui_t(line, player), w_info, magic_line_schedule(line) );
 		}
 	}
 	else if(  comp == &bt_teleport_line_to_depot  &&  line->get_convoys().get_count()>0  ) {
@@ -551,12 +551,12 @@ bool schedule_list_gui_t::action_triggered( gui_action_creator_t *comp, value_t 
 	}
 	else if(  comp == &bt_show_journey_time  ) {
 		if(  line.is_bound()  ) {
-			create_win( new gui_journey_time_info_t(line, player), w_info, (ptrdiff_t)line.get_rep() );
+			create_win( new gui_journey_time_info_t(line, player), w_info, magic_line_journey_time(line) );
 		}
 	}
 	else if(  comp == &bt_goods_waiting_time  ) {
 		if(  line.is_bound()  ) {
-			create_win( new gui_goods_waiting_time_t(line, player), w_info, (ptrdiff_t)line.get_rep() );
+			create_win( new gui_goods_waiting_time_t(line, player), w_info, magic_line_goods_waiting(line) );
 		}
 	}
 	else if(  comp == &bt_show_route_cache  ) {
