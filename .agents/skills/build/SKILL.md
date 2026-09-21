@@ -86,7 +86,23 @@ make 経由で g++ を呼ぶと `Cannot create temporary file in C:\WINDOWS\: Pe
 windres.exe: can't popen `"g++ -E -xc -DRC_INVOKED -MMD -MT build/default/simres.o" -DREVISION=... simres.rc': No error
 ```
 
-これは `simhalt.cc` などの実際のソース変更とは無関係な環境要因（windres が内部で g++ をプリプロセッサとして呼び出す際に失敗する）。原因は未特定。`build/default/simres.o` が既に存在し `simres.rc` 自体は変更されていない場合、`touch build/default/simres.o build/default/simres.d` で該当ファイルの再ビルドをスキップできる可能性があるが、**これはビルド成果物への直接操作であり、実行前に必ずユーザーに確認すること**。
+**原因は `COMSPEC` 環境変数が空であること**（2026-09-21 特定）。windres は `--preprocessor` を `_popen()` で起動するが、Windows の `_popen()` は `COMSPEC` が指す cmd.exe 経由で子プロセスを作るため、`COMSPEC` が無いと必ず失敗する（errno は立たないので "No error" と表示される）。Claude Code の Bash ツールから起動したシェルでは `COMSPEC` が空になっている。パスは **バックスラッシュ区切りで渡すこと**（`C:/Windows/...` のようなスラッシュ区切りだと cmd.exe が構文エラーになり `preprocessing failed` で落ちる）。上の例の `\\` は、Bash ツール → `bash -c "..."` の二重引用符を通したあとに `\` 1個として届かせるためのエスケープ。
+
+**解決策**: make に `COMSPEC` を渡す。
+
+```bash
+/c/msys64/usr/bin/bash.exe -c "
+  cd '/d/system/documents/GitHub/simutrans/simutrans' &&
+  COMSPEC='C:\\Windows\\System32\\cmd.exe' \
+  TEMP='C:/Users/aihara/AppData/Local/Temp' \
+  TMP='C:/Users/aihara/AppData/Local/Temp' \
+  PATH='/c/msys64/mingw64/bin:/c/msys64/usr/bin:\$PATH' \
+  make -j32 2>&1 | grep -E 'error:|Error'
+  echo exit=\$?
+"
+```
+
+`build/default/simres.o` を `touch` して再ビルドを回避する必要はない（**ビルド成果物への直接操作は、行う場合は実行前に必ずユーザーに確認すること**）。
 
 ## ビルド後、リンクまで走ったか確認する
 
