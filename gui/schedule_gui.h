@@ -19,6 +19,7 @@
 
 #include "../convoihandle_t.h"
 #include "../linehandle_t.h"
+#include "../dataobj/schedule_entry.h"
 #include "simwin.h"
 #include "../dataobj/schedule_io.h"
 #include "../tpl/vector_tpl.h"
@@ -80,6 +81,13 @@ class schedule_gui_t : public gui_frame_t, public action_listener_t
 		bt_temp_load, bt_temp_unload, bt_temp_unload_all;
 	button_t bt_reverse_default;
 	button_t bt_up, bt_down;
+
+	// transfers every setting but the position from one schedule entry to another.
+	button_t bt_copy_entry_settings, bt_paste_entry_settings;
+	// the clipboard is shared by all schedule windows, so settings can also be carried
+	// over from the schedule of another convoy or line.
+	static schedule_entry_t copied_entry;
+	static bool has_copied_entry;
 
 	gui_numberinput_t numimp_spacing, numimp_spacing_shift,
 		numimp_delay_tolerance, numimp_max_speed, numimp_max_speed_kmh_of_convoi , numimp_tbgr_waiting_time, numimp_length_coupling_done;

@@ -211,6 +211,21 @@ public:
 	void push_waiting_time(uint32 time);
 	void push_convoy_stopping_time(uint32 time);
 
+	// take over every setting of another entry. The position and the recorded times are left
+	// alone: they describe *this* stop, not how a convoy is supposed to behave there.
+	void copy_settings_from(const schedule_entry_t &other) {
+		minimum_loading             = other.minimum_loading;
+		maximum_loading             = other.maximum_loading;
+		waiting_time_shift          = other.waiting_time_shift;
+		spacing                     = other.spacing;
+		spacing_shift               = other.spacing_shift;
+		delay_tolerance             = other.delay_tolerance;
+		length_coupling_done        = other.length_coupling_done;
+		max_speed_kmh_of_convoi     = other.max_speed_kmh_of_convoi;
+		balance_speed_kmh_of_convoi = other.balance_speed_kmh_of_convoi;
+		stop_flags                  = other.stop_flags;
+	}
+
 	// preserve recorded times when re-applying a schedule whose stops/order did not change
 	void copy_time_records_from(const schedule_entry_t &other) {
 		jt_at_index = other.jt_at_index;

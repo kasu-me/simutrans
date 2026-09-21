@@ -336,6 +336,10 @@ bool schedule_gui_stats_t::action_triggered(gui_action_creator_t *, value_t v)
 
 cbuffer_t schedule_gui_stats_t::buf;
 
+// clipboard of the "copy/paste stop settings" buttons, shared by every schedule window
+schedule_entry_t schedule_gui_t::copied_entry;
+bool schedule_gui_t::has_copied_entry = false;
+
 schedule_gui_t::schedule_gui_t(schedule_t* schedule_, player_t* player_, convoihandle_t cnv_, const char* cnv_line_name) :
 	gui_frame_t( translator::translate("Fahrplan"), NULL),
 	line_selector(line_color_line_scroll_item_t::compare),
@@ -921,6 +925,21 @@ void schedule_gui_t::init(schedule_t* schedule_, player_t* player, convoihandle_
 	}
 	end_table();
 
+	// copy all settings of one entry over to another one
+	add_table(2,1)->set_force_equal_columns(true);
+	{
+		bt_copy_entry_settings.init(button_t::roundbox | button_t::flexible, "Copy stop settings");
+		bt_copy_entry_settings.set_tooltip("Copy every setting of the current stop, except its position.");
+		bt_copy_entry_settings.add_listener(this);
+		add_component(&bt_copy_entry_settings);
+
+		bt_paste_entry_settings.init(button_t::roundbox | button_t::flexible, "Paste stop settings");
+		bt_paste_entry_settings.set_tooltip("Overwrite the current stop with the copied settings. Its position is kept.");
+		bt_paste_entry_settings.add_listener(this);
+		add_component(&bt_paste_entry_settings);
+	}
+	end_table();
+
 	// action button row
 	add_table(3,1)->set_force_equal_columns(true);
 	bt_add.init(button_t::roundbox_state | button_t::flexible, "Add Stop");
@@ -1036,6 +1055,8 @@ void schedule_gui_t::update_selection()
 	bt_pass_stop.disable();
 	bt_up.disable();
 	bt_down.disable();
+	bt_copy_entry_settings.disable();
+	bt_paste_entry_settings.disable();
 
 
 	if(  !schedule->empty()  ) {
@@ -1057,6 +1078,12 @@ void schedule_gui_t::update_selection()
 		if(  current_stop!=schedule->get_count()-1  &&  (!schedule->get_next_line().is_bound()  ||  current_stop!=schedule->get_count()-2)  ) {
 			bt_down.enable();
 		}
+
+		// the last entry of a schedule with a next line only mirrors that line's first stop,
+		// so its settings must not be edited - but they can still be copied from.
+		const bool entry_editable = !schedule->get_next_line().is_bound()  ||  current_stop!=schedule->get_count()-1;
+		bt_copy_entry_settings.enable();
+		bt_paste_entry_settings.enable( has_copied_entry  &&  entry_editable );
 
 		bt_max_speed_kmh_of_convoi.enable();
 		bt_max_speed_kmh_of_convoi.pressed = schedule->at(current_stop).is_overwrite_max_speed_kmh_of_convoi();
@@ -1658,6 +1685,26 @@ dbg->message("schedule_gui_t::action_triggered()","comp=%p combo=%p",comp,&line_
 	else if(comp == &numimp_max_load) {
 		if(!schedule->empty()) {
 			schedule->at(schedule->get_current_stop()).maximum_loading = (uint8)p.i;
+			update_selection();
+		}
+	}
+	else if(comp == &bt_copy_entry_settings) {
+		if(  !schedule->empty()  ) {
+			copied_entry = schedule->at(schedule->get_current_stop());
+			has_copied_entry = true;
+			update_selection();
+		}
+	}
+	else if(comp == &bt_paste_entry_settings) {
+		if(  !schedule->empty()  &&  has_copied_entry  ) {
+			schedule_entry_t &entry = schedule->at(schedule->get_current_stop());
+			entry.copy_settings_from( copied_entry );
+			if(  schedule->is_same_dep_time()  ) {
+				// the whole schedule shares one departure timing: keep the other entries in sync
+				schedule->set_spacing_for_all( entry.spacing );
+				schedule->set_spacing_shift_for_all( entry.spacing_shift );
+				schedule->set_delay_tolerance_for_all( entry.delay_tolerance );
+			}
 			update_selection();
 		}
 	}

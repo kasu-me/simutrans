@@ -1018,3 +1018,11 @@ Import
 (実効: %d編成)
 ->
 →
+Copy stop settings
+停車地点の設定をコピー
+Copy every setting of the current stop, except its position.
+選択中の停車地点の設定を、停車位置を除いてすべてコピーします。
+Paste stop settings
+停車地点の設定を貼り付け
+Overwrite the current stop with the copied settings. Its position is kept.
+コピーした設定を選択中の停車地点に上書きします。停車位置は変更されません。
