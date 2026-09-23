@@ -13,9 +13,9 @@
 | キー | 値 |
 | --- | --- |
 | 起点コミット (base) | `d01a02edf26e0faf1c3542d4d854fe6ce52cc9f8` (v58_3) |
-| 追跡済み最新コミット (head) | `e2dd3a237ae55c0071bd6f97e5652d699fae4d46` (Merge branch 'OTRP-KUTAv6' / v62_0_1 時点) |
-| 対象コミット数 | 84 |
-| 最終更新 | 2026-09-20 |
+| 追跡済み最新コミット (head) | `aa09b864fd83687f2575ca436e2b86ff370e79bf` (increment OTRP_VERSION_PATCH / v62_0_2) |
+| 対象コミット数 | 87 |
+| 最終更新 | 2026-09-24 |
 
 > `head` より新しい本家コミットが増えた場合は skill `update-upstream-status` で追記する。
 
@@ -81,7 +81,8 @@
 | FIX-07 | バグ修正 | Windows GDI の DPI スケーリング時のリサイズ処理 | 取り込み済み |
 | FIX-08 | バグ修正 | 整地ツールが基礎 (`fundament`) タイルで高低差制限を無視する | 取り込み済み |
 | FIX-09 | バグ修正 | 誘導標識を使わない軌道系連結で、ホーム上の待機編成を見つけられない | 取り込み済み |
-| MISC-01 | その他 | 本家バージョン番号のインクリメント (v59〜v61_0_4) | 取り込み不要 |
+| FIX-10 | バグ修正 | 道路が無いタイルでの道路参照による異常終了と、連結/解放時の `route_index` 不整合 | 未取り込み |
+| MISC-01 | その他 | 本家バージョン番号のインクリメント (v59〜v62_0_2) | 取り込み不要 |
 | MISC-02 | その他 | 日本語訳 `ja.OTRP.tab` の更新 (v59/v60/v61/v62分) | 未取り込み |
 | MISC-03 | その他 | SDL3 バックエンド対応と CI のビルド構成更新 (Ubuntu 分は後に削除) | 未取り込み |
 | MISC-04 | その他 | `obj_t::finish_rd()` にセーブの OTRP バージョンを渡す基盤変更 | 未取り込み |
@@ -492,6 +493,7 @@
   - `c2973aaec` build two different waytype in one tile as disjointed diagonal (#705) — 本体 (異なる waytype)
   - `58bb2b989` make two same waytype as different way (#738) — 機能拡張 (同一 waytype 同士)
   - `1588dba70` BUG FIX: load failed (#745) — 後続修正 (ロード時の予約処理)
+  - `280ced3e8` BUG FIX: fix crash bug of v62 (#747) — 後続修正 (片脚が1方向のままのタイルのロード失敗等。**コミットの一部のみ**。残りは FIX-10)
 - **主な変更箇所**:
   - `dataobj/ribi.h` — `ribi_t::are_disjoint_bends(x, y)` を新設
     (両方が2ビットのカーブで、方向ビットを共有しない = NW と SE、NE と SW の組)
@@ -531,6 +533,20 @@
     `tests/automated-tests/tests/test_way_road.nut`
   - `simconvoi.cc` — `convoi_t::rdwr()` のロード時予約で `get_current_corner_set()` を使わず、
     ロード済みの経路から `route.get_corner_set(route_index-1)` を引く (`1588dba70`)
+  - **以下は `280ced3e8` の分**:
+  - `dataobj/ribi.h` — `ribi_t::are_disjoint_legs(x, y)` を新設。`are_disjoint_bends()` の緩和版で、
+    片方が1方向 (single) でもよい (両方とも single の場合は不可 = 2本の行き止まりはタイル中心で出会う)
+  - `boden/grund.cc` — `rdwr()` 読み込み時と `neuen_weg_bauen()` の判定を `are_disjoint_legs()` に変更。
+    交差物が必要なのに `crossing_desc` が見つからない場合も `dbg->fatal()` せず、交差物なしでロードを続行する
+  - `boden/wege/weg.cc` — `needs_crossing()` は同一 waytype 同士なら常に false。
+    `check_diagonal()` を `are_disjoint_legs()` 基準にし、同一 waytype の相手も対象にする
+  - `obj/crossing.cc` — `finish_rd()` で相手の way が無い場合は画像を空にして不活性化 (NULL 参照回避)。
+    判定を `are_disjoint_legs()` に変更
+  - `obj/roadsign.{h,cc}` — `roadsign_t::get_weg_here()` を新設。同一 waytype 2本のタイルで、
+    標識自身の `dir` に沿った脚を選ぶ (`finish_rd()` / `set_dir()` / デストラクタで使用)
+  - `simtool.cc` — 停留所建設時の disjoint 判定を `are_disjoint_legs()` に変更
+  - `tests/automated-tests/tests/test_diagonal_two_waytypes{,_same_desc}.nut`, `all_tests.nut` —
+    `*_partial_leg` テストを追加
 - **詳細**:
   - 代表的な用途は「線路の NW カーブと誘導路の SE カーブを同じタイルに置く」ような配置。
     両者はタイル中心を共有しないため、物理的にも視覚的にも交差しない。
@@ -542,6 +558,11 @@
   - `1588dba70` は、`convoi_t::rdwr()` のロード時予約で `vehicle_t::get_current_corner_set()` を
     呼んでいたのが原因のロード失敗の修正。この時点では車両がまだ編成に接続されていない
     (`set_convoi()` は `finish_rd()` で行われる) ため経路を参照できない。
+  - `280ced3e8` (FEAT-16 分) は、2本目の脚を1タイルずつ敷設している途中 (まだ1方向だけ) や、
+    片側のタイルを撤去した後の状態で保存したセーブのロード失敗の修正。従来はロード時に
+    「両方が完全なカーブ」の場合しか disjoint と認識しなかったため、交差物を作ろうとして
+    `requested for waytypes %i and %i but nothing defined!` で異常終了していた
+    (同一 waytype 同士や、rail と air のように交差物が無い組み合わせ)。
 - **取り込み時の注意**:
   - セーブ形式への影響はないが、旧セーブに残る `crossing_t` の扱いが変わる。
   - `boden/grund.cc` / `bauer/wegbauer.cc` は基本エンジン部分なので、敷設判定全般への副作用に注意。
@@ -554,7 +575,10 @@
 - **develop-kasumi 側コミット**: —
 - **備考**: 状態確認用の識別子は `dataobj/ribi.h` の `are_disjoint_bends` (本体)、
   `boden/grund.h` の `get_weg(waytype_t, ribi_t::ribi)` または
-  `dataobj/route.h` の `get_corner_set` (同一 waytype 拡張分)。
+  `dataobj/route.h` の `get_corner_set` (同一 waytype 拡張分)、
+  `dataobj/ribi.h` の `are_disjoint_legs` (`280ced3e8` 分)。
+  `280ced3e8` は FIX-10 と同一コミットのため、cherry-pick する場合は両項目をまとめて扱うか、
+  本項目の分だけを手作業で移植すること。
 
 ### FEAT-17: 保守費・走行費の倍率設定
 
@@ -563,7 +587,8 @@
 - **概要**: pakset が持つ「道の保守費」「架線等 wayobj の保守費」「車両の走行費」に対して、
   ゲーム側から % 倍率をかけられる設定を追加する。
 - **上流コミット**:
-  - `fa3506863` maintainance multiplier (#724)
+  - `fa3506863` maintainance multiplier (#724) — 本体
+  - `d98371388` vehicle runningcost update (#746) — 後続修正 (走行費の表示に倍率を反映)
 - **主な変更箇所**:
   - `dataobj/settings.{h,cc}` — `maintenance_cost_multiplier_way` /
     `maintenance_cost_multiplier_overhead` / `running_cost_multiplier_vehicle` (いずれも既定 100) を追加。
@@ -576,11 +601,26 @@
     `scaled_base_running_costs` を算出し、通行料・過積載補正・帳簿計上のすべてをそれ基準に変更
   - `gui/settings_stats.cc` — 設定ダイアログ「経済」タブに3つの数値入力を追加
   - `simutrans/config/simuconf.tab` — 3パラメータの既定値とコメントを追加
-- **詳細**: `world()` が未生成の間 (pakset 読み込み中など) は倍率をかけず素の値を返す。
-- **取り込み時の注意**: `settings_t::rdwr()` が `get_OTRP_version() >= 61` でゲートされているため
-  **セーブ形式に影響する** (MISC-01 参照)。
+  - **以下は `d98371388` の分**:
+  - `simconvoi.{h,cc}` — `convoi_t::get_running_cost()` を廃止し、倍率適用後の値を返す
+    `get_running_cost_scaled()` に置き換え (`convoi_t::info()` も追従)
+  - `vehicle/simvehicle.{h,cc}` — `vehicle_t::get_operating_cost()` をインラインから実装へ移し、倍率適用後の値を返す
+  - `gui/convoi_detail_t.cc`, `gui/convoi_info_t.cc`, `gui/depot_frame.cc`, `gui/vehiclelist_frame.cc` —
+    編成/車両の走行費表示 (`$/km`) を倍率適用後の値に変更
+- **詳細**:
+  - `world()` が未生成の間 (pakset 読み込み中など) は倍率をかけず素の値を返す。
+  - `d98371388` は、実際の課金は倍率適用後なのに UI の走行費表示が素の値のままだった不整合の修正。
+    保守費は `way_desc_t::get_maintenance()` 側で倍率を掛けているので表示も追従済みだが、
+    車両の走行費は `vehicle_desc_t::get_running_cost()` が素の値のままなので、表示側で個別に倍率を掛けている。
+- **取り込み時の注意**:
+  - `settings_t::rdwr()` が `get_OTRP_version() >= 61` でゲートされているため
+    **セーブ形式に影響する** (MISC-01 参照)。
+  - `d98371388` は `convoi_t::get_running_cost()` を削除するため、`develop-kasumi` 独自コードに
+    呼び出しが残っていないか確認すること。`vehicle_t::get_operating_cost()` は
+    `gui/convoi_detail_t.cc` の最大収入計算 (`max_income`) でも使われており、そちらも倍率適用後の値になる。
 - **develop-kasumi 側コミット**: —
-- **備考**: 状態確認用の識別子は `dataobj/settings.h` の `maintenance_cost_multiplier_way`。
+- **備考**: 状態確認用の識別子は `dataobj/settings.h` の `maintenance_cost_multiplier_way`、
+  `simconvoi.h` の `get_running_cost_scaled` (`d98371388` 分)。
 
 ### FEAT-18: 航送 (編成を他の編成に積載して輸送する)
 
@@ -843,6 +883,50 @@
 - **備考**: 状態確認用の識別子は `io/raw_image.h` の `raw_image_png_writer_t`、
   または `gui/minimap.h` の `export_to_png`。
 
+### FIX-10: 道路が無いタイルでの道路参照による異常終了と、連結/解放時の `route_index` 不整合
+
+- **分類**: バグ修正
+- **状態**: 未取り込み
+- **概要**: 「そのタイルには必ず道路がある」前提で `get_weg(road_wt)` の結果を即座に参照していた箇所を
+  NULL 安全にし、併せて連結・解放の境界で各車両の `route_index` を自編成の経路に合わせて付け直す。
+- **上流コミット**:
+  - `280ced3e8` BUG FIX: fix crash bug of v62 (#747) — **コミットの一部のみ** (残りは FEAT-16)
+- **主な変更箇所**:
+  - `boden/wege/strasse.{h,cc}` — フリー関数 `strasse_t *strasse_at(const koord3d &pos)` を新設
+    (タイルが無い/道路が無い場合は NULL)
+  - `simconvoi.cc` — `step()` / `vorfahren()` / `can_overtake()` の道路参照を `strasse_at()` に置き換え、
+    NULL のときは車線変更・追い越し判定を行わない
+  - `vehicle/simvehicle.cc` — `road_vehicle_t::calc_disp_lane()` / `is_target()` / `can_enter_tile()` の
+    道路参照を NULL 安全に変更
+  - `vehicle/simroadtraffic.cc` — `private_car_t::ist_weg_frei()` を `strasse_at()` に置き換え。
+    `enter_tile()` で道路が無ければ `time_to_life = 0` にして即座に消滅させる
+  - `vehicle/simvehicle.{h,cc}` — `vehicle_t::reanchor_route_index()` を新設。
+    車両が実際に立っているタイルを自編成の経路上で (旧 `route_index` 付近から外側へ) 探し直し、`route_index` を付け直す
+  - `simconvoi.{h,cc}` — `convoi_t::reanchor_chain_route_indices()` を新設し、
+    `couple_convoi()` / `couple_convoi_during_running()` / `uncouple_convoi()` で呼ぶ
+  - `vehicle/simvehicle.cc` — `rail_vehicle_t::leave_tile()` で同一タイル上の他編成の向きを求める際、
+    他編成の経路インデックスを経路長でクランプする (空経路での `get_count()-1u` のラップアラウンドも回避)
+- **詳細**:
+  - 道路車両の編成が道路の無いタイルを報告するケースとして、航送中 (キャリア = 船のタイル, FEAT-18)、
+    車庫内 (所属車庫の位置)、車両の無い編成 (`koord3d::invalid`)、旧セーブのロード後に way が欠けている場合、
+    停車中の車両の下の way が撤去された場合が挙げられている。従来はいずれも
+    `strasse_t::get_overtaking_mode()` の NULL 参照で異常終了していた。
+  - 連結中の子編成は自分の経路のコピーを持つが実際は親編成に牽引されるため、`vehicle_t::hop()` で
+    `route_index` が自分の経路長を超えて増え続ける。連結/解放時にその値のまま別編成の経路を引くと
+    範囲外参照になるため、境界で付け直す。
+  - 修正対象のコードの多くは v58_3 時点から存在するが、本家の件名 (crash bug of v62) のとおり
+    v62 までに入った機能 (航送 FEAT-18、道路連結 FEAT-15 等) によって顕在化した。
+- **取り込み時の注意**:
+  - `simconvoi.cc` の `step()` 内の修正箇所は、周辺の行に FEAT-23 の `get_overtaking_mode_raw()` /
+    `passing_lane_stop_only_mode` と FEAT-08 の `reversing_lane_hold` を含むため、
+    **cherry-pick では競合する**。`develop-kasumi` に取り込む場合は該当箇所を手作業で移植すること。
+  - `280ced3e8` は FEAT-16 と同一コミット。FEAT-16 を取り込まずに本項目だけ取り込む場合は、
+    `dataobj/ribi.h` / `boden/grund.cc` / `boden/wege/weg.cc` / `obj/crossing.cc` / `obj/roadsign.*` /
+    `simtool.cc` / テストの変更を除外する。
+- **develop-kasumi 側コミット**: —
+- **備考**: 関連項目 FEAT-15 / FEAT-16 / FEAT-18。状態確認用の識別子は `boden/wege/strasse.h` の `strasse_at`、
+  または `vehicle/simvehicle.h` の `reanchor_route_index`。
+
 ### MISC-01: 本家バージョン番号のインクリメント
 
 - **分類**: その他
@@ -864,6 +948,7 @@
   - `f30c237c5` increment OTRP_VERSION_PATCH (v61_0_4)
   - `559d52c2a` increment OTRP_VERSION_MAJOR (v62)
   - `252e90dfa` increment OTRP_VERSION_PATCH (v62_0_1)
+  - `aa09b864f` increment OTRP_VERSION_PATCH (v62_0_2)
 - **主な変更箇所**: `simversion.h` — `OTRP_VERSION_MAJOR` / `OTRP_VERSION_MINOR` / `OTRP_VERSION_PATCH`
 - **詳細**: —
 - **取り込み時の注意**:
@@ -874,7 +959,7 @@
   - `OTRP_VERSION_MAJOR >= 60` を要求する項目: FEAT-07
   - `OTRP_VERSION_MAJOR >= 61` を要求する項目: FEAT-17 / FEAT-18 / FEAT-19 / MISC-04
   - `OTRP_VERSION_MAJOR >= 62` を要求する項目: FEAT-18 (`8076cc1f8` の航送収入・通行料設定の分)
-  - 上記以外の項目 (FEAT-09 拡張分、FEAT-11〜FEAT-16、FEAT-20〜FEAT-24、FIX-03〜FIX-09、
+  - 上記以外の項目 (FEAT-09 拡張分、FEAT-11〜FEAT-16、FEAT-20〜FEAT-24、FIX-03〜FIX-10、
     MISC-03 / MISC-05) は `get_OTRP_version()` によるセーブ形式の分岐を持たないため、バージョン引き上げは不要。
 - **develop-kasumi 側コミット**: — (独自運用: `cf52a5750` 等)
 - **備考**: バージョン番号自体は取り込まない方針。上記の依存関係のみ管理する。
