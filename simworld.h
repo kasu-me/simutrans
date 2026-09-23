@@ -1951,4 +1951,14 @@ inline bool is_first_ticks_bigger(uint32 v1, uint32 v2) {
 	return (v1 != v2) && ((v1 > v2)? v1-v2<(uint32)(1U<<31): v2-v1>(uint32)(1U<<31));
 }
 
+// a helper function to move a ticks stamp by the same amount as the ticks reset in karte_t::step().
+// 0 is kept as it is since it means "not set" for some stamps, and a moved stamp never becomes 0.
+inline uint32 shift_ticks_keeping_zero(uint32 v, uint32 shift) {
+	if(  v==0  ) {
+		return 0;
+	}
+	const uint32 shifted = v + shift;
+	return shifted==0 ? 1 : shifted;
+}
+
 #endif

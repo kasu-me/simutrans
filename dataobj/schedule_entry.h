@@ -198,7 +198,8 @@ public:
 
 
 	void set_spacing(uint16 a, uint16 b, uint16 c) {
-		spacing = a;
+		// spacing is used as a divisor. It must be larger than 0.
+		spacing = a>0 ? a : 1;
 		spacing_shift = b;
 		delay_tolerance = c;
 	}

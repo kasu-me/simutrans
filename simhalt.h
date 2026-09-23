@@ -525,6 +525,12 @@ public:
 	 */
 	void new_month();
 
+	/**
+	 * Called when the ticks are reset to avoid overflow.
+	 * Moves the ticks stamps of the departure slots by shift.
+	 */
+	void shift_ticks_after_reset(uint32 shift);
+
 	uint8 get_connection_update_counter() const { return connection_update_counter; }
 	static uint8 get_connection_update_counter_static() { return connection_update_counter; }
 

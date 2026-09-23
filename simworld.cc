@@ -4263,8 +4263,18 @@ void karte_t::step()
 		if(  next_month_ticks > next_month_ticks+karte_t::ticks_per_world_month  ) {
 			// avoid overflow here ...
 			dbg->warning("karte_t::step()", "Ticks were overflowing => reset");
+			const uint32 old_ticks = ticks;
 			ticks %= karte_t::ticks_per_world_month;
 			next_month_ticks %= karte_t::ticks_per_world_month;
+			// The reset moves the current ticks by (ticks - old_ticks) in uint32 arithmetic.
+			// Move the stamps used for departure by the same amount to keep the distance to the current ticks.
+			const uint32 shift = ticks - old_ticks;
+			FOR(vector_tpl<convoihandle_t>, const cnv, convoi_array) {
+				cnv->shift_ticks_after_reset(shift);
+			}
+			FOR(vector_tpl<halthandle_t>, const halt, haltestelle_t::get_alle_haltestellen()) {
+				halt->shift_ticks_after_reset(shift);
+			}
 		}
 		next_month_ticks += karte_t::ticks_per_world_month;
 

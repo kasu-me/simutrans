@@ -1949,11 +1949,15 @@ void convoi_t::new_month()
 	}
 	get_owner()->book_running_costs( sum_fixed_costs, wtyp );
 	jahresgewinn += sum_fixed_costs;
+}
 
-	// update departure slot if ticks is updated (avoid overflow)
-	if(  welt->get_ticks()<welt->ticks_per_world_month && (scheduled_departure_time!=0)  ) {
-		scheduled_departure_time %= welt->ticks_per_world_month;
-	}
+
+void convoi_t::shift_ticks_after_reset(uint32 shift)
+{
+	// haltestelle_t::shift_ticks_after_reset() moves the booked slots in the same way,
+	// so that scheduled_departure_time and arrived_time still match the booked ones.
+	arrived_time = shift_ticks_keeping_zero(arrived_time, shift);
+	scheduled_departure_time = shift_ticks_keeping_zero(scheduled_departure_time, shift);
 }
 
 

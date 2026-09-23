@@ -2063,10 +2063,12 @@ void vehicle_t::display_after(int xpos, int ypos, bool is_global) const
 				if(  cnv->get_departure_time()>0  ) {
 					// the convoy is waiting for departure time.
 					// we use floating operation just for display purpose.
-					const sint32 time_remain = (cnv->get_departure_time() - world()->get_ticks())*conversion_ratio;
-					const sint32 time_remain_delay_coupling = (cnv->get_departure_time() + cnv->get_coupling_delay_tolerance() - world()->get_ticks())*conversion_ratio;
+					// the differences are cast to sint32 so that an overdue departure does not wrap around to a huge value.
+					const sint32 ticks_remain = (sint32)(cnv->get_departure_time() - world()->get_ticks());
+					const sint32 time_remain = max(ticks_remain, 0)*conversion_ratio;
+					const sint32 time_remain_delay_coupling = max((sint32)(cnv->get_departure_time() + cnv->get_coupling_delay_tolerance() - world()->get_ticks()), 0)*conversion_ratio;
 
-					if( cnv->is_waiting_for_coupling() && time_remain>time_remain_delay_coupling ){
+					if( cnv->is_waiting_for_coupling() && ticks_remain<0 ){
 						snprintf( states_text, states_text_size, translator::translate("Waiting for coupling. %i left!"), time_remain_delay_coupling);
 					}
 					else{
@@ -2107,7 +2109,7 @@ void vehicle_t::display_after(int xpos, int ypos, bool is_global) const
 						c = c->get_coupling_convoi();
 					} 
 					if(  waiting_time>0  ) {
-						const sint32 time_remain = (waiting_time - (world()->get_ticks() - cnv->get_arrived_time()))*conversion_ratio;
+						const sint32 time_remain = max((sint32)(waiting_time - (world()->get_ticks() - cnv->get_arrived_time())), 0)*conversion_ratio;
 						snprintf( states_text, states_text_size, translator::translate("Loading (%i->%i%%)! %i left!"), max_loading_level, max_loading_limit, time_remain);
 					} else {
 						snprintf( states_text, states_text_size, translator::translate("Loading (%i->%i%%)!"), max_loading_level, max_loading_limit );

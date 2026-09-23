@@ -1023,6 +1023,12 @@ public:
 	void new_month();
 
 	/**
+	 * Called when the ticks are reset to avoid overflow.
+	 * Moves the ticks stamps used for departure by shift.
+	 */
+	void shift_ticks_after_reset(uint32 shift);
+
+	/**
 	 * Method for yearly action
 	 */
 	void new_year();

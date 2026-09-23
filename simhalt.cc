@@ -1510,14 +1510,25 @@ void haltestelle_t::new_month()
 	// number of waiting should be constant ...
 	financial_history[0][HALT_WAITING] = financial_history[1][HALT_WAITING];
 
-	// update departure slot if ticks is updated (avoid overflow)
-	if(  welt->get_ticks()<welt->ticks_per_world_month  ) {
-		for (uint32 i = 0; i < DST_SIZE; ++i) {
-			for (departure_t &slot : departure_slot_table[i]) {
-				slot.dep_tick %= welt->ticks_per_world_month;
-				slot.exp_tick %= welt->ticks_per_world_month;
-			}
+}
+
+
+void haltestelle_t::shift_ticks_after_reset(uint32 shift)
+{
+	// Take all slots out since the table index depends on dep_tick.
+	slist_tpl<departure_t> slots;
+	for(  uint32 i = 0;  i < DST_SIZE;  ++i  ) {
+		while(  !departure_slot_table[i].empty()  ) {
+			slots.append(departure_slot_table[i].remove_first());
 		}
+	}
+	// Move the stamps in the same way as convoi_t::shift_ticks_after_reset() and put them back.
+	while(  !slots.empty()  ) {
+		departure_t slot = slots.remove_first();
+		slot.arr_tick = shift_ticks_keeping_zero(slot.arr_tick, shift);
+		slot.dep_tick = shift_ticks_keeping_zero(slot.dep_tick, shift);
+		slot.exp_tick = shift_ticks_keeping_zero(slot.exp_tick, shift);
+		departure_slot_table[slot.dep_tick % DST_SIZE].append(slot);
 	}
 }
 
@@ -4337,7 +4348,7 @@ void haltestelle_t::rdwr(loadsave_t *file)
 			if(  file->is_loading()  ) {
 				departure_slot_table[idx].clear();
 			}
-			for(uint8 k=0; k<n; k++) {
+			for(uint32 k=0; k<n; k++) {
 				departure_t d = file->is_loading() ? departure_t() : *i;
 				file->rdwr_long(d.arr_tick);
 				file->rdwr_long(d.dep_tick);
