@@ -1961,4 +1961,17 @@ inline uint32 shift_ticks_keeping_zero(uint32 v, uint32 shift) {
 	return shifted==0 ? 1 : shifted;
 }
 
+// same as shift_ticks_keeping_zero(), but for the departure slot ticks (scheduled departure time and dep_tick).
+// can_depart() books the slot at 0 as 1 since 0 means "not set". Take it back to 0 before moving,
+// otherwise the moved slot is 1 tick later than the same slot calculated after the reset.
+// (A slot really at 1 is also moved as 0. It needs a spacing that does not divide spacing_shift_divisor
+// and a booking just before the reset, so it is hardly possible.)
+inline uint32 shift_departure_ticks(uint32 v, uint32 shift) {
+	if(  v==0  ) {
+		return 0;
+	}
+	const uint32 shifted = (v==1 ? 0 : v) + shift;
+	return shifted==0 ? 1 : shifted;
+}
+
 #endif

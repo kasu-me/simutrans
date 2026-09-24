@@ -1526,8 +1526,9 @@ void haltestelle_t::shift_ticks_after_reset(uint32 shift)
 	while(  !slots.empty()  ) {
 		departure_t slot = slots.remove_first();
 		slot.arr_tick = shift_ticks_keeping_zero(slot.arr_tick, shift);
-		slot.dep_tick = shift_ticks_keeping_zero(slot.dep_tick, shift);
-		slot.exp_tick = shift_ticks_keeping_zero(slot.exp_tick, shift);
+		slot.dep_tick = shift_departure_ticks(slot.dep_tick, shift);
+		// exp_tick has no special value. 0 must be moved too, otherwise the slot expires right after the reset.
+		slot.exp_tick += shift;
 		departure_slot_table[slot.dep_tick % DST_SIZE].append(slot);
 	}
 }
