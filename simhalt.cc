@@ -5268,7 +5268,8 @@ bool haltestelle_t::is_departure_booked(uint32 dep_tick, uint8 stop_index, lineh
 	const uint8 idx = dep_tick % DST_SIZE;
 	slist_tpl<departure_t>::const_iterator i = departure_slot_table[idx].begin();
 	while(  i!=departure_slot_table[idx].end()  ) {
-		if(  i->dep_tick==dep_tick  &&  i->stop_index==stop_index  &&  i->cnv->get_line()==line  ) {
+		// The slot of a deleted convoy remains until it expires. Its handle is unbound.
+		if(  i->dep_tick==dep_tick  &&  i->stop_index==stop_index  &&  i->cnv.is_bound()  &&  i->cnv->get_line()==line  ) {
 			return true;
 		}
 		i++;
