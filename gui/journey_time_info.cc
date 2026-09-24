@@ -11,7 +11,9 @@
 uint32 get_latest_dep_slot(const schedule_entry_t& entry, uint32 current_time) {
   const sint32 spacing_shift = (sint64)entry.spacing_shift * world()->ticks_per_world_month / world()->get_settings().get_spacing_shift_divisor();
   uint64 slot = (current_time - spacing_shift) * (uint64)entry.spacing / world()->ticks_per_world_month;
-  return slot * world()->ticks_per_world_month / entry.spacing + spacing_shift;
+  const uint32 dep_tick = (uint32)(slot * world()->ticks_per_world_month / entry.spacing + spacing_shift);
+  // can_depart() books the slot at 0 as 1.
+  return dep_tick==0 ? 1 : dep_tick;
 }
 
 gui_journey_time_stat_t::gui_journey_time_stat_t(schedule_t*, player_t* pl) {

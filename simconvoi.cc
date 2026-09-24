@@ -4062,17 +4062,24 @@ bool can_depart(convoihandle_t cnv, halthandle_t halt, uint32 arrived_time, uint
 		// const sint32 spacing = world()->ticks_per_world_month / current_entry.spacing;
 		const uint64 delay_tolerance = (uint64)current_entry.delay_tolerance * world()->ticks_per_world_month / world()->get_settings().get_spacing_shift_divisor();
 		// slot = (arrived_time - delay_tolerance - spacing_shift) / spacing + 1
-		const sint64 calibrated_arrived_time = (sint64)arrived_time - (sint64)delay_tolerance - (sint64)spacing_shift + (sint64)time_to_load;
-		sint64 slot = calibrated_arrived_time * (sint64)current_entry.spacing / (sint64)world()->ticks_per_world_month + (sint64)(calibrated_arrived_time<0?0:1);
+		// This is calculated in uint32 even if the value wraps around 0. ticks_per_world_month divides 2^32,
+		// so the slots repeat every 2^32 ticks and the wrapped value gives exactly the same slot.
+		// (With a signed value, a negative one is rounded differently and gives a slot 1 tick later.)
+		const uint32 calibrated_arrived_time = arrived_time - (uint32)delay_tolerance - (uint32)spacing_shift + time_to_load;
+		uint64 slot = (uint64)calibrated_arrived_time * current_entry.spacing / world()->ticks_per_world_month + 1;
 		// go_on_ticks = slot * spacing + spacing_shift
-		go_on_ticks = slot * world()->ticks_per_world_month / current_entry.spacing + spacing_shift;
+		// go_on_ticks=0 means this cannot reserve slot! Use 1 instead also for the booking so that the booked slot can be erased.
+		const auto calc_go_on_ticks = [&](uint64 s) {
+			const uint32 t = (uint32)(s * world()->ticks_per_world_month / current_entry.spacing + spacing_shift);
+			return t==0 ? 1 : t;
+		};
+		go_on_ticks = calc_go_on_ticks(slot);
 		// book the departure slot.
 		while(  !halt->book_departure(arrived_time, go_on_ticks, go_on_ticks + 2 * world()->ticks_per_world_month / current_entry.spacing, cnv)  ) {
 			// If the reservation request is denied, increment slot.
 			slot++;
-			go_on_ticks = (slot) * world()->ticks_per_world_month / current_entry.spacing + spacing_shift;
+			go_on_ticks = calc_go_on_ticks(slot);
 		}
-		go_on_ticks = go_on_ticks == 0 ? go_on_ticks+1:go_on_ticks; // go_on_ticks=0 means this cannot reserve slot!
 		return is_first_ticks_bigger(world()->get_ticks(), go_on_ticks - time_to_load);
 	}
 
