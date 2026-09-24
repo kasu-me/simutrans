@@ -81,6 +81,7 @@ class schedule_gui_t : public gui_frame_t, public action_listener_t
 		bt_temp_load, bt_temp_unload, bt_temp_unload_all;
 	button_t bt_reverse_default;
 	button_t bt_up, bt_down;
+	button_t bt_rotate_to_front; // makes the current stop the first one, keeping the order of the stops
 
 	// transfers every setting but the position from one schedule entry to another.
 	button_t bt_copy_entry_settings, bt_paste_entry_settings;

@@ -246,6 +246,75 @@ void schedule_t::move_entry_backward( uint8 cur )
 
 
 
+void schedule_t::rotate_to_front( uint8 index )
+{
+	if(  entries.empty()  ) {
+		return;
+	}
+	// with a next line, the last entry is the handing-over point to it and has to stay at the end
+	const uint8 count = next_line.is_bound() ? entries.get_count()-1 : entries.get_count();
+	if(  index==0  ||  index>=count  ) {
+		return;
+	}
+	minivec_tpl<schedule_entry_t> old_entries(count);
+	for(  uint8 i=0;  i<count;  i++  ) {
+		old_entries.append( entries[i] );
+	}
+	for(  uint8 i=0;  i<count;  i++  ) {
+		entries[i] = old_entries[(index+i)%count];
+	}
+	if(  current_stop<count  ) {
+		current_stop = (current_stop+count-index)%count;
+	}
+}
+
+
+
+sint16 schedule_t::get_rotated_entry_index( const schedule_t *old_schedule, uint8 old_index ) const
+{
+	const uint8 total = entries.get_count();
+	if(  total==0  ||  total!=old_schedule->entries.get_count()  ||  old_index>=total  ||  next_line!=old_schedule->next_line  ) {
+		return -1;
+	}
+	// with a next line, the last entry is the handing-over point to it, which is never rotated
+	uint8 count = total;
+	if(  next_line.is_bound()  ) {
+		if(  entries[total-1].pos!=old_schedule->entries[total-1].pos  ) {
+			return -1;
+		}
+		if(  old_index==total-1  ) {
+			return old_index;
+		}
+		count = total-1;
+	}
+	// Try every starting point. A stop can occur several times in a schedule, so the positions may
+	// match for more than one of them: then take the one which keeps most of the entry settings.
+	sint16 new_index = -1;
+	uint8 best_same_settings = 0;
+	for(  uint8 offset=0;  offset<count;  offset++  ) {
+		// the entry i of this schedule was the entry (i+offset)%count of the old schedule
+		bool same_order = true;
+		uint8 same_settings = 0;
+		for(  uint8 i=0;  i<count;  i++  ) {
+			const schedule_entry_t &old_entry = old_schedule->entries[(i+offset)%count];
+			if(  entries[i].pos!=old_entry.pos  ) {
+				same_order = false;
+				break;
+			}
+			if(  entries[i]==old_entry  ) {
+				same_settings++;
+			}
+		}
+		if(  same_order  &&  (new_index<0  ||  same_settings>best_same_settings)  ) {
+			new_index = (old_index+count-offset)%count;
+			best_same_settings = same_settings;
+		}
+	}
+	return new_index;
+}
+
+
+
 void schedule_t::rdwr(loadsave_t *file)
 {
 	xml_tag_t f( file, "fahrplan_t" );
@@ -720,14 +789,22 @@ bool schedule_t::sscanf_schedule( const char *ptr )
 		entries.append(entry);
 	}
 	// check entry changes and set old journey time record if stop does not changed
-	uint8 j=0;
-	for(  uint8 i=0; i<old_entries.get_count(); i++  ) {
-		if(  j>=entries.get_count()  ) {
-			break;
-		}
-		if(  (entries[j==0?entries.get_count()-1:j-1].pos == old_entries[i==0?old_entries.get_count()-1:i-1].pos)  &&  (entries[j].pos == old_entries[i].pos)  ) {
-			entries[j].copy_time_records_from(old_entries[i]);
-			j++;
+	// (i.e. the stop and its previous stop are the same).
+	// The old entries are searched cyclically from the last match on, so that the records also
+	// survive when the schedule was rotated (see rotate_to_front()) or stops were inserted.
+	const uint8 old_count = old_entries.get_count();
+	bool old_entry_used[256] = {};
+	uint8 i=0;
+	for(  uint8 j=0;  j<entries.get_count()  &&  old_count>0;  j++  ) {
+		const koord3d &prev_pos = entries[j==0?entries.get_count()-1:j-1].pos;
+		for(  uint8 k=0;  k<old_count;  k++  ) {
+			const uint8 o = (i+k)%old_count;
+			if(  !old_entry_used[o]  &&  (prev_pos == old_entries[o==0?old_count-1:o-1].pos)  &&  (entries[j].pos == old_entries[o].pos)  ) {
+				entries[j].copy_time_records_from(old_entries[o]);
+				old_entry_used[o] = true;
+				i = (o+1)%old_count;
+				break;
+			}
 		}
 	}
 	return true;

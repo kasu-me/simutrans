@@ -425,3 +425,93 @@ function test_schedule_entry_time_statistics()
 	ASSERT_TRUE(entry_b.journey_time[1] > 0)
 	ASSERT_TRUE(entry_b.journey_time[2] > 0)
 }
+
+
+// --- Rotating the schedule of a line (schedule window: "Set as first") ---
+
+function test_schedule_rotate_line_keeps_convoy_position()
+{
+	local pl = player_x(0)
+
+	// 3-stop road route: A(4,2) - B(4,5) - C(4,8) - depot(4,9)
+	ASSERT_EQUAL(command_x(tool_build_way).work(pl, coord3d(4, 2, 0), coord3d(4, 9, 0), "cobblestone_road"), null)
+	ASSERT_EQUAL(command_x(tool_build_station).work(pl, coord3d(4, 2, 0), "BusStop"), null)
+	ASSERT_EQUAL(command_x(tool_build_station).work(pl, coord3d(4, 5, 0), "BusStop"), null)
+	ASSERT_EQUAL(command_x(tool_build_station).work(pl, coord3d(4, 8, 0), "BusStop"), null)
+	ASSERT_EQUAL(command_x.build_depot(pl, coord3d(4, 9, 0), building_desc_x("CarDepot")), null)
+
+	local pos_a = coord3d(4, 2, 0)
+	local pos_b = coord3d(4, 5, 0)
+	local pos_c = coord3d(4, 8, 0)
+
+	// round trip A - B - C - B: the stop B occurs twice
+	ASSERT_TRUE(pl.create_line(wt_road))
+	local line_list = pl.get_line_list()
+	local line = line_list[line_list.get_count() - 1]
+	line.change_schedule(pl, schedule_x(wt_road, [
+		schedule_entry_x(pos_a, 0, 0),
+		schedule_entry_x(pos_b, 0, 0),
+		schedule_entry_x(pos_c, 0, 0),
+		schedule_entry_x(pos_b, 0, 0),
+	]))
+
+	local depot = depot_x(4, 9, 0)
+	depot.append_vehicle(pl, convoy_x(0), vehicle_desc_x("Buessig"))
+	local cnv = depot.get_convoy_list()[0]
+	cnv.set_line(pl, line)
+	depot.start_all_convoys(pl)
+	debug.set_game_speed(5)
+
+	// drive one round, so that every entry has a journey time record
+	while (cnv.get_schedule().current != 2) {
+		sleep()
+	}
+	while (cnv.get_schedule().current != 1) {
+		sleep()
+	}
+
+	// hold the bus at B on its way from A to C (full load never happens here)
+	line.change_schedule(pl, schedule_x(wt_road, [
+		schedule_entry_x(pos_a, 0, 0),
+		schedule_entry_x(pos_b, 100, 0),
+		schedule_entry_x(pos_c, 0, 0),
+		schedule_entry_x(pos_b, 0, 0),
+	]))
+	while (!(cnv.is_loading()  &&  cnv.get_schedule().current == 1)) {
+		sleep()
+	}
+
+	local old_entries = line.get_schedule().entries
+	for (local i = 0; i < 4; i++) {
+		ASSERT_TRUE(old_entries[i].journey_time[0] > 0)
+	}
+
+	// make C the first stop: C - B - A - B
+	line.change_schedule(pl, schedule_x(wt_road, [
+		schedule_entry_x(pos_c, 0, 0),
+		schedule_entry_x(pos_b, 0, 0),
+		schedule_entry_x(pos_a, 0, 0),
+		schedule_entry_x(pos_b, 100, 0),
+	]))
+	// a loading convoy takes the new schedule over as soon as its wait_lock runs out
+	while (cnv.get_schedule().entries[0].y != pos_c.y) {
+		sleep()
+	}
+	debug.set_game_speed(1)
+
+	// The bus still stands at the B between A and C, which is now the last entry.
+	// (Matching only by the position of the stop would pick the B between C and A.)
+	local sched = cnv.get_schedule()
+	ASSERT_EQUAL(sched.current, 3)
+	ASSERT_TRUE(cnv.is_loading())
+
+	// the recorded journey times moved together with their entries
+	local new_entries = line.get_schedule().entries
+	for (local i = 0; i < 4; i++) {
+		local old_entry = old_entries[(i + 2) % 4]
+		ASSERT_EQUAL(new_entries[i].journey_time.len(), old_entry.journey_time.len())
+		for (local j = 0; j < old_entry.journey_time.len(); j++) {
+			ASSERT_EQUAL(new_entries[i].journey_time[j], old_entry.journey_time[j])
+		}
+	}
+}

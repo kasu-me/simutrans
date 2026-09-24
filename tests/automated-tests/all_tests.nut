@@ -301,6 +301,7 @@ all_tests <- [
 	test_schedule_next_line_non_null,
 	test_schedule_current,
 	test_schedule_entry_time_statistics,
+	test_schedule_rotate_line_keeps_convoy_position,
 	test_road_api,
 	test_road_choose_stop_behind_halt_mode,
 	test_road_choose_stop_behind_oneway_mode,

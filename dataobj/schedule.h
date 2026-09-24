@@ -226,6 +226,20 @@ public:
 	void move_entry_forward(uint8);
 	void move_entry_backward(uint8);
 
+	/**
+	 * Rotates the schedule so that the entry at @p index becomes the first one.
+	 * The cyclic order of the entries is kept, and current_stop keeps pointing to the same entry.
+	 * With a next line, the last entry is the handing-over point to it and stays at the end.
+	 */
+	void rotate_to_front(uint8 index);
+
+	/**
+	 * If this schedule has the same stops as @p old_schedule in the same cyclic order, only starting
+	 * from another entry (see rotate_to_front()), returns the index of the entry which is at
+	 * @p old_index in @p old_schedule. Returns -1 otherwise.
+	 */
+	sint16 get_rotated_entry_index(const schedule_t *old_schedule, uint8 old_index) const;
+
 	void rdwr(loadsave_t *file);
 
 	void rotate90( sint16 y_size );

@@ -1020,6 +1020,12 @@ public:
 	
 	bool is_departure_booked(uint32 dep_tick, uint8 stop_index, linehandle_t line) const;
 
+	/**
+	 * Updates the stop index of the departure slots booked by @p cnv,
+	 * when its schedule was changed and the current entry got another index.
+	 */
+	void update_departure_stop_index(convoihandle_t cnv, uint8 stop_index);
+
 	void extinguish_all_waiting_goods();
 
 	// allow unloading from longer convoy

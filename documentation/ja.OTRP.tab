@@ -289,6 +289,10 @@ up this entry
 この駅を上へ移動
 down this entry
 この駅を下へ移動
+Set as first
+この駅を先頭に
+Rotate the schedule so that the selected stop comes first. The order of the stops is kept.
+駅の順序を保ったまま，選択中の駅が先頭になるようにスケジュールを並べ替えます．
 #------Schedule window related stuff------
 #------スケジュールウィンドウ関連のエントリ------
 Please click on the map to add\nwaypoints or stops to this\nschedule.

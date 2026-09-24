@@ -897,19 +897,21 @@ void schedule_gui_t::init(schedule_t* schedule_, player_t* player, convoihandle_
 	extract_driving_settings(false);
 
 
-	add_table(6,1);
+	//  hide the return ticket on rail stuff, where it causes much trouble
+	const bool show_return_ticket = !env_t::hide_rail_return_ticket  ||  schedule->get_waytype()==road_wt  ||  schedule->get_waytype()==air_wt  ||  schedule->get_waytype()==water_wt;
+	add_table(show_return_ticket ? 7 : 6, 1);
 	{
 		// return tickets
-		if(  !env_t::hide_rail_return_ticket  ||  schedule->get_waytype()==road_wt  ||  schedule->get_waytype()==air_wt  ||  schedule->get_waytype()==water_wt  ) {
-			//  hide the return ticket on rail stuff, where it causes much trouble
+		if(  show_return_ticket  ) {
 			bt_return.init(button_t::roundbox, "return ticket");
 			bt_return.set_tooltip("Add stops for backward travel");
 			bt_return.add_listener(this);
 			add_component(&bt_return);
 		}
-		else {
-			new_component<gui_fill_t>();
-		}
+		bt_rotate_to_front.init(button_t::roundbox, "Set as first");
+		bt_rotate_to_front.set_tooltip("Rotate the schedule so that the selected stop comes first. The order of the stops is kept.");
+		bt_rotate_to_front.add_listener(this);
+		add_component(&bt_rotate_to_front);
 		new_component<gui_fill_t>();
 
 		bt_up.init(button_t::arrowup, "up");
@@ -1055,6 +1057,7 @@ void schedule_gui_t::update_selection()
 	bt_pass_stop.disable();
 	bt_up.disable();
 	bt_down.disable();
+	bt_rotate_to_front.disable();
 	bt_copy_entry_settings.disable();
 	bt_paste_entry_settings.disable();
 
@@ -1077,6 +1080,10 @@ void schedule_gui_t::update_selection()
 		}
 		if(  current_stop!=schedule->get_count()-1  &&  (!schedule->get_next_line().is_bound()  ||  current_stop!=schedule->get_count()-2)  ) {
 			bt_down.enable();
+		}
+		// the handing-over point to the next line stays at the end
+		if(  current_stop!=0  &&  (!schedule->get_next_line().is_bound()  ||  current_stop!=schedule->get_count()-1)  ) {
+			bt_rotate_to_front.enable();
 		}
 
 		// the last entry of a schedule with a next line only mirrors that line's first stop,
@@ -1375,6 +1382,20 @@ dbg->message("schedule_gui_t::action_triggered()","comp=%p combo=%p",comp,&line_
 	else if(comp == &bt_down) {
 		if(!schedule->empty()) {
 			schedule->move_entry_forward(schedule->get_current_stop());
+			update_selection();
+		}
+	}
+	else if(comp == &bt_rotate_to_front) {
+		if(!schedule->empty()) {
+			schedule->rotate_to_front(schedule->get_current_stop());
+			if(  cnv.is_bound()  ) {
+				// The current stop of a convoy's schedule is where the convoy heads for:
+				// keep the stop it is heading for now instead of the one selected to become the first.
+				const sint16 cnv_stop = schedule->get_rotated_entry_index(old_schedule, old_schedule->get_current_stop());
+				if(  cnv_stop>=0  ) {
+					schedule->set_current_stop((uint8)cnv_stop);
+				}
+			}
 			update_selection();
 		}
 	}

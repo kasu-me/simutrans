@@ -5279,6 +5279,17 @@ bool haltestelle_t::is_departure_booked(uint32 dep_tick, uint8 stop_index, lineh
 }
 
 
+void haltestelle_t::update_departure_stop_index(convoihandle_t cnv, uint8 stop_index) {
+	for(  uint32 idx = 0;  idx < DST_SIZE;  idx++  ) {
+		for(  slist_tpl<departure_t>::iterator i = departure_slot_table[idx].begin();  i != departure_slot_table[idx].end();  ++i  ) {
+			if(  i->cnv==cnv  ) {
+				i->stop_index = stop_index;
+			}
+		}
+	}
+}
+
+
 // A subroutine of calc_destination_halt.
 // Returns if the schedule entry whose journey time is not registered exists.
 bool unregistered_journey_time_exists(const schedule_t* schedule, player_t* player) {

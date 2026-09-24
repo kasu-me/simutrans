@@ -247,7 +247,7 @@ public:
 	uint32 get_average_waiting_time() const;
 	uint32 get_median_convoy_stopping_time() const;
 	
-	bool operator ==(const schedule_entry_t &a) {
+	bool operator ==(const schedule_entry_t &a) const {
 		return a.pos == this->pos
 		  &&  a.minimum_loading    == this->minimum_loading
 			&&  a.waiting_time_shift == this->waiting_time_shift

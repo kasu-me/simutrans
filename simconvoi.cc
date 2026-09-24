@@ -5036,7 +5036,14 @@ void convoi_t::check_pending_updates()
 			// something to check for ...
 			current = schedule->get_current_entry().pos;
 
-			if(  current_stop<new_schedule->get_count() &&  current==new_schedule->at(current_stop).pos  ) {
+			// A merely rotated schedule (see schedule_t::rotate_to_front()) keeps the order of the stops,
+			// so the convoy can keep heading for the very same entry.
+			const sint16 rotated_stop = new_schedule->get_rotated_entry_index(schedule, current_stop);
+			if(  rotated_stop>=0  ) {
+				current_stop = rotated_stop;
+				is_same = true;
+			}
+			else if(  current_stop<new_schedule->get_count() &&  current==new_schedule->at(current_stop).pos  ) {
 				// next pos is the same => keep the convoi state
 				is_same = true;
 			}
@@ -5119,6 +5126,15 @@ void convoi_t::check_pending_updates()
 			// next was depot. restore it
 			schedule->insert(welt->lookup(depot));
 			schedule->set_current_stop( (schedule->get_current_stop()+schedule->get_count()-1)%schedule->get_count() );
+		}
+
+		if(  is_same  ) {
+			// A departure slot booked at the current stop is identified by the index of the entry,
+			// which may have moved in the new schedule.
+			const halthandle_t halt = haltestelle_t::get_stoppable_halt(schedule->get_current_entry().pos, get_owner(), schedule->get_waytype());
+			if(  halt.is_bound()  ) {
+				halt->update_departure_stop_index(self, schedule->get_current_stop_exluding_depot());
+			}
 		}
 
 		if (state != INITIAL) {
