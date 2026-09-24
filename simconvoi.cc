@@ -4586,8 +4586,12 @@ void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_ste
 
 	// at least wait the minimum time for loading
 	if(  !is_coupled()  &&  scheduled_departure_time>0  ) {
-		const sint64 ticks_remain = (uint64)scheduled_departure_time - (uint64)time - (uint64)welt->get_ticks();
-		if(  ticks_remain<(sint64)time  ) {
+		// ticks until the departure judgement above becomes true.
+		// The difference is cast to sint32 since the ticks can wrap around 0.
+		// While waiting for coupling, the convoy departs after the delay tolerance. Do not check it every step until then.
+		const uint32 judgement_ticks = scheduled_departure_time + (coupling_cond ? scheduled_coupling_delay_tolerance : 0) - time;
+		const sint32 ticks_remain = (sint32)(judgement_ticks - welt->get_ticks());
+		if(  ticks_remain<(sint32)time  ) {
 			// this convoy is about to start. we don't want to wait for 2000 ms or more.
 			// just wait for ticks_remain
 			time = max(0, ticks_remain);

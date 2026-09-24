@@ -1086,6 +1086,8 @@ void gui_departure_board_t::update_departures(halthandle_t halt)
 			}
 			else if(  e.waiting_time_shift>0  ) {
 				waiting_time = welt->ticks_per_world_month/e.waiting_time_shift-(welt->get_ticks()-cnv->get_arrived_time());
+				// the maximum waiting time is over but the convoy has not departed yet (waiting time should be 0)
+				waiting_time = waiting_time > 0 ? waiting_time : 0;
 			}
 			dest_info_t next( next_halt, waiting_time, cnv );
 			destinations.insert_ordered( next, compare_hi );
