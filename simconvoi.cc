@@ -2193,6 +2193,9 @@ void convoi_t::ziel_erreicht()
 				set_next_coupling(route_t::INVALID_INDEX, 0);
 				v->get_convoi()->set_coupling_done(true);
 				coupling_done = true;
+				// The leading convoy waiting for this coupling may sleep until the end of the delay tolerance.
+				// Wake it up so that it judges the departure in the next step.
+				get_most_parent_convoi()->wait_lock = 0;
 				temp_parent_convoi->check_and_set_coupling_done_over_length();
 				check_electrification();
 				return;
