@@ -1980,6 +1980,11 @@ ribi_t::ribi vehicle_t::get_ribi(const grund_t* gr, ribi_t::ribi from_dir) const
 	if(  from_dir != ribi_t::none  ) {
 		ribi &= rs->get_detailed_oneway_out_ribi(from_dir);
 	}
+	// but the oneway_mode mask of a road is independent of any sign and still applies
+	const weg_t *weg = gr->get_weg(get_waytype());
+	if(  weg  &&  weg->get_waytype()==road_wt  ) {
+		ribi &= ~((const strasse_t *)weg)->get_active_ribi_mask_oneway();
+	}
 	return ribi;
 }
 
