@@ -209,3 +209,93 @@
     結果として差分は本家コミットと同一 (削除済みの `dbg->message` 1行を除く)。
 - **develop-kasumi 側コミット**: `72f659731`
 - **備考**: 状態確認用の識別子は `vehicle/simvehicle.h` の `check_platform_coupling`。
+
+### FIX-10: 道路が無いタイルでの道路参照による異常終了と、連結/解放時の `route_index` 不整合
+
+- **分類**: バグ修正
+- **状態**: 取り込み済み
+- **概要**: 「そのタイルには必ず道路がある」前提で `get_weg(road_wt)` の結果を即座に参照していた箇所を
+  NULL 安全にし、併せて連結・解放の境界で各車両の `route_index` を自編成の経路に合わせて付け直す。
+- **上流コミット**:
+  - `280ced3e8` BUG FIX: fix crash bug of v62 (#747) — **コミットの一部のみ** (残りは FEAT-16)
+- **主な変更箇所**:
+  - `boden/wege/strasse.{h,cc}` — フリー関数 `strasse_t *strasse_at(const koord3d &pos)` を新設
+    (タイルが無い/道路が無い場合は NULL)
+  - `simconvoi.cc` — `step()` / `vorfahren()` / `can_overtake()` の道路参照を `strasse_at()` に置き換え、
+    NULL のときは車線変更・追い越し判定を行わない
+  - `vehicle/simvehicle.cc` — `road_vehicle_t::calc_disp_lane()` / `is_target()` / `can_enter_tile()` の
+    道路参照を NULL 安全に変更
+  - `vehicle/simroadtraffic.cc` — `private_car_t::ist_weg_frei()` を `strasse_at()` に置き換え。
+    `enter_tile()` で道路が無ければ `time_to_life = 0` にして即座に消滅させる
+  - `vehicle/simvehicle.{h,cc}` — `vehicle_t::reanchor_route_index()` を新設。
+    車両が実際に立っているタイルを自編成の経路上で (旧 `route_index` 付近から外側へ) 探し直し、`route_index` を付け直す
+  - `simconvoi.{h,cc}` — `convoi_t::reanchor_chain_route_indices()` を新設し、
+    `couple_convoi()` / `couple_convoi_during_running()` / `uncouple_convoi()` で呼ぶ
+  - `vehicle/simvehicle.cc` — `rail_vehicle_t::leave_tile()` で同一タイル上の他編成の向きを求める際、
+    他編成の経路インデックスを経路長でクランプする (空経路での `get_count()-1u` のラップアラウンドも回避)
+- **詳細**:
+  - 道路車両の編成が道路の無いタイルを報告するケースとして、航送中 (キャリア = 船のタイル, FEAT-18)、
+    車庫内 (所属車庫の位置)、車両の無い編成 (`koord3d::invalid`)、旧セーブのロード後に way が欠けている場合、
+    停車中の車両の下の way が撤去された場合が挙げられている。従来はいずれも
+    `strasse_t::get_overtaking_mode()` の NULL 参照で異常終了していた。
+  - 連結中の子編成は自分の経路のコピーを持つが実際は親編成に牽引されるため、`vehicle_t::hop()` で
+    `route_index` が自分の経路長を超えて増え続ける。連結/解放時にその値のまま別編成の経路を引くと
+    範囲外参照になるため、境界で付け直す。
+  - 修正対象のコードの多くは v58_3 時点から存在するが、本家の件名 (crash bug of v62) のとおり
+    v62 までに入った機能 (航送 FEAT-18、道路連結 FEAT-15 等) によって顕在化した。
+- **取り込み時の注意**:
+  - `simconvoi.cc` の `step()` 内の修正箇所は、周辺の行に FEAT-23 の `get_overtaking_mode_raw()` /
+    `passing_lane_stop_only_mode` と FEAT-08 の `reversing_lane_hold` を含むため、
+    **cherry-pick では競合する**。`develop-kasumi` に取り込む場合は該当箇所を手作業で移植すること。
+  - `280ced3e8` は FEAT-16 と同一コミット。FEAT-16 を取り込まずに本項目だけ取り込む場合は、
+    `dataobj/ribi.h` / `boden/grund.cc` / `boden/wege/weg.cc` / `obj/crossing.cc` / `obj/roadsign.*` /
+    `simtool.cc` / テストの変更を除外する。
+  - **移植内容 (2026-09-28)**: FEAT-16 の分を除外し、手作業で移植した。
+    本家の差分のうち `develop-kasumi` に該当コードが無い次の2か所は移植対象外:
+    `convoi_t::vorfahren()` の逆走発車時の車線設定 (FEAT-08 の `reversing_lane_hold` 周辺) と、
+    `step()` の条件式中の `get_overtaking_mode_raw()!=passing_lane_stop_only_mode` (FEAT-23)。
+    `step()` の2か所は `develop-kasumi` の既存条件式に `str0 &&` と `strasse_at()` を適用する形にした。
+    `road_vehicle_t::set_sideways_image()` と `rail_vehicle_t::leave_tile()` の修正は本家と同一。
+    `strasse_at()` のコメントからは航送 (FEAT-18) への言及を除いた。
+    FEAT-08 / FEAT-23 を後から取り込む場合は、該当行を `strasse_at()` 版に合わせて移植すること。
+  - 取り込み後に `test_schedule_entry_length_coupling_done`、`test_sign_build_oneway`、
+    `test_road_choose_*` (6件)、`test_reservation_clear_road`、`test_transport_*` (4件) の通過を確認。
+    異常終了の再現シナリオ自体の自動テストは無い。
+- **develop-kasumi 側コミット**: `65ed5e40d`
+- **備考**: 関連項目 FEAT-15 / FEAT-16 / FEAT-18。状態確認用の識別子は `boden/wege/strasse.h` の `strasse_at`、
+  または `vehicle/simvehicle.h` の `reanchor_route_index`。
+
+### FIX-11: 一方通行詳細設定の標識がある道路で、一方通行モード (`oneway_mode`) の進行方向制限が経路判定に効かない
+
+- **分類**: バグ修正
+- **状態**: 取り込み済み
+- **概要**: 一方通行の詳細設定 (`detailed_oneway`) を持つ標識が置かれた道路タイルでは、
+  `vehicle_t::get_ribi(gr, from_dir)` が標識の方向マスクだけを適用し、
+  一方通行モードの道路が持つ `ribi_mask_oneway` を適用していなかったのを修正する。
+- **上流コミット**:
+  - `891191546` add grund_t::has_two_same_waytype_ways() and fix vehicle_t::get_ribi() (#751) — **コミットの一部のみ** (残りは FEAT-16)
+- **主な変更箇所**:
+  - `boden/wege/strasse.h` — `strasse_t::get_active_ribi_mask_oneway()` を新設
+    (`overtaking_mode<=oneway_mode` のとき `ribi_mask_oneway`、それ以外は `ribi_t::none`)
+  - `boden/wege/strasse.cc` — `strasse_t::get_ribi()` を上記ヘルパーで書き直し (挙動同一)
+  - `vehicle/simvehicle.cc` — `vehicle_t::get_ribi(gr, from_dir)` の詳細一方通行分岐で、
+    非マスク ribi に標識の `get_detailed_oneway_out_ribi()` を掛けた後、
+    way が道路なら `~get_active_ribi_mask_oneway()` も掛ける
+- **詳細**: 詳細一方通行の標識は `ribi_maske` (通常の一方通行標識のマスク) を進入方向ごとのマスクで
+  置き換えるため、非マスクの ribi から計算し直している。そのとき、標識とは無関係な
+  道路自体の一方通行モードのマスクまで一緒に落としていたため、一方通行モードの道路に
+  詳細一方通行標識を置くと、そのタイルでは道路の一方通行方向が経路判定に反映されなかった。
+  該当コードは v58_3 時点から存在し、`develop-kasumi` (FIX-03 取り込み済み) の
+  `vehicle/simvehicle.cc` にも同じ形で残っている。
+- **取り込み時の注意**:
+  - `891191546` は FEAT-16 と同一コミット。本項目だけを取り込む場合は、
+    `strasse.{h,cc}` の変更と `vehicle_t::get_ribi(gr, from_dir)` の末尾に
+    `get_active_ribi_mask_oneway()` を掛ける数行のみを手作業で移植する
+    (同関数の脚選択部分は FEAT-16 の `get_weg(waytype_t, ribi_t::ribi)` 等に依存する)。
+  - セーブ形式への影響は無い。
+  - **移植内容 (2026-09-28)**: 上記どおり `strasse.{h,cc}` の変更と、
+    `vehicle_t::get_ribi(gr, from_dir)` の末尾で `gr->get_weg(get_waytype())` が道路なら
+    `~get_active_ribi_mask_oneway()` を掛ける数行のみを移植した。本家版はここで FEAT-16 の脚 (`leg`) を
+    優先して参照するが、`develop-kasumi` には同一 waytype の2脚が無いため `get_weg(waytype)` のみとした。
+- **develop-kasumi 側コミット**: `e31fd6d88`
+- **備考**: 関連項目 FEAT-16 / FIX-03。状態確認用の識別子は `boden/wege/strasse.h` の `get_active_ribi_mask_oneway`。
