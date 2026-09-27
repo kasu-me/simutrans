@@ -361,6 +361,21 @@ public:
 	 */
 	void clamp_route_index();
 
+	/**
+	 * Re-derive route_index from the tile this vehicle actually stands on, against the
+	 * route its convoy currently holds. hop() increments route_index without an upper
+	 * bound once the vehicle has passed the end of its own route - a coupled child that
+	 * is dragged along keeps hopping on its parent's behalf while indexing into its own
+	 * (possibly shorter) copy of the route - so the index can be arbitrarily far past
+	 * get_count(). Coupling and uncoupling hand that index to a different convoy, so it
+	 * must be re-anchored there.
+	 * pos_next is deliberately left alone: it is the tile the vehicle is physically
+	 * moving onto, and hop() re-derives it from route_index at the next tile change.
+	 * @returns true if get_pos() was found in the route; false means the vehicle is not
+	 *          on its own route at all and route_index was clamped instead.
+	 */
+	bool reanchor_route_index();
+
 	vehicle_t();
 	vehicle_t(koord3d pos, const vehicle_desc_t* desc, player_t* player);
 

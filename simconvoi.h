@@ -1171,6 +1171,16 @@ public:
 
 	// Couple with given convoy
 	bool couple_convoi(convoihandle_t coupled);
+
+	/**
+	 * Re-anchor route_index of every vehicle of this convoy and of all convoys coupled
+	 * behind it, against the route each of those convoys holds. A coupled child keeps
+	 * its own copy of the route but is driven by its parent, so its vehicles' route_index
+	 * can run arbitrarily far past its route (vehicle_t::hop() has no upper bound there).
+	 * Coupling and uncoupling hand those indices to a different convoy, so they have to
+	 * be made meaningful again at both boundaries.
+	 */
+	void reanchor_chain_route_indices();
 	convoihandle_t uncouple_convoi(  bool need_reservation_update = true  );
 
 	bool is_coupled() const { return state==COUPLED  ||  state==COUPLED_LOADING; }

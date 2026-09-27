@@ -21,6 +21,14 @@ const way_desc_t *strasse_t::default_strasse=NULL;
 bool strasse_t::show_masked_ribi = false;
 bool strasse_t::show_reservations = false;
 
+
+strasse_t *strasse_at(const koord3d &pos)
+{
+	const grund_t *gr = world()->lookup(pos);
+	return gr ? (strasse_t*)gr->get_weg(road_wt) : NULL;
+}
+
+
 void strasse_t::set_gehweg(bool janein)
 {
 	weg_t::set_gehweg(janein);

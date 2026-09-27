@@ -985,6 +985,43 @@ void vehicle_t::clamp_route_index()
 }
 
 
+bool vehicle_t::reanchor_route_index()
+{
+	if(  cnv == NULL  ) {
+		return false;
+	}
+	const route_t* r = cnv->get_route();
+	const uint32 count = r->get_count();
+	if(  count == 0  ) {
+		route_index = 0;
+		check_for_finish = true;
+		return false;
+	}
+	// route_index indexes pos_next, so our own tile is expected at route_index-1
+	const koord3d pos = get_pos();
+	const uint32 anchor = min( (uint32)route_index, count ) - (route_index > 0 ? 1u : 0u);
+	// search outwards from the old anchor: a route may visit the same tile twice (loops,
+	// or a reversal at a waypoint), and the nearest match is the one we are standing on
+	for(  uint32 d = 0;  d < count;  d++  ) {
+		uint32 found = count;
+		if(  anchor >= d  &&  r->at( (uint16)(anchor-d) ) == pos  ) {
+			found = anchor - d;
+		}
+		else if(  anchor+d < count  &&  r->at( (uint16)(anchor+d) ) == pos  ) {
+			found = anchor + d;
+		}
+		if(  found < count  ) {
+			route_index = (uint16)(found + 1u);
+			check_for_finish = route_index >= count;
+			return true;
+		}
+	}
+	// not on this route at all - the convoy has to find a new one anyway
+	clamp_route_index();
+	return false;
+}
+
+
 sint8 vehicle_t::vehicle_offset_defined_by_way(ribi_t::dir d, const sint8 offset, const bool is_x, const bool reverse, const sint16 raster_width)
 {
 	sint8 offset_value;
@@ -2335,7 +2372,7 @@ void road_vehicle_t::calc_disp_lane()
 void road_vehicle_t::set_sideways_image()
 {
 	// Determine effective drive side: drive-on-left XOR inverted_mode on current tile
-	const strasse_t *str = (strasse_t*)welt->lookup(get_pos())->get_weg(road_wt);
+	const strasse_t *str = strasse_at( get_pos() );
 	const bool drives_left = welt->get_settings().is_drive_left();
 	const bool inverted    = str  &&  str->get_overtaking_mode() == inverted_mode;
 	const bool effective_drive_left = drives_left ^ inverted;
@@ -2491,8 +2528,8 @@ bool road_vehicle_t::is_target(const grund_t *gr, const grund_t *prev_gr) const
 					}
 					else {
 						// there are another car here!
-						strasse_t *str = (strasse_t*)to->get_weg(road_wt);
-						const overtaking_mode_t overtaking_mode = str->get_overtaking_mode();
+						const strasse_t *str = (const strasse_t*)to->get_weg(road_wt);
+						const overtaking_mode_t overtaking_mode = str ? str->get_overtaking_mode() : prohibited_mode;
 						if(  overtaking_mode==prohibited_mode || overtaking_mode==halt_mode ) {
 							// we do not have empty lane, also we cannot enter because we cannot overtake it!(avoid stack)
 							return false;
@@ -2728,7 +2765,7 @@ bool road_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 		// side road -> main road from passing lane side: vehicle should enter passing lane on main road.
 		next_lane = 0;
 		if(  !cnv->get_schedule()->get_current_entry().is_no_overtake()  &&  (str->get_ribi_unmasked() == ribi_t::all  ||  ribi_t::is_threeway(str->get_ribi_unmasked()))  &&  str->get_overtaking_mode() <= oneway_mode  ) {
-			const strasse_t* str_prev = route_index == 0 ? NULL : (strasse_t *)welt->lookup(r.at(route_index - 1u))->get_weg(road_wt);
+			const strasse_t* str_prev = route_index == 0 ? NULL : strasse_at( r.at(route_index - 1u) );
 			const grund_t* gr_next = route_index < r.get_count() - 1u ? welt->lookup(r.at(route_index + 1u)) : NULL;
 			const strasse_t* str_next = gr_next ? (strasse_t*)gr_next -> get_weg(road_wt) : NULL;
 			if(str_prev && str_next && str_prev->get_overtaking_mode() > oneway_mode  && str_next->get_overtaking_mode() <= oneway_mode) {
@@ -2742,14 +2779,16 @@ bool road_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 
 		// When overtaking_mode changes from inverted_mode to others, no cars blocking must work as the convoi is on traffic lane. Otherwise, no_cars_blocking cannot recognize vehicles on the traffic lane of the next tile.
 		//next_lane = -1 does NOT mean that the vehicle must go traffic lane on the next tile.
-		const strasse_t* current_str = (strasse_t*)(welt->lookup(get_pos())->get_weg(road_wt));
+		const strasse_t* current_str = strasse_at( get_pos() );
 		if(  current_str  &&  current_str->get_overtaking_mode()==inverted_mode  ) {
 			if(  str->get_overtaking_mode()<inverted_mode  ) {
 				next_lane = -1;
 			}
 		}
 
-		if(  current_str->get_overtaking_mode()<=oneway_mode  &&  str->get_overtaking_mode()>oneway_mode  ) {
+		// current_str may be NULL (the check above says so) - the tile we stand on does not
+		// always carry a road, e.g. right after the way under a stopped convoy was removed
+		if(  current_str  &&  current_str->get_overtaking_mode()<=oneway_mode  &&  str->get_overtaking_mode()>oneway_mode  ) {
 			next_lane = -1;
 		}
 
@@ -2798,7 +2837,9 @@ bool road_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 		bool int_block = (rs  &&  rs->get_desc()->is_traffic_light())  ||  (ribi_t::is_threeway(str->get_ribi_unmasked())  &&  (((drives_on_left ? ribi_t::rotate90l(curr_90direction) : ribi_t::rotate90(curr_90direction)) & str->get_ribi_unmasked())  ||  curr_90direction != next_90direction));
 
 		//If this convoi is overtaking, the convoi must avoid a head-on crash.
-		if(  cnv->is_overtaking()  &&  current_str->get_overtaking_mode()!=inverted_mode  ){
+		// current_str may be NULL, see above - treat "no road under us" like a road that is not
+		// inverted_mode, i.e. keep checking for oncoming traffic rather than crash
+		if(  cnv->is_overtaking()  &&  (current_str==NULL  ||  current_str->get_overtaking_mode()!=inverted_mode)  ){
 			while(  test_index < route_index + 2u && test_index < r.get_count()  ){
 				grund_t *grn = welt->lookup(r.at(test_index));
 				if(  !grn  ) {
@@ -2887,7 +2928,7 @@ bool road_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 			// Decide whether the convoi should go on passing lane.
 			// side road -> main road from passing lane side: vehicle should enter passing lane on main road.
 			if(   ribi_t::is_threeway(str->get_ribi_unmasked())  &&  str->get_overtaking_mode() <= oneway_mode  ) {
-				const strasse_t* str_prev = (strasse_t *)welt->lookup(r.at(test_index - 1u))->get_weg(road_wt);
+				const strasse_t* str_prev = strasse_at( r.at(test_index - 1u) );
 				if(  str_prev  &&  str_prev->get_overtaking_mode() > oneway_mode  &&  test_index + 1u < r.get_count()  ) {
 					ribi_t::ribi dir_1 = calc_direction(r.at(test_index - 1u), r.at(test_index));
 					ribi_t::ribi dir_2 = calc_direction(r.at(test_index), r.at(test_index + 1u));
@@ -5251,9 +5292,23 @@ void rail_vehicle_t::leave_tile()
 					// other convoy exist!
 					other_convoy = v->get_convoi()->self;
 					const uint16 current_stop = v->get_route_index();
-					other_convoy_dir =
-					ribi_t::backward(ribi_type(other_convoy->get_route()->at(max(2u,current_stop)-2u), get_pos()))
-					| ribi_type(get_pos(), other_convoy->get_route()->at(min(other_convoy->get_route()->get_count()-1u,current_stop)));
+					// current_stop belongs to a convoy we do not drive, so it is not bounded by
+					// that convoy's route: hop() lets route_index run past the end (see
+					// vehicle_t::reanchor_route_index()). Clamp both ends - note get_count() is
+					// unsigned, so get_count()-1u would wrap on an empty route.
+					const route_t* other_route = other_convoy->get_route();
+					const uint32 other_count = other_route->get_count();
+					if(  other_count < 2  ) {
+						// no route to recover a heading from
+						other_convoy_dir = ribi_t::none;
+					}
+					else {
+						const uint16 idx_here = (uint16)min( (uint32)current_stop, other_count-1u );
+						const uint16 idx_prev = (uint16)min( (uint32)max(2u,current_stop)-2u, other_count-1u );
+						other_convoy_dir =
+						ribi_t::backward(ribi_type(other_route->at(idx_prev), get_pos()))
+						| ribi_type(get_pos(), other_route->at(idx_here));
+					}
 				}
 				// Use convoy handle so co-reserved convoys are correctly identified:
 				// unreserve(convoihandle_t) matches primary OR reserved2, while the old

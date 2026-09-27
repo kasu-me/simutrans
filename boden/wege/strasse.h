@@ -159,4 +159,16 @@ public:
 
 };
 
+
+/**
+ * The road on the tile at @p pos, or NULL when there is no tile there or the tile carries no
+ * road. Road logic all over the game looks a road up by position and then dereferences it right
+ * away, but a road is not guaranteed to be there: a convoy in a depot reports its home depot,
+ * a way can be missing or mismatched after loading an old savegame, and a way can be removed
+ * under a standing vehicle. Dereferencing the NULL then crashes inside
+ * strasse_t::get_overtaking_mode(), which is where such a bug surfaces because that accessor
+ * is what the caller usually wants first.
+ */
+strasse_t *strasse_at(const koord3d &pos);
+
 #endif
