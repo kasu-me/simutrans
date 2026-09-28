@@ -20,7 +20,8 @@ The exported text contains one block per stop. Stop names, the resulting headway
 Choose an <em>Import mode</em>, then click a file or press <em>Paste from clipboard</em>.
 </p>
 <p>
-<em>Replace whole schedule:</em> the stop list and every setting are replaced by the ones in the file. Every position in the file must exist on the map and be usable by this kind of vehicle.
+<em>Replace whole schedule:</em> the stop list and every setting are replaced by the ones in the file. Every position in the file must exist on the map and be usable by this kind of vehicle.<br>
+The schedule keeps heading for the stop it was heading for. If that stop is not in the imported schedule, it heads for the next stop of the old schedule that still is, or for the first stop if none is.
 </p>
 <p>
 <em>Apply departure time settings only:</em> the stop list is not touched at all. Only the spacing, the departure offset, the delay tolerance, <em>Wait for time</em> and <em>Load before departure</em> of each stop are overwritten, plus <em>Use same departure time for all stops</em> and the departure slot group of the schedule. This requires the file to have exactly the same stops, in the same order, at the same coordinates as the schedule being edited.
@@ -32,7 +33,9 @@ An import is rejected as a whole if anything does not match - a different way ty
 The imported schedule is only applied to the convoy or line when the schedule window is closed, so a mistake can be undone with <em>Revert schedule</em> before closing. In a network game the change is sent to the server on close, exactly like any other schedule edit.
 </p>
 <p>
-Lines referenced by the file (the departure slot group and the next line) are stored by name and are looked up among your own lines. If no line of that name exists, the setting is left empty and a note is shown.
+Lines referenced by the file (the departure slot group and the next line) are stored by name and are looked up among your own lines.<br>
+A schedule that uses the own departure slot group of its line is exported without a name, so importing it into another line gives that line its own group, too. A named line stands for the departure slot group it belongs to, just like choosing it in <a href="schedule.txt">Schedule Controls</a>. If no line of that name exists, the departure slot group is left unchanged and a note is shown.<br>
+If the next line does not exist, no next line is set and a note is shown.
 </p>
 <p>
 Note: the clipboard buttons use the system clipboard on Windows and on SDL2 builds. Other builds fall back to an internal buffer that cannot exchange text with other programs; use a file there.

@@ -163,7 +163,7 @@ static const char *line_name_of(linehandle_t line)
 }
 
 
-void schedule_export_text( cbuffer_t &buf, const schedule_t *schedule, const player_t *player, const char *source_name )
+void schedule_export_text( cbuffer_t &buf, const schedule_t *schedule, const player_t *player, linehandle_t own_line, const char *source_name )
 {
 	const uint16 divisor = welt->get_settings().get_spacing_shift_divisor();
 	const waytype_t wt = schedule->get_waytype();
@@ -181,7 +181,14 @@ void schedule_export_text( cbuffer_t &buf, const schedule_t *schedule, const pla
 	buf.append("\n");
 	buf.printf("max_speed = %u\n", (uint32)schedule->get_max_speed());
 	buf.printf("additional_base_waiting_time = %u\n", schedule->get_additional_base_waiting_time());
-	buf.printf("departure_slot_group = %s\n", line_name_of(schedule->get_departure_slot_group_id()));
+	const linehandle_t group = schedule->get_departure_slot_group_id();
+	if(  !group.is_bound()  ||  group == own_line  ) {
+		// the own group has no name, so it becomes the own group of whichever line imports it
+		buf.append("departure_slot_group =  # own group\n");
+	}
+	else {
+		buf.printf("departure_slot_group = %s\n", line_name_of(group));
+	}
 	buf.printf("next_line = %s\n", line_name_of(schedule->get_next_line()));
 	buf.printf("entry_count = %u\n", (uint32)schedule->get_count());
 
@@ -406,13 +413,92 @@ static linehandle_t find_line_by_name(const player_t *player, const std::string 
 }
 
 
+/**
+ * The departure slot group to apply for the name in the file.
+ * No name means the own group: the line @p own_line itself. A named line stands for the group it
+ * belongs to, just like choosing it in the schedule dialog does.
+ * Whenever this cannot be resolved, the current group of @p target is kept.
+ */
+static linehandle_t resolve_departure_slot_group(const std::string &name, const schedule_t *target, const player_t *player, linehandle_t own_line, cbuffer_t &warnmsg)
+{
+	if(  name.empty()  ) {
+		return own_line.is_bound() ? own_line : target->get_departure_slot_group_id();
+	}
+	bool ambiguous = false;
+	const linehandle_t line = find_line_by_name(player, name, ambiguous);
+	if(  !line.is_bound()  ) {
+		warnmsg.append(translator::translate("Could not find the line of the departure slot group. The group was left unchanged.\n"));
+		warnmsg.printf("%s\n", name.c_str());
+		return target->get_departure_slot_group_id();
+	}
+	if(  ambiguous  ) {
+		warnmsg.append(translator::translate("More than one line has this name.\n"));
+		warnmsg.printf("%s\n", name.c_str());
+	}
+	if(  line == own_line  ) {
+		return own_line;
+	}
+	const linehandle_t group = line->get_schedule()->get_departure_slot_group_id();
+	return group.is_bound() ? group : line;
+}
+
+
+/**
+ * The entry of @p schedule to head for after its stops were replaced by an import.
+ * This is the stop the old schedule (@p old_stops) was heading for or, when it is gone, the first
+ * of the stops after it which is still served. A stop served from another platform of the same
+ * halt counts too. As a stop can occur several times, the occurrence reached from the same stop
+ * as before is preferred.
+ */
+static uint8 stop_to_head_for(const schedule_t *schedule, const vector_tpl<koord3d> &old_stops, uint8 old_current_stop, const player_t *player)
+{
+	const uint32 old_count = old_stops.get_count();
+	const uint8 count = schedule->get_count();
+	const waytype_t wt = schedule->get_waytype();
+	for(  uint32 k = 0;  k < old_count;  k++  ) {
+		const koord3d &pos      = old_stops[(old_current_stop+k) % old_count];
+		const koord3d &prev_pos = old_stops[(old_current_stop+k+old_count-1) % old_count];
+		const halthandle_t halt      = haltestelle_t::get_stoppable_halt(pos, player, wt);
+		const halthandle_t prev_halt = haltestelle_t::get_stoppable_halt(prev_pos, player, wt);
+		sint16 best = -1;
+		int best_quality = 0;
+		for(  uint8 i = 0;  i < count;  i++  ) {
+			const koord3d &p      = schedule->at(i).pos;
+			const koord3d &prev_p = schedule->at((i+count-1) % count).pos;
+			int quality;
+			if(  p == pos  ) {
+				quality = 4;
+			}
+			else if(  halt.is_bound()  &&  haltestelle_t::get_stoppable_halt(p, player, wt) == halt  ) {
+				quality = 2;
+			}
+			else {
+				continue;
+			}
+			if(  prev_p == prev_pos  ||  (prev_halt.is_bound()  &&  haltestelle_t::get_stoppable_halt(prev_p, player, wt) == prev_halt)  ) {
+				quality++;
+			}
+			if(  quality > best_quality  ) {
+				best = i;
+				best_quality = quality;
+			}
+		}
+		if(  best >= 0  ) {
+			return (uint8)best;
+		}
+	}
+	// none of the old stops is served any more
+	return 0;
+}
+
+
 static void reject(cbuffer_t &errmsg, const char *reason)
 {
 	errmsg.append(translator::translate(reason));
 }
 
 
-bool schedule_import_text( const char *text, schedule_t *target, schedule_import_mode_t mode, const player_t *player, cbuffer_t &errmsg, cbuffer_t &warnmsg )
+bool schedule_import_text( const char *text, schedule_t *target, schedule_import_mode_t mode, const player_t *player, linehandle_t own_line, cbuffer_t &errmsg, cbuffer_t &warnmsg )
 {
 	if(  text == NULL  ||  *text == 0  ) {
 		reject(errmsg, "Not a schedule file.\n");
@@ -625,16 +711,7 @@ bool schedule_import_text( const char *text, schedule_t *target, schedule_import
 	}
 
 	// resolve the line references by name, they are only meaningful inside one world
-	bool ambiguous = false;
-	linehandle_t group_line = find_line_by_name(player, header.departure_slot_group, ambiguous);
-	if(  !header.departure_slot_group.empty()  &&  !group_line.is_bound()  ) {
-		warnmsg.append(translator::translate("Could not find the line of the departure slot group.\n"));
-		warnmsg.printf("%s\n", header.departure_slot_group.c_str());
-	}
-	else if(  ambiguous  ) {
-		warnmsg.append(translator::translate("More than one line has this name.\n"));
-		warnmsg.printf("%s\n", header.departure_slot_group.c_str());
-	}
+	const linehandle_t group_line = resolve_departure_slot_group(header.departure_slot_group, target, player, own_line, warnmsg);
 
 	// -- apply ---------------------------------------------------------------
 	if(  mode == SCHEDULE_IMPORT_DEPARTURE_ONLY  ) {
@@ -657,11 +734,17 @@ bool schedule_import_text( const char *text, schedule_t *target, schedule_import
 		warnmsg.printf("%s\n", header.next_line.c_str());
 	}
 
+	// the old stops, to find the one to head for again once they are replaced
+	const uint8 old_current_stop = target->get_current_stop();
+	vector_tpl<koord3d> old_stops(target->get_count());
+	for(  uint8 i = 0;  i < target->get_count();  i++  ) {
+		old_stops.append(target->at(i).pos);
+	}
+
 	// Reuse the well tested compact form: sscanf_schedule() also restores the recorded
 	// journey/waiting times of the stops that did not move.
-	const uint8 old_current_stop = target->get_current_stop();
 	cbuffer_t compact;
-	const uint32 packed = (uint32)old_current_stop + ((header.schedule_flags & 0xFFu) << 8) + (header.max_speed << 16);
+	const uint32 packed = ((header.schedule_flags & 0xFFu) << 8) + (header.max_speed << 16);
 	compact.printf("%u|%u|%u|%d|%u|", packed, (uint32)group_line.get_id(),
 		header.additional_base_waiting_time, (int)target->get_type(), next_line.get_id());
 	for(  uint32 i = 0;  i < parsed.get_count();  i++  ) {
@@ -677,6 +760,6 @@ bool schedule_import_text( const char *text, schedule_t *target, schedule_import
 		return false;
 	}
 	// keep heading for the stop we were heading for, rather than the exporter's
-	target->set_current_stop(old_current_stop);
+	target->set_current_stop( stop_to_head_for(target, old_stops, old_current_stop, player) );
 	return true;
 }

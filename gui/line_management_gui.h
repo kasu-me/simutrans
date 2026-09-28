@@ -26,6 +26,8 @@ public:
 	void rdwr( loadsave_t *file ) OVERRIDE;
 	uint32 get_rdwr_id() OVERRIDE { return magic_line_schedule_rdwr_dummy; }
 
+	linehandle_t get_edited_line() const OVERRIDE { return line; }
+
 
 private:
 	linehandle_t line;

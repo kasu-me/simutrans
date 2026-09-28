@@ -69,7 +69,7 @@ schedule_io_frame_t::schedule_io_frame_t(schedule_gui_t *owner_, bool do_export_
 	if(  do_export  ) {
 		set_name(translator::translate("Export schedule"));
 		if(  schedule != NULL  ) {
-			schedule_export_text(export_buf, schedule, player, source_name);
+			schedule_export_text(export_buf, schedule, player, owner->get_edited_line(), source_name);
 		}
 
 		// set_filename() expects a name that still carries its extension and drops the last

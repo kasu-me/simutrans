@@ -8,6 +8,7 @@
 
 
 #include "../simtypes.h"
+#include "../linehandle_t.h"
 
 
 class cbuffer_t;
@@ -29,18 +30,23 @@ enum schedule_import_mode_t {
 
 /**
  * Writes @p schedule as human readable text, suitable for a file or the clipboard.
+ * @p own_line is the line the schedule belongs to (unbound for a convoy without line). A departure
+ * slot group which is this line itself is written as the own group, so that importing the file
+ * into another line gives that line its own group instead of joining this one.
  * @p source_name is written as an informational "source" line, may be NULL.
  */
-void schedule_export_text( cbuffer_t &buf, const schedule_t *schedule, const player_t *player, const char *source_name );
+void schedule_export_text( cbuffer_t &buf, const schedule_t *schedule, const player_t *player, linehandle_t own_line, const char *source_name );
 
 /**
  * Parses @p text and applies it to @p target.
  * Everything is validated before anything is written, so on failure @p target is left untouched.
+ * @param own_line the line @p target belongs to (unbound for a convoy without line); it becomes the
+ *                 departure slot group when the file asks for the own group
  * @param errmsg  receives a translated reason when the import is rejected
  * @param warnmsg receives translated notes about things that could not be restored exactly
  * @return true if the schedule was applied
  */
-bool schedule_import_text( const char *text, schedule_t *target, schedule_import_mode_t mode, const player_t *player, cbuffer_t &errmsg, cbuffer_t &warnmsg );
+bool schedule_import_text( const char *text, schedule_t *target, schedule_import_mode_t mode, const player_t *player, linehandle_t own_line, cbuffer_t &errmsg, cbuffer_t &warnmsg );
 
 /*
  * spacing_shift and delay_tolerance are stored as fractions of a month (0..spacing_shift_divisor),

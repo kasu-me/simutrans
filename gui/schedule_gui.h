@@ -164,6 +164,9 @@ public:
 	 */
 	bool apply_imported_schedule(const char *text, schedule_import_mode_t mode, cbuffer_t &errmsg, cbuffer_t &warnmsg);
 
+	/// the line whose schedule is edited: the convoy's line, or none for a convoy without line
+	virtual linehandle_t get_edited_line() const { return old_line; }
+
 	bool infowin_event(event_t const*) OVERRIDE;
 
 	const char *get_help_filename() const OVERRIDE {return "schedule.txt";}

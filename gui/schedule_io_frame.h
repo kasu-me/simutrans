@@ -30,7 +30,7 @@ class schedule_io_frame_t : public savegame_frame_t
 private:
 	bool do_export;
 
-	/// only used while importing; the schedule window the import is applied to
+	/// the schedule window the dialog was opened from; an import is applied to it
 	schedule_gui_t *owner;
 
 	/// export only: the text is built once at construction, so the dialog does not

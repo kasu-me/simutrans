@@ -1325,7 +1325,7 @@ bool schedule_gui_t::apply_imported_schedule(const char *text, schedule_import_m
 
 	// work on a copy, so a rejected import cannot leave the schedule half written
 	schedule_t *imported = schedule->copy();
-	if(  !schedule_import_text(text, imported, mode, player, errmsg, warnmsg)  ) {
+	if(  !schedule_import_text(text, imported, mode, player, get_edited_line(), errmsg, warnmsg)  ) {
 		delete imported;
 		return false;
 	}

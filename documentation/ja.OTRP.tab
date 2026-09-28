@@ -1008,8 +1008,8 @@ The stops do not match the current schedule.\n
 停車地点が現在のスケジュールと一致しません．\n
 Could not apply the schedule.\n
 スケジュールを適用できませんでした．\n
-Could not find the line of the departure slot group.\n
-発車時刻グループの路線が見つかりませんでした．\n
+Could not find the line of the departure slot group. The group was left unchanged.\n
+発車時刻グループの路線が見つからないため，グループは変更しませんでした．\n
 Could not find the next line.\n
 次の路線が見つかりませんでした．\n
 More than one line has this name.\n
