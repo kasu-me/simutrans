@@ -5656,6 +5656,12 @@ sint64 convoi_t::get_stat_converted(int month, int cost_type) const
 
 const char* convoi_t::send_to_depot(bool local)
 {
+	// release the "go home" button first, since some of the paths below return early
+	if (local) {
+		if (convoi_info_t *info = dynamic_cast<convoi_info_t*>(win_get_magic( magic_convoi_info+self.get_id()))) {
+			info->route_search_finished();
+		}
+	}
 	const char *txt;
 	vehicle_t *v = front();
 	// if we are already at depot (e.g. start but wait for clearance), we go back there. 
@@ -5711,11 +5717,6 @@ const char* convoi_t::send_to_depot(bool local)
 	delete route;
 	DBG_MESSAGE("shortest route has ", "%i hops", shortest_route->get_count()-1);
 
-	if (local) {
-		if (convoi_info_t *info = dynamic_cast<convoi_info_t*>(win_get_magic( magic_convoi_info+self.get_id()))) {
-			info->route_search_finished();
-		}
-	}
 	// if route to a depot has been found, update the convoi's schedule
 	if(  !shortest_route->empty()  ) {
 		convoihandle_t c = self;

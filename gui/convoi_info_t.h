@@ -107,7 +107,10 @@ private:
 	// checks if possible / necessary
 	void rename_cnv();
 
-	static bool route_search_in_progress;
+	// set while a "go home" request of this window is waiting for execution.
+	// kept per window: in network games the request may be dropped (e.g. by a resync),
+	// so a shared flag could stay set forever and lock the button of every convoy.
+	bool route_search_in_progress;
 	static const char *sort_text[SORT_MODES];
 
 	void show_hide_statistics( bool show );

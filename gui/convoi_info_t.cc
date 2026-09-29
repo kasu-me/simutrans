@@ -60,9 +60,6 @@ static const bool cost_type_money[convoi_t::MAX_CONVOI_COST] =
 };
 
 
-
-bool convoi_info_t::route_search_in_progress=false;
-
 /**
  * This variable defines by which column the table is sorted
  * Values: 0 = destination
@@ -86,6 +83,7 @@ convoi_info_t::convoi_info_t(convoihandle_t cnv) :
 	scroll_freight(&container_freight, true, true),
 	scroll_stops_list(&container_stops, true, true)
 {
+	route_search_in_progress = false;
 	if (cnv.is_bound()) {
 		init(cnv);
 	}
