@@ -1452,6 +1452,14 @@ bool convoi_t::drive_to()
 					reverse_convoy_coupling();
 					reversing_coupling_needed=reverse_here;
 					get_most_parent_convoi()->reversing_coupling_needed=reverse_here;
+					// The decision is final until the train has been placed on the new route (vorfahren()
+					// resets the flag). The new leading convoy must not judge again: its front vehicle is
+					// still the one in the middle of the train, so the route from there may start in the
+					// other direction and the coupling would be reversed back and forth forever, releasing
+					// the reservation of the train every time.
+					for(  convoihandle_t c = get_most_parent_convoi();  c.is_bound();  c = c->get_coupling_convoi()  ) {
+						c->reverse_coupling_done = true;
+					}
 					get_most_parent_convoi()->state=ROUTING_1;
 					get_most_parent_convoi()->alte_richtung=get_most_parent_convoi()->front()->get_direction();
 					get_most_parent_convoi()->check_electrification();
@@ -2786,6 +2794,11 @@ void convoi_t::vorfahren()
 	while(  c.is_bound()  ) {
 		c->set_coupling_done(false);
 		c->cease_coupling_due_to_length_over=false;
+		// The train leaves the stop. A departure through hat_gehalten() already did this, but a
+		// schedule change at the stop starts the train directly and left the coupled convoys loading.
+		if(  c!=self  &&  c->state==COUPLED_LOADING  ) {
+			c->state = COUPLED;
+		}
 		c = c->get_coupling_convoi();
 	}
 
