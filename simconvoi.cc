@@ -1980,11 +1980,18 @@ void convoi_t::shift_ticks_after_reset(uint32 shift)
 void convoi_t::betrete_depot(depot_t *dep, bool is_loading)
 {
 	// first remove reservation, if train is still on track
-	unreserve_route();
+	// The coupled convoys keep their own copy of the route (right after coupling at a halt it is
+	// still the one they arrived with), so free each of them while the chain is still coupled:
+	// unreserving matches the whole chain then.
+	convoihandle_t c = self;
+	while(  c.is_bound()  ) {
+		c->unreserve_route();
+		c = c->get_coupling_convoi();
+	}
 	clear_reserved_tiles();
 
 	// remove vehicles from world data structure
-	convoihandle_t c = self;
+	c = self;
 	convoihandle_t child = c->get_coupling_convoi();
 	const bool coupling_arrived_depot = child.is_bound();
 	while(c.is_bound()) {
@@ -6251,10 +6258,20 @@ convoihandle_t convoi_t::uncouple_convoi(  bool need_reservation_update  ) {
 	get_most_parent_convoi()->must_recalc_friction_weight();
 	
 	// finally, we need to change reservation!
-	route_t const *r = get_route();
+	// The indices of the detached chain belong to its own copy of the route. That copy equals our
+	// route only after vorfahren() handed it over - right after coupling at a halt the child still
+	// holds the route it arrived with, and indexing our route with its indices hands over (and so
+	// leaves reserved) tiles somewhere else on our way. So walk the child's own route and keep
+	// only the tile of our last vehicle.
+	route_t const *r = ret->get_route();
+	koord3d const own_back_pos = back()->get_pos();
 	if(  need_reservation_update  &&  r  &&  r->get_count()>0  ) {
-		for(  uint16 i = max(ret->find_most_child_convoi()->back()->get_route_index(),1u)-1; i < min(min(ret->front()->get_route_index(),max(back()->get_route_index(),1u)-1),r->get_count()); i++  ) {
+		for(  uint16 i = max(ret->find_most_child_convoi()->back()->get_route_index(),1u)-1; i < min(ret->front()->get_route_index(),r->get_count()); i++  ) {
 			koord3d const pos = r->at(i);
+			if(  pos==own_back_pos  ) {
+				// still occupied by us
+				continue;
+			}
 			grund_t const *gr = welt->lookup(pos);
 			schiene_t * sch1 = gr ? (schiene_t *)gr->get_weg(front()->get_waytype()) : NULL;
 			if(  sch1  ) {
