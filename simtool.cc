@@ -10553,15 +10553,34 @@ bool tool_change_depot_t::init( player_t *player )
 			break;
 		}
 		case 'u': { // coupling convoy in depot
-			if(  !cnv.is_bound()  ) {
-				// in network mode the convoy may have been sold or disassembled
-				// while this command was travelling to the server and back
-				break;
+			// In network games this is executed some time after the convoy was chosen in the depot
+			// window, so either convoy may have been sold, disassembled or left the depot meanwhile.
+			// Coupling a convoy in the depot with a running one would make the depot convoy drag it
+			// back on departure or loading.
+			slist_tpl<convoihandle_t> const& depot_convoys = depot->get_convoy_list();
+			if(  !depot_convoys.is_contained(cnv)  ) {
+				dbg->warning("tool_change_depot_t::init", "convoy %u is not in depot at (%s)", convoi_id, pos.get_str());
+				return false;
 			}
 			convoihandle_t child = convoihandle_t();
 			uint32 coupled_cnv_id = (uint32)strtoul(p, NULL, 10);
 			if( coupled_cnv_id != 0) {
-				child.set_id(coupled_cnv_id);
+				FOR(slist_tpl<convoihandle_t>, const c, depot_convoys) {
+					if(  c.get_id()==coupled_cnv_id  ) {
+						child = c;
+						break;
+					}
+				}
+				if(  !child.is_bound()  ) {
+					dbg->warning("tool_change_depot_t::init", "convoy %u is not in depot at (%s)", coupled_cnv_id, pos.get_str());
+					return false;
+				}
+				// the depot window refuses loops already, but it judged an older state as well
+				for(  convoihandle_t c = child;  c.is_bound();  c = c->get_coupling_convoi()  ) {
+					if(  c==cnv  ) {
+						return false;
+					}
+				}
 			}
 			cnv->set_coupling_convoi(child);
 			// in network mode this runs only after the server round trip,

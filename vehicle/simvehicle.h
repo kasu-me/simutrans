@@ -463,6 +463,9 @@ public:
 
 	virtual void set_convoi(convoi_t *c);
 
+	// only during loading: drops the marker 1 that rdwr_from_convoi() stores in cnv for a saved stop reservation
+	void discard_target_reservation_marker() { if(  cnv==(convoi_t *)1  ) { cnv = NULL; } }
+
 	/**
 	 * Unload freight to halt
 	 * @return sum of unloaded goods

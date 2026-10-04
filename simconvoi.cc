@@ -3324,6 +3324,14 @@ void convoi_t::rdwr(loadsave_t *file)
 			// add to convoi
 			fahr[i] = v;
 		}
+		if(  state==INITIAL  ) {
+			// A convoy in a depot has no stop reservation to restore. karte_t::rdwr_gamestate() files
+			// it into its depot before finish_rd() assigns the vehicles, so the marker must not
+			// remain in place of a convoy pointer there.
+			for(  uint8 i=0;  i<anz_vehikel;  i++  ) {
+				fahr[i]->discard_target_reservation_marker();
+			}
+		}
 		sum_gesamtweight = sum_weight;
 	}
 

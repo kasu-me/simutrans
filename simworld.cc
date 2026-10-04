@@ -6273,6 +6273,17 @@ void karte_t::rdwr_gamestate(loadsave_t *file, loadingscreen_t *ls)
 				ls->set_progress( get_size().y+(get_size().y*convoi_array.get_count())/(2*max_convoi)+128 );
 			}
 		}
+		// A convoy in a depot can only be coupled with convoys in the same depot. Older versions of
+		// the depot coupling tool could link it with one which had left meanwhile; following such a
+		// link below would file that running convoy into the depot. This has to be checked before
+		// any convoy is filed, since that sets the state of the whole coupled chain to INITIAL.
+		FOR( vector_tpl<convoi_t*>, cnv, loading_convoi_array ) {
+			convoihandle_t const child = cnv->get_coupling_convoi();
+			if(  cnv->in_depot()  &&  child.is_bound()  &&  (!child->in_depot()  ||  child->get_pos()!=cnv->get_pos())  ) {
+				dbg->warning("karte_t::rdwr_gamestate()", "convoy %u in depot at (%s) was coupled with convoy %u outside it, uncoupled", cnv->self.get_id(), cnv->get_pos().get_str(), child.get_id());
+				cnv->set_coupling_convoi(convoihandle_t());
+			}
+		}
 		FOR( vector_tpl<convoi_t*>, cnv, loading_convoi_array ) {
 			if(cnv->in_depot()) {
 				grund_t * gr = lookup(cnv->get_pos());
