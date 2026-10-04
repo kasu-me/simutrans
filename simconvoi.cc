@@ -1995,7 +1995,10 @@ void convoi_t::betrete_depot(depot_t *dep, bool is_loading)
 	convoihandle_t child = c->get_coupling_convoi();
 	const bool coupling_arrived_depot = child.is_bound();
 	while(c.is_bound()) {
-		c->uncouple_convoi();
+		// The whole chain leaves the track, so the child must not take over any tiles. Its route
+		// and route indices are stale for a convoy loaded in a depot, and a handover there would
+		// leave tiles reserved by a convoy which never releases them.
+		c->uncouple_convoi(false);
 		if( c->reversed ) {
 			// reversing in depot flag is recorded in c->reversing_needed
 			c->reverse_vehicles();
