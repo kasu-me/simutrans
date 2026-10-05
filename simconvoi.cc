@@ -1986,6 +1986,20 @@ void convoi_t::betrete_depot(depot_t *dep, bool is_loading)
 	convoihandle_t c = self;
 	while(  c.is_bound()  ) {
 		c->unreserve_route();
+		// unreserve_route() only frees the tiles ahead of the last vehicle. The tiles the vehicles
+		// stand on are released by leave_tile() below, but only after uncoupling: a child would then
+		// unreserve with its own handle and leave the tiles the chain reserved under the parent.
+		if(  coupling_convoi.is_bound()  ) {
+			for(  uint8 i=0;  i<c->anz_vehikel;  i++  ) {
+				if(  grund_t* gr = welt->lookup(c->fahr[i]->get_pos())  ) {
+					for(  uint8 wnr=0;  wnr<2;  wnr++  ) {
+						if(  schiene_t* sch = obj_cast<schiene_t>(gr->get_weg_nr(wnr))  ) {
+							sch->unreserve(self);
+						}
+					}
+				}
+			}
+		}
 		c = c->get_coupling_convoi();
 	}
 	clear_reserved_tiles();
