@@ -2817,7 +2817,17 @@ void convoi_t::vorfahren()
 	bool at_dest = false;
 	if(gr  &&  gr->get_depot()) {
 		// start in depot
-		convoihandle_t c = self;
+		// The coupled convoys still hold the route depot_t::can_start_convoi() calculated for
+		// them, which ends at the next schedule entry. If that entry is a waypoint, drive_to()
+		// extended our route up to the next halt, so hand it over - otherwise the coupled
+		// convoys stop at the end of their own route and the train splits there.
+		convoihandle_t c = coupling_convoi;
+		while(  c.is_bound()  ) {
+			c->access_route()->clear();
+			c->access_route()->append(get_route());
+			c = c->get_coupling_convoi();
+		}
+		c = self;
 		while(c.is_bound()) {
 			for(unsigned i=0; i<c->anz_vehikel; i++) {
 				vehicle_t* v = c->fahr[i];
