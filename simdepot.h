@@ -13,6 +13,8 @@
 #include "simline.h"
 #include "dataobj/loadsave.h"
 #include "dataobj/translator.h"
+#include "macros.h"
+#include "utils/simstring.h"
 
 #define VEHICLE_FILTER_RELEVANT 1
 #define VEHICLE_FILTER_GOODS_OFFSET 2
@@ -249,7 +251,7 @@ public:
 	 * vehicle name filter used in depot_frame_t
 	 */
 	const char *get_name_filter() {return depot_filter;}
-	void set_name_filter(const char* c) { strncpy(depot_filter, c, sizeof(depot_filter)-1); depot_filter[sizeof(depot_filter)-1] = 0; }
+	void set_name_filter(const char* c) { tstrncpy(depot_filter, c ? c : "", lengthof(depot_filter)); }
 
 	/**
 	 * Update the depot_frame_t.
