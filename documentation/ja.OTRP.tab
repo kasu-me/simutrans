@@ -1038,6 +1038,8 @@ Map image exported to the screenshot folder.
 マップ画像をスクリーンショットフォルダに出力しました。
 Map image export failed.
 マップ画像の出力に失敗しました。
+You set exclusive map options:
+同時に表示できないマップ表示オプションが指定されています:
 Thumbnails
 サムネイル表示
 Large thumbnails

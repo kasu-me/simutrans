@@ -172,7 +172,7 @@ const char *tool_t::id_to_string(uint16 id)
 		CASE_TO_STRING(TOOL_SHOW_WAY_OFFSET_LABEL);
 		CASE_TO_STRING(UNUSED_TOOL_ADD_MESSAGE);
 		CASE_TO_STRING(UNUSED_WKZ_PWDHASH_TOOL);
-		CASE_TO_STRING(UNUSED_TOOL_EXPORT_MINIMAP);
+		CASE_TO_STRING(TOOL_EXPORT_MINIMAP);
 		}
 	}
 	else if (id & DIALOGE_TOOL) {
@@ -337,7 +337,6 @@ tool_t *create_simple_tool(int toolnr)
 		case TOOL_CHANGE_LINE:         tool = new tool_change_line_t(); break;
 		case TOOL_CHANGE_DEPOT:        tool = new tool_change_depot_t(); break;
 		case UNUSED_WKZ_PWDHASH_TOOL: dbg->warning("create_simple_tool()","deprecated tool [%i] requested", toolnr); return NULL;
-		case UNUSED_TOOL_EXPORT_MINIMAP: dbg->warning("create_simple_tool()","tool [%i] is not available in this build", toolnr); return NULL;
 		case TOOL_CHANGE_PLAYER:   tool = new tool_change_player_t(); break;
 		case TOOL_CHANGE_TRAFFIC_LIGHT:tool = new tool_change_traffic_light_t(); break;
 		case TOOL_CHANGE_ROADSIGN:   tool = new tool_change_roadsign_t(); break;
@@ -364,6 +363,7 @@ tool_t *create_simple_tool(int toolnr)
 		case TOOL_SHOW_WAY_OFFSET_LABEL: tool = new tool_show_way_offset_label_t(); break;
 		case TOOL_SHOW_ONLY_OWN_VEHICLE_STATES:		tool = new tool_only_own_vehicle_states_t(); break;
 		case TOOL_FOLLOW_CONVOI_UNDERGROUND:		tool = new tool_follow_convoi_underground_t(); break;
+		case TOOL_EXPORT_MINIMAP:      tool = new tool_export_minimap_t(); break;
 		default:                    dbg->error("create_simple_tool()","cannot satisfy request for simple_tool[%i]!",toolnr);
 		                            return NULL;
 	}
@@ -637,7 +637,7 @@ void tool_t::init_menu()
 	}
 	for(  uint16 i=0;  i<SIMPLE_TOOL_COUNT;  i++  ) {
 		// To squelch warning on startup
-		if( i == UNUSED_TOOL_ADD_MESSAGE || i == UNUSED_WKZ_PWDHASH_TOOL || i == UNUSED_TOOL_EXPORT_MINIMAP) {
+		if( i == UNUSED_TOOL_ADD_MESSAGE || i == UNUSED_WKZ_PWDHASH_TOOL) {
 			simple_tool.append(NULL);
 			continue;
 		}
