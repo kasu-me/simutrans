@@ -172,6 +172,7 @@ const char *tool_t::id_to_string(uint16 id)
 		CASE_TO_STRING(TOOL_SHOW_WAY_OFFSET_LABEL);
 		CASE_TO_STRING(UNUSED_TOOL_ADD_MESSAGE);
 		CASE_TO_STRING(UNUSED_WKZ_PWDHASH_TOOL);
+		CASE_TO_STRING(UNUSED_TOOL_EXPORT_MINIMAP);
 		}
 	}
 	else if (id & DIALOGE_TOOL) {
@@ -336,6 +337,7 @@ tool_t *create_simple_tool(int toolnr)
 		case TOOL_CHANGE_LINE:         tool = new tool_change_line_t(); break;
 		case TOOL_CHANGE_DEPOT:        tool = new tool_change_depot_t(); break;
 		case UNUSED_WKZ_PWDHASH_TOOL: dbg->warning("create_simple_tool()","deprecated tool [%i] requested", toolnr); return NULL;
+		case UNUSED_TOOL_EXPORT_MINIMAP: dbg->warning("create_simple_tool()","tool [%i] is not available in this build", toolnr); return NULL;
 		case TOOL_CHANGE_PLAYER:   tool = new tool_change_player_t(); break;
 		case TOOL_CHANGE_TRAFFIC_LIGHT:tool = new tool_change_traffic_light_t(); break;
 		case TOOL_CHANGE_ROADSIGN:   tool = new tool_change_roadsign_t(); break;
@@ -635,7 +637,7 @@ void tool_t::init_menu()
 	}
 	for(  uint16 i=0;  i<SIMPLE_TOOL_COUNT;  i++  ) {
 		// To squelch warning on startup
-		if( i == UNUSED_TOOL_ADD_MESSAGE || i == UNUSED_WKZ_PWDHASH_TOOL) {
+		if( i == UNUSED_TOOL_ADD_MESSAGE || i == UNUSED_WKZ_PWDHASH_TOOL || i == UNUSED_TOOL_EXPORT_MINIMAP) {
 			simple_tool.append(NULL);
 			continue;
 		}
@@ -930,7 +932,11 @@ bool tool_t::read_menu(const std::string &menuconf_path)
 			else if (char const* const c = strstart(toolname, "simple_tool[")) {
 				uint8 const toolnr = atoi(c);
 				if(  toolnr<SIMPLE_TOOL_COUNT  ) {
-					if(create_tool) {
+					if(  simple_tool[toolnr] == NULL  ) {
+						// unused slot (e.g. a tool not ported to this build)
+						dbg->warning( "tool_t::read_menu()", "When parsing menuconf.tab: Simple tool %hhu is not available. Tool ignored.", toolnr );
+					}
+					else if(create_tool) {
 						addtool = create_simple_tool( toolnr );
 						*addtool = *(simple_tool[toolnr]);
 						simple_tool.append( addtool );
