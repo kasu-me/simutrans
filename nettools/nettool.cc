@@ -333,6 +333,7 @@ int lock_company(SOCKET socket, uint32, int argc, char **argv)
 	// player number
 	int _n = atoi(argv[0]);
 	if (_n < 0  ||  _n >= 15 /*PLAYER_UNOWNED*/ ) {
+		fprintf(stderr, "Invalid company number %d (must be 0..%d)\n", _n, 15-1);
 		return 3;
 	}
 	uint8 player_nr = _n;
