@@ -1532,7 +1532,7 @@ bool check_pos_win(event_t *ev)
 	if(  menu_selector  &&
 		( menu_selector->is_being_dragged()  ||
 		  (menu_selector->is_hit(x-menuoffset.x, y-menuoffset.y)  &&  y > menuoffset.y+D_TITLEBAR_HEIGHT) )  &&
-		ev->ev_class != EVENT_KEYBOARD) {
+		ev->ev_class != EVENT_KEYBOARD  &&  ev->ev_class != EVENT_STRING) {
 
 		event_t wev = *ev;
 		wev.move_origin(menuoffset);
