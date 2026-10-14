@@ -112,7 +112,7 @@ bool gui_tab_panel_t::action_triggered(gui_action_creator_t *comp, value_t)
 
 bool gui_tab_panel_t::infowin_event(const event_t *ev)
 {
-	if(  (required_size.w>size.w  ||  offset_tab > 0)  &&  ev->ev_class!=EVENT_KEYBOARD  &&  ev->ev_code==MOUSE_LEFTBUTTON  ) {
+	if(  (required_size.w>size.w  ||  offset_tab > 0)  &&  ev->ev_class!=EVENT_KEYBOARD  &&  ev->ev_class!=EVENT_STRING  &&  ev->ev_code==MOUSE_LEFTBUTTON  ) {
 		// buttons pressed
 		if(  left.getroffen(ev->cx, ev->cy)  ) {
 			event_t ev2 = *ev;
@@ -162,7 +162,8 @@ bool gui_tab_panel_t::infowin_event(const event_t *ev)
 		}
 	}
 
-	if(  ev->ev_class == EVENT_KEYBOARD  ||  DOES_WINDOW_CHILDREN_NEED(ev)  ||  get_aktives_tab()->getroffen(ev->mx, ev->my)  ||  get_aktives_tab()->getroffen(ev->cx, ev->cy)) {
+	// keys and strings (e.g. committed IME text) must reach the focused component regardless of the mouse position
+	if(  ev->ev_class == EVENT_KEYBOARD  ||  ev->ev_class == EVENT_STRING  ||  DOES_WINDOW_CHILDREN_NEED(ev)  ||  get_aktives_tab()->getroffen(ev->mx, ev->my)  ||  get_aktives_tab()->getroffen(ev->cx, ev->cy)) {
 		// active tab was hit
 		event_t ev2 = *ev;
 		ev2.move_origin(get_aktives_tab()->get_pos());

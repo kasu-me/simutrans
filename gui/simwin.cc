@@ -1523,7 +1523,7 @@ bool check_pos_win(event_t *ev)
 		tool_t::toolbar_tool[0]->get_tool_selector()  &&
 		tool_t::toolbar_tool[0]->get_tool_selector()->is_hit(x-menuoffset.x, y-menuoffset.y)  &&
 		y > menuoffset.y+D_TITLEBAR_HEIGHT  &&
-		ev->ev_class != EVENT_KEYBOARD) {
+		ev->ev_class != EVENT_KEYBOARD  &&  ev->ev_class != EVENT_STRING) {
 
 		event_t wev = *ev;
 		wev.move_origin(menuoffset);

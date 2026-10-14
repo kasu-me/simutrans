@@ -428,6 +428,9 @@ bool gui_textinput_t::infowin_event(const event_t *ev)
 				len += num_letter;
 			} /* while still characters in string */
 		}
+		cursor_reference_time = dr_time(); // update reference time for cursor blinking
+		// swallow it like a key, so that the string is not delivered to another component
+		return true;
 	}
 	else if(  IS_LEFTCLICK(ev)  ) {
 		// since now the focus could be received while the mouse  no there, we must release it

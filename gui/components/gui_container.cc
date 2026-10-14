@@ -75,7 +75,9 @@ bool gui_container_t::infowin_event(const event_t *ev)
 	}
 
 	// need to change focus?
-	if(  ev->ev_class==EVENT_KEYBOARD  ) {
+	// text input (e.g. a committed IME string) goes only to the focused component like keys:
+	// its mouse coordinates are not meaningful for this window
+	if(  ev->ev_class==EVENT_KEYBOARD  ||  ev->ev_class==EVENT_STRING  ) {
 
 		if(  comp_focus  &&  comp_focus->is_visible()  ) {
 			event_t ev2 = *ev;
@@ -84,7 +86,8 @@ bool gui_container_t::infowin_event(const event_t *ev)
 		}
 
 		// either event not swallowed, or inner container has no focused child component after TAB event
-		if(  !swallowed  ||  (ev->ev_code==SIM_KEY_TAB  &&  comp_focus  &&  comp_focus->get_focus()==NULL)  ) {
+		// (a string event has no key code, ev_code shares its storage with ev_ptr)
+		if(  ev->ev_class==EVENT_KEYBOARD  &&  (!swallowed  ||  (ev->ev_code==SIM_KEY_TAB  &&  comp_focus  &&  comp_focus->get_focus()==NULL))  ) {
 			if(  ev->ev_code==SIM_KEY_TAB  ) {
 				// TAB: find new focus
 				new_focus = NULL;
