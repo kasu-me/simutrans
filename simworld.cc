@@ -7076,6 +7076,9 @@ void karte_t::reset_timer()
 	}
 
 	if(  step_mode&PAUSE_FLAG  ) {
+		// redraw right away; next_step_time may still be stale (e.g. 0 after loading)
+		// and would block all redraws if dr_time() is past 2^31 ms
+		next_step_time = last_tick_sync;
 		intr_disable();
 	}
 	else if(step_mode==FAST_FORWARD) {
