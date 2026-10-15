@@ -165,6 +165,7 @@ void convoi_t::init(player_t *player)
 	next_coupling_index = route_t::INVALID_INDEX;
 	next_coupling_steps = 0;
 
+	suspended_before_departure = false;
 	coupling_done = false;
 	uncouple_done = false;
 
@@ -346,8 +347,9 @@ void convoi_t::reserve_route()
 			}
 		}
 	}
-	else if(  !is_coupled()  &&  !route.empty()  &&  anz_vehikel>0  &&  (is_waiting()  ||  state==DRIVING  ||  state==LEAVING_DEPOT)  ){
+	else if(  !is_coupled()  &&  !route.empty()  &&  anz_vehikel>0  &&  (is_waiting()  ||  state==DRIVING  ||  state==LEAVING_DEPOT  ||  state==SUSPENSION)  ){
 		// reservation is controlled by next_reservation_index.
+		// A suspended convoy keeps the reservation it had when it was stopped.
 		// Start one step back so the rear car's current tile is also reserved with
 		// the correct ribi direction (individual loading only uses ribi_t::none).
 		for(  int idx = max(1u, find_most_child_convoi()->back()->get_route_index()) - 1;  idx < next_reservation_index  &&  idx < (int)route.get_count();  idx++  ) {
@@ -494,7 +496,7 @@ DBG_MESSAGE("convoi_t::finish_rd()","state=%s, next_stop_index=%d", state_names[
 				// wrong alignment here => must relocate
 				if(v->need_realignment()) {
 					// diagonal => convoi must restart
-					realign_position |= ribi_t::is_bend(v->get_direction())  &&  (state==DRIVING  ||  is_waiting());
+					realign_position |= ribi_t::is_bend(v->get_direction())  &&  (state==DRIVING  ||  is_waiting()  ||  state==SUSPENSION);
 				}
 				// if version is 99.17 or lower, some convois are broken, i.e. had too large gaps between vehicles
 				if(  !realign_position  &&  state!=INITIAL  &&  state!=LEAVING_DEPOT  &&  state != COUPLED  &&  state != COUPLED_LOADING  ) {
@@ -602,7 +604,15 @@ DBG_MESSAGE("convoi_t::finish_rd()","next_stop_index=%d", next_stop_index );
 			}
 			fahr[0]->set_leading(true);
 			if(  state != INITIAL  &&  state != EDIT_SCHEDULE  &&  fahr[0]->get_pos() != last_start  ) {
-				state = WAITING_FOR_CLEARANCE;
+				if(  is_suspended()  ) {
+					// stay suspended. Only the occupied tiles were reserved above, so the convoy
+					// has to reserve its way like a departing one when the suspension ends.
+					state = SUSPENSION;
+					suspended_before_departure = true;
+				}
+				else {
+					state = WAITING_FOR_CLEARANCE;
+				}
 			}
 		}
 	}
@@ -3163,8 +3173,13 @@ void convoi_t::rdwr(loadsave_t *file)
 		wait_lock = 60000;
 	}
 
-	bool dummy_bool=false;
-	file->rdwr_bool(dummy_bool);
+	// This bool was unused. It now holds suspended_before_departure, which only matters while
+	// the convoy is suspended; older versions read and ignore it, so no version check is needed.
+	bool departure_pending = state==SUSPENSION  &&  suspended_before_departure;
+	file->rdwr_bool(departure_pending);
+	if(  file->is_loading()  ) {
+		suspended_before_departure = departure_pending;
+	}
 	file->rdwr_long(owner_n);
 	file->rdwr_long(akt_speed);
 	file->rdwr_long(akt_speed_soll);
@@ -4756,31 +4771,64 @@ sint64 convoi_t::calc_restwert() const
 }
 
 
+bool convoi_t::can_be_suspended() const
+{
+	if(  is_coupled()  ) {
+		// a coupled convoy follows its parent
+		return false;
+	}
+	switch(  state  ) {
+		case DRIVING:
+		case LOADING:
+		case WAITING_FOR_CLEARANCE:
+		case WAITING_FOR_CLEARANCE_ONE_MONTH:
+		case WAITING_FOR_CLEARANCE_TWO_MONTHS:
+		case CAN_START:
+		case CAN_START_ONE_MONTH:
+		case CAN_START_TWO_MONTHS:
+		case LEAVING_DEPOT:
+			return true;
+		default:
+			// in a depot, without a valid route, editing the schedule or being destroyed:
+			// there is no state to come back to after the suspension
+			return false;
+	}
+}
+
+
 void convoi_t::set_suspension( bool y )
 {
-	if( is_coupled() ) {
+	if(  y==is_suspended()  ) {
 		// nothing to do
 		return;
 	}
-	if( is_loading() ) {
-		state = y? SUSPENSION_LOADING: LOADING;
-		return;
-	}
-	// end suspension
-	if( !y ) {
-		// re-driving
-		if( state==EDIT_SCHEDULE ) {
-			// please close schedule window.
+	if(  y  ) {
+		if(  !can_be_suspended()  ) {
 			return;
 		}
-		state = DRIVING;
-		return;
-	}
-	// set 
-	if( state!=EDIT_SCHEDULE ) {
+		if(  state==LOADING  ) {
+			state = SUSPENSION_LOADING;
+			return;
+		}
+		suspended_before_departure = state==CAN_START  ||  state==CAN_START_ONE_MONTH  ||  state==CAN_START_TWO_MONTHS;
 		state = SUSPENSION;
 		return;
 	}
+	// end suspension
+	if(  state==SUSPENSION_LOADING  ) {
+		state = LOADING;
+		return;
+	}
+	if(  suspended_before_departure  ) {
+		// the first block is not reserved yet => start again
+		state = CAN_START;
+		wait_lock = 0;
+	}
+	else {
+		// a convoy still leaving the depot has to continue doing so
+		state = (steps_driven>=0) ? LEAVING_DEPOT : DRIVING;
+	}
+	suspended_before_departure = false;
 }
 
 

@@ -389,6 +389,11 @@ private:
 
 	bool signal_check_in_step_request;
 
+	// true if the convoy was suspended before it had departed (CAN_START*). Such a convoy
+	// has not reserved its first block yet, so it has to go through CAN_START again when
+	// the suspension ends instead of driving on as if it had a reservation.
+	bool suspended_before_departure;
+
 	/**
 	 * struct holds new financial history for convoi
 	 */
@@ -660,6 +665,8 @@ public:
 	* suspension
 	*/
 	bool is_suspended() const { return state==SUSPENSION || state==SUSPENSION_LOADING; }
+	/// true if the convoy is in a state that can be suspended
+	bool can_be_suspended() const;
 	void set_suspension( bool y );
 
 	/**
