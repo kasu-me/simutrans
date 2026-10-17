@@ -582,7 +582,7 @@ void rdwr_all_win(loadsave_t *file)
 			FOR(const slist_tpl<depot_t*>, d, depot_t::get_depot_list()) {
 				char filter[64];
 				if(file->is_saving()) {
-					strncpy(filter,d->get_name_filter(),sizeof(d->get_name_filter()));
+					tstrncpy(filter, d->get_name_filter(), lengthof(filter));
 				}
 				file->rdwr_str(filter, sizeof(filter));
 				if(file->is_loading()) {

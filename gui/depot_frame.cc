@@ -659,7 +659,7 @@ DBG_DEBUG("depot_frame_t::depot_frame_t()","get_max_convoi_length()=%i",depot->g
 	vehicle_filter.add_listener(this);
 	add_component(&vehicle_filter);
 
-	strncpy(name_filter_value,depot->get_name_filter(),sizeof(depot->get_name_filter()));
+	tstrncpy(name_filter_value, depot->get_name_filter(), lengthof(name_filter_value));
 	name_filter_input.set_text(name_filter_value, 60);
 	add_component(&name_filter_input);
 	name_filter_input.add_listener(this);
@@ -3089,7 +3089,7 @@ void  depot_frame_t::rdwr( loadsave_t *file)
 	file->rdwr_long(icnv);
 	if(  file->get_OTRP_version()==51  ) {
 		file->rdwr_str(name_filter_value, sizeof(name_filter_value));
-		strncpy(name_filter_value,depot->get_name_filter(),sizeof(depot->get_name_filter()));
+		tstrncpy(name_filter_value, depot->get_name_filter(), lengthof(name_filter_value));
 	}
 	sort_by.rdwr(file);
 	simline_t::rdwr_linehandle_t(file, selected_line);
@@ -3101,7 +3101,7 @@ void  depot_frame_t::rdwr( loadsave_t *file)
 
 		win_set_magic(this, (ptrdiff_t)depot);
 
-		strncpy(name_filter_value,depot->get_name_filter(),sizeof(depot->get_name_filter()));
+		tstrncpy(name_filter_value, depot->get_name_filter(), lengthof(name_filter_value));
 		name_filter_input.set_text(name_filter_value,sizeof(name_filter_value));
 	}
 
