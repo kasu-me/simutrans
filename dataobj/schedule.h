@@ -130,6 +130,13 @@ public:
 	schedule_entry_t const& get_next_entry() const;
 
 	/**
+	 * Returns the entry whose settings apply at the given stop.
+	 * With a next line, the last entry is only a copy of the next line's first stop made when
+	 * the next line was set, so the next line's first stop is returned instead.
+	 */
+	schedule_entry_t const& get_effective_entry( uint8 idx ) const;
+
+	/**
 	 * Set the current stop of the schedule .
 	 * If new value is bigger than stops available, the max stop will be used.
 	 */

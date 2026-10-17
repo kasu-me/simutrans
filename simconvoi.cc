@@ -2150,12 +2150,15 @@ void convoi_t::ziel_erreicht()
 
 	c = self;
 	while(c.is_bound()) {
-		if (  c->get_schedule()->get_current_entry().is_overwrite_max_speed_kmh_of_convoi()  ) {
-			c->set_max_speed_kmh_of_convoi(c->get_schedule()->get_current_entry().max_speed_kmh_of_convoi);
+		// at the handing-over point, the next line's first stop decides the speed settings
+		const schedule_t *c_schedule = c->get_schedule();
+		const schedule_entry_t &entry = c_schedule->get_effective_entry(c_schedule->get_current_stop());
+		if (  entry.is_overwrite_max_speed_kmh_of_convoi()  ) {
+			c->set_max_speed_kmh_of_convoi(entry.max_speed_kmh_of_convoi);
 			c->must_recalc_speed_limit();
 		}
-		if (  c->get_schedule()->get_current_entry().is_overwrite_balance_speed_kmh_of_convoi()  ) {
-			c->set_max_balance_speed_convoi(c->get_schedule()->get_current_entry().balance_speed_kmh_of_convoi);
+		if (  entry.is_overwrite_balance_speed_kmh_of_convoi()  ) {
+			c->set_max_balance_speed_convoi(entry.balance_speed_kmh_of_convoi);
 		}
 		c = c->get_coupling_convoi();
 	}

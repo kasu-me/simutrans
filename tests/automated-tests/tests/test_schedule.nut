@@ -426,7 +426,6 @@ function test_schedule_entry_time_statistics()
 	ASSERT_TRUE(entry_b.journey_time[2] > 0)
 }
 
-
 // --- Rotating the schedule of a line (schedule window: "Set as first") ---
 
 function test_schedule_rotate_line_keeps_convoy_position()
@@ -514,4 +513,89 @@ function test_schedule_rotate_line_keeps_convoy_position()
 			ASSERT_EQUAL(new_entries[i].journey_time[j], old_entry.journey_time[j])
 		}
 	}
+}
+
+// --- Handing-over point to the next line ---
+
+// A convoy handed over to the next line must follow the speed settings of the next line's first
+// stop, even if they were changed after the next line was set (the last entry of the previous
+// line's schedule is only a copy made when the next line was set).
+function test_schedule_next_line_first_stop_speed_override()
+{
+	local pl = player_x(0)
+	local stop_p = coord3d(4, 2, 0)
+	local stop_q = coord3d(13, 2, 0)
+
+	ASSERT_EQUAL(command_x(tool_build_way).work(pl, coord3d(2, 2, 0), coord3d(14, 2, 0), "wooden_sleeper_track"), null)
+	ASSERT_EQUAL(command_x(tool_build_station).work(pl, stop_p, "TrainStop"), null)
+	ASSERT_EQUAL(command_x(tool_build_station).work(pl, stop_q, "TrainStop"), null)
+	ASSERT_EQUAL(command_x.build_depot(pl, coord3d(2, 2, 0), building_desc_x("TrainDepot")), null)
+
+	// line B: Q -> P
+	ASSERT_EQUAL(pl.create_line(wt_rail), true)
+	local line_list = pl.get_line_list()
+	local line_b = line_list[line_list.get_count() - 1]
+	line_b.change_schedule(pl, schedule_x(wt_rail, [
+		schedule_entry_x(stop_q, 0, 0),
+		schedule_entry_x(stop_p, 0, 0),
+	]))
+
+	// line A: P -> Q, then continues on line B
+	ASSERT_EQUAL(pl.create_line(wt_rail), true)
+	line_list = pl.get_line_list()
+	local line_a = line_list[line_list.get_count() - 1]
+	local sched_a = schedule_x(wt_rail, [
+		schedule_entry_x(stop_p, 0, 0),
+		schedule_entry_x(stop_q, 0, 0),
+	])
+	sched_a.next_line = line_b
+	line_a.change_schedule(pl, sched_a)
+	ASSERT_EQUAL(line_a.get_schedule().next_line.get_name(), line_b.get_name())
+
+	// limit the speed at the first stop of line B only after line A got its copy of that stop
+	local limit_kmh = 15
+	local sched_b = line_b.get_schedule()
+	sched_b.entries[0].flags = sched_b.entries[0].flags | (1 << 11) // MAX_SPEED_KMH_OF_CONVOI
+	sched_b.entries[0].max_speed = limit_kmh
+	line_b.change_schedule(pl, sched_b)
+
+	local depot = depot_x(2, 2, 0)
+	depot.append_vehicle(pl, convoy_x(0), vehicle_desc_x("1Diesellokomotive"))
+	local cnv = depot.get_convoy_list()[0]
+	cnv.set_line(pl, line_a)
+	depot.start_all_convoys(pl)
+	debug.set_game_speed(5)
+
+	// on line A, the convoy is not limited
+	local max_kmh_on_a = 0
+	local handed_over = false
+	for (local i = 0; i < 5000; i++) {
+		sleep()
+		if (cnv.get_line().get_name() == line_b.get_name()) {
+			handed_over = true
+			break
+		}
+		max_kmh_on_a = max(max_kmh_on_a, cnv.get_speed())
+	}
+
+	// on line B, the convoy follows the limit set at the handing-over point
+	local max_kmh_on_b = 0
+	local left_q = false
+	for (local i = 0; handed_over && i < 5000; i++) {
+		sleep()
+		local pos = cnv.get_pos()
+		left_q = left_q || pos.x < stop_q.x - 1
+		if (left_q && pos.x == stop_p.x && cnv.get_speed() == 0) {
+			break
+		}
+		max_kmh_on_b = max(max_kmh_on_b, cnv.get_speed())
+	}
+
+	debug.set_game_speed(1)
+
+	ASSERT_TRUE(handed_over)
+	ASSERT_TRUE(left_q)
+	ASSERT_GREATER(max_kmh_on_a, limit_kmh + 5)
+	ASSERT_TRUE(max_kmh_on_b > 0)
+	ASSERT_LESS(max_kmh_on_b, limit_kmh + 2)
 }

@@ -1009,6 +1009,19 @@ schedule_entry_t const& schedule_t::get_next_entry() const {
 	return entries[(current_stop+1)%entries.get_count()];
 }
 
+schedule_entry_t const& schedule_t::get_effective_entry( uint8 idx ) const {
+	if(  idx>=entries.get_count()  ) {
+		return dummy_entry;
+	}
+	if(  idx==entries.get_count()-1  &&  is_next_line_valid()  ) {
+		schedule_entry_t const& first_entry = next_line->get_schedule()->at(0);
+		if(  first_entry.pos==entries[idx].pos  ) {
+			return first_entry;
+		}
+	}
+	return entries[idx];
+}
+
 void schedule_t::advance()
 {
 	if(  entries.empty()  ){

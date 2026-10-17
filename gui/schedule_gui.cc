@@ -1092,18 +1092,22 @@ void schedule_gui_t::update_selection()
 		bt_copy_entry_settings.enable();
 		bt_paste_entry_settings.enable( has_copied_entry  &&  entry_editable );
 
-		bt_max_speed_kmh_of_convoi.enable();
-		bt_max_speed_kmh_of_convoi.pressed = schedule->at(current_stop).is_overwrite_max_speed_kmh_of_convoi();
-		if (  schedule->at(current_stop).is_overwrite_max_speed_kmh_of_convoi()  ) {
+		// the handing-over point to the next line shows the speed settings of the next line's first stop,
+		// which are applied there. They are edited in the next line's schedule.
+		const bool speed_editable = entry_editable;
+		const schedule_entry_t &speed_entry = schedule->get_effective_entry(current_stop);
+		bt_max_speed_kmh_of_convoi.enable(speed_editable);
+		bt_max_speed_kmh_of_convoi.pressed = speed_entry.is_overwrite_max_speed_kmh_of_convoi();
+		if (  speed_editable  &&  speed_entry.is_overwrite_max_speed_kmh_of_convoi()  ) {
 			numimp_max_speed_kmh_of_convoi.enable();
 		}
-		numimp_max_speed_kmh_of_convoi.set_value( schedule->at(current_stop).max_speed_kmh_of_convoi );
-		bt_balance_speed_kmh_of_convoi.enable();
-		bt_balance_speed_kmh_of_convoi.pressed = schedule->at(current_stop).is_overwrite_balance_speed_kmh_of_convoi();
-		if(  schedule->at(current_stop).is_overwrite_balance_speed_kmh_of_convoi()  ) {
+		numimp_max_speed_kmh_of_convoi.set_value( speed_entry.max_speed_kmh_of_convoi );
+		bt_balance_speed_kmh_of_convoi.enable(speed_editable);
+		bt_balance_speed_kmh_of_convoi.pressed = speed_entry.is_overwrite_balance_speed_kmh_of_convoi();
+		if(  speed_editable  &&  speed_entry.is_overwrite_balance_speed_kmh_of_convoi()  ) {
 			numimp_balance_speed_kmh_of_convoi.enable();
 		}
-		numimp_balance_speed_kmh_of_convoi.set_value( schedule->at(current_stop).balance_speed_kmh_of_convoi );
+		numimp_balance_speed_kmh_of_convoi.set_value( speed_entry.balance_speed_kmh_of_convoi );
 		bt_pass_stop.enable();
 		bt_pass_stop.pressed = schedule->at(current_stop).is_pass_stop();
 		// if the next_line is set, the last entry is same as the next_line->get_schedule()->at(0)
