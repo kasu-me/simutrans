@@ -665,7 +665,7 @@ bool schedule_import_text( const char *text, schedule_t *target, schedule_import
 		const char *bad_field = NULL;
 		if(       !e.has_pos                                   ) { bad_field = "pos"; }
 		else if(  e.minimum_loading > 100                      ) { bad_field = "minimum_loading"; }
-		else if(  e.maximum_loading > 100                      ) { bad_field = "maximum_loading"; }
+		else if(  e.maximum_loading > 250                      ) { bad_field = "maximum_loading"; } // overloading allows up to 250%
 		else if(  e.waiting_time_shift > 0xFFFF                ) { bad_field = "waiting_time_shift"; }
 		else if(  e.spacing < 1  ||  e.spacing > world_divisor ) { bad_field = "spacing"; }
 		else if(  e.spacing_shift > world_divisor              ) { bad_field = "spacing_shift"; }
