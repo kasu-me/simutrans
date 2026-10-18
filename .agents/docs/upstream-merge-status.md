@@ -13,9 +13,9 @@
 | キー | 値 |
 | --- | --- |
 | 起点コミット (base) | `d01a02edf26e0faf1c3542d4d854fe6ce52cc9f8` (v58_3) |
-| 追跡済み最新コミット (head) | `dfbd77ae8062482ad16ae1c996eb83dd87737e34` (update ja.OTRP.tab for v62 / v62_0_3) |
-| 対象コミット数 | 92 |
-| 最終更新 | 2026-09-28 |
+| 追跡済み最新コミット (head) | `e2bdac807d898fb444474c690ffa6b623636a9c5` (increment OTRP_VERSION_MINOR / v62_2) |
+| 対象コミット数 | 104 |
+| 最終更新 | 2026-10-17 |
 
 > `head` より新しい本家コミットが増えた場合は skill `update-upstream-status` で追記する。
 
@@ -71,7 +71,10 @@
 | FEAT-21 | 新機能追加 | 停留所の私有化で道・架線の所有権も移転し、費用を精算する | 未取り込み |
 | FEAT-22 | 新機能追加 | 車両オフセット付き線路で対向2編成が同一タイルに進入できる | 未取り込み |
 | FEAT-23 | 新機能追加 | 追越モードに `exclusive_area` / `passing_lane_stop_only` を追加 | 未取り込み |
-| FEAT-24 | 新機能追加 | ミニマップ全体の PNG 出力 | 未取り込み |
+| FEAT-24 | 新機能追加 | ミニマップ全体の PNG 出力 (ツール・MCP・Squirrel API からの出力を含む) | 未取り込み |
+| FEAT-25 | 新機能追加 | マップエディタの建物等をサムネイルで選択する | 未取り込み |
+| FEAT-26 | 新機能追加 | スケジュール編集で選択した停留所を先頭にする (Make first) | 取り込み不要 |
+| FEAT-27 | 新機能追加 | 市街建築物の選択状態をプリセットとして保存/読込する | 未取り込み |
 | FIX-01 | バグ修正 | choose 標識/choose 区間終端が経路上にある場合の判定 | 取り込み済み |
 | FIX-02 | バグ修正 | pak の `clip_below` 設定の読み込み順序 | 取り込み済み |
 | FIX-03 | バグ修正 | 一方通行詳細設定の waytype 判定漏れと経路喪失時の異常終了 | 取り込み済み |
@@ -83,8 +86,14 @@
 | FIX-09 | バグ修正 | 誘導標識を使わない軌道系連結で、ホーム上の待機編成を見つけられない | 取り込み済み |
 | FIX-10 | バグ修正 | 道路が無いタイルでの道路参照による異常終了と、連結/解放時の `route_index` 不整合 | 取り込み済み |
 | FIX-11 | バグ修正 | 一方通行詳細設定の標識がある道路で、一方通行モード (`oneway_mode`) の進行方向制限が経路判定に効かない | 取り込み済み |
-| MISC-01 | その他 | 本家バージョン番号のインクリメント (v59〜v62_0_3) | 取り込み不要 |
-| MISC-02 | その他 | 日本語訳 `ja.OTRP.tab` の更新 (v59/v60/v61/v62分) | 未取り込み |
+| FIX-12 | バグ修正 | 市街建築物を複数タイルの建物に建て替える際の異常終了 | 取り込み済み |
+| FIX-13 | バグ修正 | `-load net:` で起動したときに pakset のチェックサムを照合しない | 取り込み済み |
+| FIX-14 | バグ修正 | 編成の譲渡で会社ごとの編成数統計が更新されない | 取り込み済み |
+| FIX-15 | バグ修正 | 車庫の車両名フィルタ文字列のコピー長の誤り | 取り込み済み |
+| FIX-16 | バグ修正 | パスワード画面と会社ロック関連のネットワークコマンドの不具合 | 取り込み済み |
+| FIX-17 | バグ修正 | シンプルツール番号のずれ (`TOOL_HALT_PERMISSION` を enum 末尾へ移動) | 取り込み済み |
+| MISC-01 | その他 | 本家バージョン番号のインクリメント (v59〜v62_2) | 取り込み不要 |
+| MISC-02 | その他 | 日本語訳 `ja.OTRP.tab` の更新 (v59〜v62_2分) | 未取り込み |
 | MISC-03 | その他 | SDL3 バックエンド対応と CI のビルド構成更新 (Ubuntu 分は後に削除) | 未取り込み |
 | MISC-04 | その他 | `obj_t::finish_rd()` にセーブの OTRP バージョンを渡す基盤変更 | 未取り込み |
 | MISC-05 | その他 | OTRP 用アドオン pak (矢印・ダミー貨物) を `documentation/` に同梱 | 未取り込み |
@@ -918,8 +927,10 @@
 - **状態**: 未取り込み
 - **概要**: ミニマップ (地図) ウィンドウに「マップ画像を出力」ボタンを追加し、
   現在の表示設定・ズームでマップ全体を PNG ファイルに書き出せるようにする。
+  後続コミットで、マップウィンドウを開かずにツール・MCP・Squirrel API から、任意のマップモードで出力できるようになった。
 - **上流コミット**:
-  - `859a2244d` Add full minimap PNG export (#744)
+  - `859a2244d` Add full minimap PNG export (#744) — 本体
+  - `43f0ce22e` add tools, mcp and squirrel api scripts for export minimap (#753) — 機能拡張 (ツール/MCP/Squirrel API からの出力とマップモード指定)
 - **主な変更箇所**:
   - `io/raw_image.h`, `io/raw_image_png.cc` — `raw_image_png_writer_t` (行単位に書き出す
     逐次 PNG ライタ) を新設。メモリに載らない大きさの画像に対応する
@@ -929,13 +940,126 @@
     画面サイズ単位のタイルに分けて描画しつつ、最大32MBの帯 (strip) 単位で PNG へ流し込む
   - `gui/map_frame.{h,cc}` — `b_export_map` ボタンと結果通知 (`news_img`) を追加
   - `documentation/ja.OTRP.tab` — 「マップ画像を出力」等 (MISC-02 参照)
+  - **以下は `43f0ce22e` (機能拡張) の分**:
+  - `gui/minimap.{h,cc}` — `export_to_png(filename, export_mode)` オーバーロードを追加し、従来の
+    `export_to_png(filename)` は `env_t::default_mapmode` で委譲する形に変更。描画本体を `render_to_png()` に分離。
+    static の `parse_display_mode(str, mode_out)` (10進/`0x` のビットマスク、または `MAP_TOWN|MAP_LINES` 形式の名前列。
+    区切りは `|` `+` `,` 空白、`MAP_` 省略可・大文字小文字を区別しない、空文字/`default` は現在のモード) と
+    `check_display_mode(mode, conflicts)` (同時に描画できないモードの組み合わせ検出) を新設
+  - `simtool.{h,cc}`, `simmenu.{h,cc}` — シンプルツール `TOOL_EXPORT_MINIMAP` (`tool_export_minimap_t`) を追加。
+    `default_param` でマップモードを指定でき、ツールチップにも表示する
+  - `network/mcp_tools.cc` — MCP ツール `export_minimap` (任意引数 `mapmode`: 文字列または整数) を追加
+  - `script/api/api_gui.cc` — Squirrel API `gui.export_minimap()` / `gui.export_minimap_with_mode(mapmode)` を追加
+    (戻り値は出力ファイルのパス、失敗時は空)
+  - `gui/map_frame.cc` — モードが衝突する場合は `export_to_png()` 側が警告付きで結果を通知するので、ボタン側では通知を出さない
+  - `documentation/ja.OTRP.tab` — 「同時に表示できないマップ表示オプションが指定されています:」(MISC-02 参照)
 - **詳細**: 出力先はスクリーンショットフォルダ (`simmap00.png` から連番)。
   出力中はミニマップのオフセット/サイズとクリップ領域を一時的に差し替え、終了後に復元する。
+  - `43f0ce22e` では出力中だけマップモードを差し替え、終了後に元のモードと可視状態へ戻す。
+    マップウィンドウが閉じている場合は `map_data` を破棄する (非表示のまま車両がピクセル更新を続けないように)。
+    衝突する組み合わせ (基本モード2つ、停留所系モード2つ、基本モードと `MAP_HIDE_CONTOUR` / `MAP_CLIMATES` の併用等) でも
+    出力自体は行い、ログと結果ウィンドウで警告する (MCP の応答では `warning` フィールド)。
 - **取り込み時の注意**: セーブ形式への影響なし。`display_snapshot()` のオーバーロード追加のため
   バックエンド側 (`simgraph16.cc` / `simgraph0.cc`) の追従が必要。
+  - `43f0ce22e` の `TOOL_EXPORT_MINIMAP` はシンプルツール enum の末尾に追加されるが、直後の本家 `57b53b49d` (FIX-17) で
+    `TOOL_HALT_PERMISSION` がさらに後ろへ移されるため、ツール番号は FIX-17 とセットで決まる (FIX-17 参照)。
+  - `develop-kasumi` では FIX-17 の取り込み時に 53 番を `UNUSED_TOOL_EXPORT_MINIMAP` として確保済み (`11d84abb5`)。
+    拡張分を取り込む際は enum の `UNUSED_TOOL_EXPORT_MINIMAP` を `TOOL_EXPORT_MINIMAP` に置き換え、
+    `simmenu.cc` の未使用枠扱い (`id_to_string()` / `create_simple_tool()` / `init_menu()` の3箇所) を外すこと。
+  - `tool_export_minimap_t` は `is_init_network_safe()` が真なので、ネットワークゲームでも各クライアントがローカルに実行する。
+  - MCP ツールの追加先 `network/mcp_tools.cc` は FEAT-14 (`get_tile_info`) と同じ `TOOL_DEFS[]` を触る。
 - **develop-kasumi 側コミット**: —
 - **備考**: 状態確認用の識別子は `io/raw_image.h` の `raw_image_png_writer_t`、
-  または `gui/minimap.h` の `export_to_png`。
+  または `gui/minimap.h` の `export_to_png` (本体)、`simtool.h` の `tool_export_minimap_t` (`43f0ce22e` 分)。
+
+### FEAT-25: マップエディタの建物等をサムネイルで選択する
+
+- **分類**: 新機能追加
+- **状態**: 未取り込み
+- **概要**: 記念物・産業・市街建築物・樹木・地上物の各配置ダイアログに「サムネイル表示」「大きく表示」を追加し、
+  名前の一覧の代わりに画像の格子から選べるようにする。
+- **上流コミット**:
+  - `8bdf0e5b8` Add buildings thumbnail selection (#762)
+- **主な変更箇所**:
+  - `display/simgraph.h`, `display/simgraph16.cc`, `display/simgraph0.cc` — `display_base_img_scaled(image_id, scr_rect)` を新設。
+    画像のズームキャッシュを変えずに、透過/半透過ランを保ったまま任意の矩形へ縮小描画する
+  - `gui/components/gui_building.{h,cc}` — `gui_building_t::draw_scaled(offset, bounds)` を追加 (建物全体を縦横比を保って矩形に収める)
+  - `gui/components/gui_scrolled_list.{h,cc}` — `set_grid_cell_width()` を追加し、固定幅セルの格子レイアウトに切り替えられるようにする (0 で従来の1列リスト)
+  - `gui/extend_edit.{h,cc}` — 一覧要素 `building_thumbnail_t` / `image_thumbnail_t` を新設。
+    `extend_edit_gui_t` に `bt_thumbnails` / `bt_large_thumbnails`、`init_thumbnail_options()`、
+    `get_thumbnail_size()`、`update_thumbnail_columns()`、`show_selected_building()` を追加
+  - `gui/curiosity_edit.cc`, `gui/factory_edit.cc`, `gui/citybuilding_edit.cc`, `gui/baum_edit.cc`,
+    `gui/groundobj_edit.{h,cc}` — 各ダイアログでサムネイル表示に対応
+  - `documentation/ja.OTRP.tab` — 「サムネイル表示」「大きく表示」(MISC-02 参照)
+- **詳細**:
+  - 建物のセルの大きさは、車庫の車両選択と同じ `bahndepot_x_grid` / `bahndepot_y_grid` (pak 側の上書き含む) を基準にする。
+  - 表示モードを切り替えても複数選択の状態を保つ。
+  - 表示モードはウィンドウ状態 (`rdwr()`) のボタンフラグの空きビットに保存される
+    (`extend_edit_gui_t` は「大きく表示」を bit6、樹木/地上物の「サムネイル表示」を bit5。
+    記念物・市街建築物は各ダイアログのフラグの bit3、産業は bit6)。
+- **取り込み時の注意**: セーブ形式への影響なし (ウィンドウ状態のビット追加のみ)。
+  FEAT-27 (市街建築物のプリセット) と同じ `gui/citybuilding_edit.cc` を触るため、両方を取り込む場合は本項目を先にする
+  (本家でもこの順)。
+- **develop-kasumi 側コミット**: —
+- **備考**: 状態確認用の識別子は `gui/extend_edit.h` の `building_thumbnail_t`、
+  または `display/simgraph.h` の `display_base_img_scaled`。
+
+### FEAT-26: スケジュール編集で選択した停留所を先頭にする (Make first)
+
+- **分類**: 新機能追加
+- **状態**: 取り込み不要
+- **概要**: スケジュール編集画面に「先頭へ」(`Make first`) モードを追加し、クリックした停留所が先頭になるよう
+  順序を保ったままスケジュールを回転させる。
+- **上流コミット**:
+  - `a560206be` Add schedule make first button (#749)
+- **主な変更箇所**:
+  - `gui/schedule_gui.h` — 編集モード enum に `making_first` を追加、`button_t bt_make_first` を追加
+  - `gui/schedule_gui.cc` — 「往復切符」ボタンの行 (`add_table(7,1)`) に `bt_make_first` (roundbox_state) を配置。
+    追加/挿入/削除と排他のモードボタンとして扱い、`update_tool()` ではツールを解除する。
+    モード中に停留所をクリックすると、`move_entry_backward()` を (行番号) 回繰り返して回転させ、
+    その後は追加モードに戻る
+  - `documentation/ja.OTRP.tab` — 「先頭へ」「選択したエントリが先頭となるようにスケジュールを並べ替えます。」(MISC-02 参照)
+- **詳細**: Next line の引き継ぎ用ダミーエントリがある場合は、それを末尾に残したまま実エントリだけを回転させる。
+  GUI 上の並べ替えのみで、編成の行き先 (`current_stop`) や発車枠の項目番号の追従は行わない。
+- **取り込み時の注意**: セーブ形式への影響なし。
+- **develop-kasumi 側コミット**: —
+- **備考**: **取り込み不要 (2026-10-18 ユーザー判断)**。`develop-kasumi` に同等の機能を独自に実装済みのため
+  (`84592de0b`「スケジュール編集画面に「この駅を先頭に」ボタンを追加」、ボタン `bt_rotate_to_front` / `schedule_t::rotate_to_front()`)。
+  独自版はモードではなく選択中の停留所に対する即時ボタンで、路線編成への反映時の行き先の引き継ぎ、
+  発車枠の項目番号の更新、所要時間記録の引き継ぎまで対応している。状態確認用の識別子は `gui/schedule_gui.h` の `bt_make_first`。
+
+### FEAT-27: 市街建築物の選択状態をプリセットとして保存/読込する
+
+- **分類**: 新機能追加
+- **状態**: 未取り込み
+- **概要**: 市街建築物の配置ダイアログで複数選択した建物の組を「プリセット」としてファイルに保存し、
+  後から読み込んで同じ選択状態を復元できるようにする (建物パレット)。
+- **上流コミット**:
+  - `42d5061e9` Add city building palette feature (#748)
+- **主な変更箇所**:
+  - `dataobj/citybuilding_preset.{h,cc}` (新規) — `citybuilding_preset_t` (建物名の配列) と
+    `citybuilding_preset_load()` / `citybuilding_preset_save()` / `citybuilding_preset_recover()` /
+    `citybuilding_preset_file_state()` を追加。1プリセット = 1ファイルの tab 形式 (`building[n]=<名前>`、`%XX` エスケープ)
+  - `gui/citybuilding_preset_frame.{h,cc}` (新規) — `savegame_frame_t` 派生のファイル選択ダイアログ
+    `citybuilding_preset_frame_t`。上書き時の確認ダイアログ、破損ファイルの復旧結果の通知
+  - `gui/citybuilding_edit.{h,cc}` — `bt_preset_load` / `bt_preset_save`、`load_preset()` / `save_preset()` を追加。
+    読込時は回転設定を維持する (`restoring_preset`)。未使用だった `lb_name_filter_input` を削除
+  - `gui/savegame_frame.{h,cc}` — `close_after_ok()` (OK 後にウィンドウを閉じるか) と `get_input_filename()` を追加
+  - `gui/simwin.h` — `magic_citybuilding_preset_confirm` / `magic_citybuilding_preset_file` を追加
+  - `Makefile`, `Simutrans-Main.vcxitems` — 新規ソースの追加
+  - `documentation/ja.OTRP.tab` — 「プリセットを読込」「プリセットを保存」等 16 語 (MISC-02 参照)
+- **詳細**:
+  - 保存先は `env_t::pak_dir + "building_preset/"` (使用中の pakset のディレクトリ配下)。
+  - 書き込みは `.tmp` に書いてから置き換え、旧ファイルは一時的に `.bak` に退避する。
+    中断で `.bak` / `.tmp` が残った場合は次回の読込/保存時に復旧し、壊れたファイルは `.corrupt[.n]` として残す。
+  - 読込時は建物名で照合し、見つかった件数を「%u / %u 件を選択」で通知する (pakset に無い建物は無視)。
+- **取り込み時の注意**: セーブ形式への影響なし。
+  - 保存先が pakset のディレクトリなので、pakset を書き込みできない場所に置いている環境では保存できない。
+  - FEAT-25 と同じ `gui/citybuilding_edit.cc` を触る。本家では FEAT-25 の後に入っているため、その順で取り込む方が競合が少ない。
+  - `savegame_frame_t` に仮想関数が増えるため、`develop-kasumi` 側で同クラスを改造していれば追従が必要。
+- **develop-kasumi 側コミット**: —
+- **備考**: 状態確認用の識別子は `dataobj/citybuilding_preset.h` の `citybuilding_preset_t`、
+  または `gui/citybuilding_edit.h` の `bt_preset_load`。
 
 ### MISC-01: 本家バージョン番号のインクリメント
 
@@ -960,6 +1084,8 @@
   - `252e90dfa` increment OTRP_VERSION_PATCH (v62_0_1)
   - `aa09b864f` increment OTRP_VERSION_PATCH (v62_0_2)
   - `5e2e05510` increment OTRP_VERSION_PATCH (v62_0_3)
+  - `e495a7ba5` increment OTRP_VERSION_MINOR (v62_1)
+  - `e2bdac807` increment OTRP_VERSION_MINOR (v62_2)
 - **主な変更箇所**: `simversion.h` — `OTRP_VERSION_MAJOR` / `OTRP_VERSION_MINOR` / `OTRP_VERSION_PATCH`
 - **詳細**: —
 - **取り込み時の注意**:
@@ -970,7 +1096,7 @@
   - `OTRP_VERSION_MAJOR >= 60` を要求する項目: FEAT-07
   - `OTRP_VERSION_MAJOR >= 61` を要求する項目: FEAT-17 / FEAT-18 / FEAT-19 / MISC-04
   - `OTRP_VERSION_MAJOR >= 62` を要求する項目: FEAT-18 (`8076cc1f8` の航送収入・通行料設定の分)
-  - 上記以外の項目 (FEAT-09 拡張分、FEAT-11〜FEAT-16、FEAT-20〜FEAT-24、FIX-03〜FIX-11、
+  - 上記以外の項目 (FEAT-09 拡張分、FEAT-11〜FEAT-16、FEAT-20〜FEAT-27、FIX-03〜FIX-17、
     MISC-03 / MISC-05) は `get_OTRP_version()` によるセーブ形式の分岐を持たないため、バージョン引き上げは不要。
 - **develop-kasumi 側コミット**: — (独自運用: `cf52a5750` 等)
 - **備考**: バージョン番号自体は取り込まない方針。上記の依存関係のみ管理する。
@@ -979,7 +1105,7 @@
 
 - **分類**: その他
 - **状態**: 未取り込み
-- **概要**: v59 / v60 / v61 / v62 で追加された機能に対応する日本語訳の追加。
+- **概要**: v59 / v60 / v61 / v62 (v62_1 / v62_2 を含む) で追加された機能に対応する日本語訳の追加。
 - **上流コミット**:
   - `8da4abc3e` update ja.OTRP.tab for v59
   - `d65dc2063` add ja.OTRP.tab for v60
@@ -1006,6 +1132,12 @@
     「振分を利用して編成長より短いホームに進入できます」(FEAT-20)、
     `This tile has a second, disconnected way of the same type:` →「このタイルは2種類の線路等があります」
     (FEAT-16 の `58bb2b989`)。
+  - v62_1 / v62_2 分は翻訳のみのコミットは無く、すべて機能コミットに同梱されている:
+    `8bdf0e5b8` の「サムネイル表示」「大きく表示」(FEAT-25)、
+    `a560206be` の「先頭へ」「選択したエントリが先頭となるようにスケジュールを並べ替えます。」(FEAT-26)、
+    `42d5061e9` の「プリセットを読込」「プリセットを保存」「プリセットの上書き」等 16 語 (FEAT-27)、
+    `43f0ce22e` の「同時に表示できないマップ表示オプションが指定されています:」(FEAT-24 拡張分)。
+    なお `develop-kasumi` は FEAT-26 相当の独自機能用に `Set as first` 等の訳を独自に登録している (`84592de0b`)。
   - v60_1 〜 v61 の間は翻訳のみのコミットは無く、機能コミットに同梱されている:
     `5461ae2d2` の「発車許可を出す路線を指定」(FEAT-02)、
     `eaae6f8b2` の「通行方向の詳細設定をコピー/貼り付け」「通行可能な方向」等 (FEAT-13)

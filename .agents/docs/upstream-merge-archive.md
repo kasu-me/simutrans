@@ -299,3 +299,145 @@
     優先して参照するが、`develop-kasumi` には同一 waytype の2脚が無いため `get_weg(waytype)` のみとした。
 - **develop-kasumi 側コミット**: `e31fd6d88`
 - **備考**: 関連項目 FEAT-16 / FIX-03。状態確認用の識別子は `boden/wege/strasse.h` の `get_active_ribi_mask_oneway`。
+
+### FIX-12: 市街建築物を複数タイルの建物に建て替える際の異常終了
+
+- **分類**: バグ修正
+- **状態**: 取り込み済み
+- **概要**: 市街建築物の建て替え (`renovate_city_building()`) で、複数タイルの建物に置き換える際に
+  他の都市に属する建物や市街建築物でないタイルを巻き込んで異常終了する問題を修正する。
+- **上流コミット**:
+  - `5a763f099` BUG FIX: crash when upgrade to multitile building (#756)
+- **主な変更箇所**:
+  - `simcity.cc` — `stadt_t::renovate_city_building()` の近傍探索で、隣の建物が市街建築物であることに加えて
+    **同じ都市に属する** (`testgb->get_stadt() == this`) ことを条件にする。
+    さらに置き換えの直前に、置き換える全タイルが「この都市の市街建築物」であることを確認し、
+    1つでも外れたら建て替えを中止する
+- **詳細**: 他都市のタイルを置き換えようとすると `update_gebaeude_from_stadt()` が失敗する
+  (コード中のコメントより)。
+- **取り込み時の注意**: セーブ形式への影響なし。対象のコードは v58_3 時点と同一で、そのまま cherry-pick できる見込み。
+- **develop-kasumi 側コミット**: `10a37e4c1`
+- **備考**: —
+
+### FIX-13: `-load net:` で起動したときに pakset のチェックサムを照合しない
+
+- **分類**: バグ修正
+- **状態**: 取り込み済み
+- **概要**: コマンドライン引数 `-load net:<server>` でサーバーへ直接参加する場合に、
+  pakset の一致を確認せずに参加してしまう問題を修正する (参加前にチェックサムを照合する)。
+- **上流コミット**:
+  - `ae80b9154` BUG FIX: add pakset checksum when using -load:net (#755)
+- **主な変更箇所**:
+  - `dataobj/gameinfo.{h,cc}` — `network_gameinfo()` で埋める用の空の既定コンストラクタ `gameinfo_t()` を追加
+  - `simmain.cc` — `check_pakset_checksum(server, msg)` を新設。`simu_main()` で `loadgame` が `net:` で始まる場合、
+    `network_gameinfo()` でサーバーの pakset チェックサムを取得して自分のものと比較し、
+    不一致なら `network_compare_pakset_with_server()` で差分を取得して参加を取りやめる (既定マップで起動)。
+    起動後に差分を `help_frame_t` (`magic_pakset_info_t`) で表示する
+- **詳細**: サーバーに問い合わせできなかった場合は照合を省略し、通常の参加処理にエラー報告を任せる。
+  GUI のサーバー一覧 (`server_frame_t`) は従来から pakset チェックサムの一致を表示しており、本修正はコマンドライン経由が対象。
+- **取り込み時の注意**: セーブ形式・ネットワークプロトコルへの影響なし。
+  ローカルのネットワーク再現実験では `-load net:` で参加しているため、取り込み後は
+  pakset が不一致だと参加せずに既定マップが立ち上がる挙動に変わる点に注意。
+- **develop-kasumi 側コミット**: `6c7b58822`
+- **備考**: 状態確認用の識別子は `simmain.cc` の `check_pakset_checksum`。
+
+### FIX-14: 編成の譲渡で会社ごとの編成数統計が更新されない
+
+- **分類**: バグ修正
+- **状態**: 取り込み済み
+- **概要**: 編成を他社へ譲渡 (`trade_convoi()`) した際に、旧所有者・新所有者の編成数の統計が増減しない問題を修正する。
+- **上流コミット**:
+  - `d0d7ec16e` BUG FIX: convoi count when trade convoi (#760)
+- **主な変更箇所**:
+  - `simconvoi.cc` — `convoi_t::trade_convoi()` で、所有者変更前に `owner->book_convoi_number(-1)`、
+    変更後に新所有者で `owner->book_convoi_number(1)` を呼ぶ
+- **詳細**: —
+- **取り込み時の注意**: セーブ形式への影響なし (財務統計の値が正しくなるだけ)。2行の追加のみ。
+- **develop-kasumi 側コミット**: `a9f1ae415`
+- **備考**: —
+
+### FIX-15: 車庫の車両名フィルタ文字列のコピー長の誤り
+
+- **分類**: バグ修正
+- **状態**: 取り込み済み
+- **概要**: 車庫ウィンドウの車両名フィルタを `sizeof(ポインタ)` の長さでコピーしていたため、
+  ウィンドウ状態の保存/復元 (ネットワーク再同期を含む) のたびに先頭 8 バイト程度しか残らず、
+  日本語などのマルチバイト文字が途中で切れて文字化けする問題を修正する。
+- **上流コミット**:
+  - `9e6810f68` BUG FIX: fix depot filter (#761)
+- **主な変更箇所**:
+  - `gui/depot_frame.cc` — コンストラクタと `rdwr()` の `strncpy(..., sizeof(depot->get_name_filter()))` を
+    `tstrncpy(..., lengthof(name_filter_value))` に置き換え。`set_text()` の長さも `lengthof(name_filter_value)` に統一。
+    OTRP v51 形式の読み込み経路では `depot` が NULL の場合にコピーしない
+  - `gui/simwin.cc` — `rdwr_all_win()` の車庫フィルタ保存で同様に `tstrncpy()` を使い、作業用バッファ `filter[64]` を空文字で初期化
+  - `simdepot.h` — `set_name_filter()` を `tstrncpy()` 化し、NULL を空文字として扱う。`macros.h` / `utils/simstring.h` を include
+- **詳細**: PR 本文の履歴には車庫ウィンドウのレイアウト変更・スクロール修正・サーバーでのエラーウィンドウ抑止が並ぶが、
+  squash 後の差分は上記のフィルタ修正のみ。
+- **取り込み時の注意**: セーブ形式への影響なし。
+- **develop-kasumi 側コミット**: `9e7f1072c` (先行して独自修正 `f8e8a9a00`)
+- **備考**: `develop-kasumi` は同じ不具合を `f8e8a9a00`「BUG FIX: depot vehicle name filter got garbled after a network resync」で
+  先に独自修正していた (`depot_frame.cc` の `sizeof` → `tstrncpy(..., lengthof(...))` 3箇所、`simwin.cc`、`set_name_filter()` の終端保証)。
+  残りの防御的修正 ((a) `set_text()` の長さの統一、(b) v51 経路の `depot` NULL ガード、(c) `simwin.cc` の `filter[64] = ""` 初期化、
+  (d) `set_name_filter()` の NULL 引数ガード) を `9e7f1072c` で cherry-pick した。競合箇所はすべて本家側を採用しており、
+  取り込み後の該当箇所は本家と同一。
+
+### FIX-16: パスワード画面と会社ロック関連のネットワークコマンドの不具合
+
+- **分類**: バグ修正
+- **状態**: 取り込み済み
+- **概要**: 会社のパスワード/ロック操作まわりの細かな不具合をまとめて修正する
+  (空き会社番号への認証要求でサーバーが異常終了しうる、「Clear Password」ボタンの状態が更新されない、等)。
+- **上流コミット**:
+  - `ed547bf0f` fix nettool to use players>15 (#759)
+- **主な変更箇所**:
+  - `network/network_cmd_ingame.cc` —
+    `nwc_auth_player_t::execute()` で要求された会社を先に `welt->get_player()` で引き、存在しない番号/空き枠なら警告を出して何もしない
+    (従来は NULL を逆参照していた)。ログ出力を 64 ビットのビット列表示に変更。
+    `nwc_service_t::execute()` の会社ロック解除で、`unlock_player_all()` の除外対象にソケット (`packet->get_sender()`) ではなく
+    クライアント ID (`sender_id`) を渡すよう修正
+  - `gui/password_frame.{h,cc}` — 「Clear Password」ボタンの有効条件を `update_unlock_button()` に切り出し、
+    `draw()` のたびに再評価する (サーバー応答や他クライアント・nettool による変更を、ウィンドウ表示中にも反映)。
+    解除要求の応答待ち (`is_unlock_pending()`) の間はボタンを無効化し、押されても二重送信しない
+  - `nettools/nettool.cc` — `lock_company` で範囲外の会社番号を指定した場合にエラーメッセージを出す
+- **詳細**: PR 名は「players>15」だが、差分の内容は会社数上限 (FEAT-01) に依存しない。
+  コミット本文の履歴は FEAT-01 の作業ブランチのものがそのまま残っている。
+  `unlock_player_all()` の第3引数はクライアント ID (`uint32 except_client`) なので、ソケットを渡すと
+  除外すべきクライアントとは別のクライアントが除外されるか、誰も除外されない。
+- **取り込み時の注意**: セーブ形式・ネットワークプロトコルへの影響なし。
+  対象のコードは v58_3 時点と同一 (`develop-kasumi` でも未修正) で、FEAT-01 を取り込まなくても単独で適用できる見込み。
+  ログ出力の `%llx` は `player_unlocked` を `unsigned long long` にキャストしているので、
+  FEAT-01 未取り込みのままでも問題ない。
+- **develop-kasumi 側コミット**: `1c639142e`
+- **備考**: 関連項目 FEAT-01。状態確認用の識別子は `gui/password_frame.h` の `update_unlock_button`。
+  `nettools/nettool.cc` は FEAT-01 未取り込みで `lock_company()` の上限が `15 /*PLAYER_UNOWNED*/` の直書きのままのため競合した。
+  上限はそのままにエラーメッセージだけを取り込んだ (表示は `15-1`)。FEAT-01 を取り込む際は `PLAYER_UNOWNED` に置き換えること。
+
+### FIX-17: シンプルツール番号のずれ (`TOOL_HALT_PERMISSION` を enum 末尾へ移動)
+
+- **分類**: バグ修正
+- **状態**: 取り込み済み
+- **概要**: 本家 #540 (`f0fac8dcf`, v58_3 より前) で停留所の権限設定ツール `TOOL_HALT_PERMISSION` が
+  シンプルツール enum の途中に挿入され、後続ツールの番号が1つずつずれていたのを、末尾へ移して元の番号に戻す。
+- **上流コミット**:
+  - `57b53b49d` change menubar number (#764)
+- **主な変更箇所**:
+  - `simmenu.h` — シンプルツール enum で `TOOL_HALT_PERMISSION` を `TOOL_CHANGE_HALT` の直後から
+    `TOOL_EXPORT_MINIMAP` (FEAT-24 拡張分) の後ろへ移動
+- **詳細**: 番号の変化は次のとおり (`develop-kasumi` / v58_3 → 本家修正後)。
+  `TOOL_HALT_PERMISSION` 47 → 54、`TOOL_CHANGE_FACTORY` 48 → 47、`TOOL_RESET_GAME_SPEED` 49 → 48、
+  `TOOL_FIX_GAME_SPEED` 50 → 49、`TOOL_SHOW_WAY_OFFSET_LABEL` 51 → 50、
+  `TOOL_SHOW_ONLY_OWN_VEHICLE_STATES` 52 → 51、`TOOL_FOLLOW_CONVOI_UNDERGROUND` 53 → 52、
+  (新設) `TOOL_EXPORT_MINIMAP` 53。
+  47〜52 は #540 以前の番号と一致する (`f0fac8dcf^` の `simmenu.h` で確認)。
+  PR 本文の履歴は FEAT-24 拡張 (`43f0ce22e`) の作業ブランチのものが残っている。
+- **取り込み時の注意**:
+  - シンプルツールの番号は pakset の `menuconf.tab` の `simple_tool[n]` と、ネットワークで送るツール ID に使われる。
+    取り込むと、**`develop-kasumi` 向けにツール番号 47〜53 を指定している `menuconf.tab` は書き換えが必要**になり、
+    サーバーとクライアントのバイナリも揃える必要がある (2026-10-17 時点のテスト環境の pakset には該当番号の参照なし)。
+  - FEAT-24 拡張分 (`TOOL_EXPORT_MINIMAP`) と番号が連動するため、どちらかだけを取り込む場合は番号の並びを個別に判断すること。
+- **develop-kasumi 側コミット**: `11d84abb5`
+- **備考**: 関連項目 FEAT-24。`develop-kasumi` には `TOOL_EXPORT_MINIMAP` が未取り込みのため、`11d84abb5` で
+  53 番を未使用枠 `UNUSED_TOOL_EXPORT_MINIMAP` として確保し、本家と同じ番号 (`TOOL_HALT_PERMISSION` = 54) に揃えた。
+  未使用枠は既存の `UNUSED_*` と同様に `init_menu()` で NULL のままにし、`create_simple_tool()` では警告して NULL を返す。
+  あわせて `read_menu()` に、`menuconf.tab` が未使用枠 (NULL) を指定した場合に警告して無視するガードを追加した
+  (従来は `create_tool` 経路で NULL を逆参照していた)。
