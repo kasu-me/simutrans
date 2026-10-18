@@ -15,7 +15,7 @@
 | 起点コミット (base) | `d01a02edf26e0faf1c3542d4d854fe6ce52cc9f8` (v58_3) |
 | 追跡済み最新コミット (head) | `e2bdac807d898fb444474c690ffa6b623636a9c5` (increment OTRP_VERSION_MINOR / v62_2) |
 | 対象コミット数 | 104 |
-| 最終更新 | 2026-10-17 |
+| 最終更新 | 2026-10-18 |
 
 > `head` より新しい本家コミットが増えた場合は skill `update-upstream-status` で追記する。
 
@@ -71,8 +71,8 @@
 | FEAT-21 | 新機能追加 | 停留所の私有化で道・架線の所有権も移転し、費用を精算する | 未取り込み |
 | FEAT-22 | 新機能追加 | 車両オフセット付き線路で対向2編成が同一タイルに進入できる | 未取り込み |
 | FEAT-23 | 新機能追加 | 追越モードに `exclusive_area` / `passing_lane_stop_only` を追加 | 未取り込み |
-| FEAT-24 | 新機能追加 | ミニマップ全体の PNG 出力 (ツール・MCP・Squirrel API からの出力を含む) | 未取り込み |
-| FEAT-25 | 新機能追加 | マップエディタの建物等をサムネイルで選択する | 未取り込み |
+| FEAT-24 | 新機能追加 | ミニマップ全体の PNG 出力 (ツール・MCP・Squirrel API からの出力を含む) | 取り込み済み |
+| FEAT-25 | 新機能追加 | マップエディタの建物等をサムネイルで選択する | 取り込み済み |
 | FEAT-26 | 新機能追加 | スケジュール編集で選択した停留所を先頭にする (Make first) | 取り込み不要 |
 | FEAT-27 | 新機能追加 | 市街建築物の選択状態をプリセットとして保存/読込する | 未取り込み |
 | FIX-01 | バグ修正 | choose 標識/choose 区間終端が経路上にある場合の判定 | 取り込み済み |
@@ -921,89 +921,6 @@
 - **備考**: 状態確認用の識別子は `simtypes.h` の `effective_overtaking_mode`、
   または `boden/wege/strasse.h` の `get_overtaking_mode_raw`。
 
-### FEAT-24: ミニマップ全体の PNG 出力
-
-- **分類**: 新機能追加
-- **状態**: 未取り込み
-- **概要**: ミニマップ (地図) ウィンドウに「マップ画像を出力」ボタンを追加し、
-  現在の表示設定・ズームでマップ全体を PNG ファイルに書き出せるようにする。
-  後続コミットで、マップウィンドウを開かずにツール・MCP・Squirrel API から、任意のマップモードで出力できるようになった。
-- **上流コミット**:
-  - `859a2244d` Add full minimap PNG export (#744) — 本体
-  - `43f0ce22e` add tools, mcp and squirrel api scripts for export minimap (#753) — 機能拡張 (ツール/MCP/Squirrel API からの出力とマップモード指定)
-- **主な変更箇所**:
-  - `io/raw_image.h`, `io/raw_image_png.cc` — `raw_image_png_writer_t` (行単位に書き出す
-    逐次 PNG ライタ) を新設。メモリに載らない大きさの画像に対応する
-  - `display/simgraph.h`, `display/simgraph16.cc`, `display/simgraph0.cc` —
-    画面領域を `raw_image_t` の指定位置へ写す `display_snapshot(area, image, destination)` を追加
-  - `gui/minimap.{h,cc}` — `minimap_t::export_to_png(std::string &filename)` を新設。
-    画面サイズ単位のタイルに分けて描画しつつ、最大32MBの帯 (strip) 単位で PNG へ流し込む
-  - `gui/map_frame.{h,cc}` — `b_export_map` ボタンと結果通知 (`news_img`) を追加
-  - `documentation/ja.OTRP.tab` — 「マップ画像を出力」等 (MISC-02 参照)
-  - **以下は `43f0ce22e` (機能拡張) の分**:
-  - `gui/minimap.{h,cc}` — `export_to_png(filename, export_mode)` オーバーロードを追加し、従来の
-    `export_to_png(filename)` は `env_t::default_mapmode` で委譲する形に変更。描画本体を `render_to_png()` に分離。
-    static の `parse_display_mode(str, mode_out)` (10進/`0x` のビットマスク、または `MAP_TOWN|MAP_LINES` 形式の名前列。
-    区切りは `|` `+` `,` 空白、`MAP_` 省略可・大文字小文字を区別しない、空文字/`default` は現在のモード) と
-    `check_display_mode(mode, conflicts)` (同時に描画できないモードの組み合わせ検出) を新設
-  - `simtool.{h,cc}`, `simmenu.{h,cc}` — シンプルツール `TOOL_EXPORT_MINIMAP` (`tool_export_minimap_t`) を追加。
-    `default_param` でマップモードを指定でき、ツールチップにも表示する
-  - `network/mcp_tools.cc` — MCP ツール `export_minimap` (任意引数 `mapmode`: 文字列または整数) を追加
-  - `script/api/api_gui.cc` — Squirrel API `gui.export_minimap()` / `gui.export_minimap_with_mode(mapmode)` を追加
-    (戻り値は出力ファイルのパス、失敗時は空)
-  - `gui/map_frame.cc` — モードが衝突する場合は `export_to_png()` 側が警告付きで結果を通知するので、ボタン側では通知を出さない
-  - `documentation/ja.OTRP.tab` — 「同時に表示できないマップ表示オプションが指定されています:」(MISC-02 参照)
-- **詳細**: 出力先はスクリーンショットフォルダ (`simmap00.png` から連番)。
-  出力中はミニマップのオフセット/サイズとクリップ領域を一時的に差し替え、終了後に復元する。
-  - `43f0ce22e` では出力中だけマップモードを差し替え、終了後に元のモードと可視状態へ戻す。
-    マップウィンドウが閉じている場合は `map_data` を破棄する (非表示のまま車両がピクセル更新を続けないように)。
-    衝突する組み合わせ (基本モード2つ、停留所系モード2つ、基本モードと `MAP_HIDE_CONTOUR` / `MAP_CLIMATES` の併用等) でも
-    出力自体は行い、ログと結果ウィンドウで警告する (MCP の応答では `warning` フィールド)。
-- **取り込み時の注意**: セーブ形式への影響なし。`display_snapshot()` のオーバーロード追加のため
-  バックエンド側 (`simgraph16.cc` / `simgraph0.cc`) の追従が必要。
-  - `43f0ce22e` の `TOOL_EXPORT_MINIMAP` はシンプルツール enum の末尾に追加されるが、直後の本家 `57b53b49d` (FIX-17) で
-    `TOOL_HALT_PERMISSION` がさらに後ろへ移されるため、ツール番号は FIX-17 とセットで決まる (FIX-17 参照)。
-  - `develop-kasumi` では FIX-17 の取り込み時に 53 番を `UNUSED_TOOL_EXPORT_MINIMAP` として確保済み (`11d84abb5`)。
-    拡張分を取り込む際は enum の `UNUSED_TOOL_EXPORT_MINIMAP` を `TOOL_EXPORT_MINIMAP` に置き換え、
-    `simmenu.cc` の未使用枠扱い (`id_to_string()` / `create_simple_tool()` / `init_menu()` の3箇所) を外すこと。
-  - `tool_export_minimap_t` は `is_init_network_safe()` が真なので、ネットワークゲームでも各クライアントがローカルに実行する。
-  - MCP ツールの追加先 `network/mcp_tools.cc` は FEAT-14 (`get_tile_info`) と同じ `TOOL_DEFS[]` を触る。
-- **develop-kasumi 側コミット**: —
-- **備考**: 状態確認用の識別子は `io/raw_image.h` の `raw_image_png_writer_t`、
-  または `gui/minimap.h` の `export_to_png` (本体)、`simtool.h` の `tool_export_minimap_t` (`43f0ce22e` 分)。
-
-### FEAT-25: マップエディタの建物等をサムネイルで選択する
-
-- **分類**: 新機能追加
-- **状態**: 未取り込み
-- **概要**: 記念物・産業・市街建築物・樹木・地上物の各配置ダイアログに「サムネイル表示」「大きく表示」を追加し、
-  名前の一覧の代わりに画像の格子から選べるようにする。
-- **上流コミット**:
-  - `8bdf0e5b8` Add buildings thumbnail selection (#762)
-- **主な変更箇所**:
-  - `display/simgraph.h`, `display/simgraph16.cc`, `display/simgraph0.cc` — `display_base_img_scaled(image_id, scr_rect)` を新設。
-    画像のズームキャッシュを変えずに、透過/半透過ランを保ったまま任意の矩形へ縮小描画する
-  - `gui/components/gui_building.{h,cc}` — `gui_building_t::draw_scaled(offset, bounds)` を追加 (建物全体を縦横比を保って矩形に収める)
-  - `gui/components/gui_scrolled_list.{h,cc}` — `set_grid_cell_width()` を追加し、固定幅セルの格子レイアウトに切り替えられるようにする (0 で従来の1列リスト)
-  - `gui/extend_edit.{h,cc}` — 一覧要素 `building_thumbnail_t` / `image_thumbnail_t` を新設。
-    `extend_edit_gui_t` に `bt_thumbnails` / `bt_large_thumbnails`、`init_thumbnail_options()`、
-    `get_thumbnail_size()`、`update_thumbnail_columns()`、`show_selected_building()` を追加
-  - `gui/curiosity_edit.cc`, `gui/factory_edit.cc`, `gui/citybuilding_edit.cc`, `gui/baum_edit.cc`,
-    `gui/groundobj_edit.{h,cc}` — 各ダイアログでサムネイル表示に対応
-  - `documentation/ja.OTRP.tab` — 「サムネイル表示」「大きく表示」(MISC-02 参照)
-- **詳細**:
-  - 建物のセルの大きさは、車庫の車両選択と同じ `bahndepot_x_grid` / `bahndepot_y_grid` (pak 側の上書き含む) を基準にする。
-  - 表示モードを切り替えても複数選択の状態を保つ。
-  - 表示モードはウィンドウ状態 (`rdwr()`) のボタンフラグの空きビットに保存される
-    (`extend_edit_gui_t` は「大きく表示」を bit6、樹木/地上物の「サムネイル表示」を bit5。
-    記念物・市街建築物は各ダイアログのフラグの bit3、産業は bit6)。
-- **取り込み時の注意**: セーブ形式への影響なし (ウィンドウ状態のビット追加のみ)。
-  FEAT-27 (市街建築物のプリセット) と同じ `gui/citybuilding_edit.cc` を触るため、両方を取り込む場合は本項目を先にする
-  (本家でもこの順)。
-- **develop-kasumi 側コミット**: —
-- **備考**: 状態確認用の識別子は `gui/extend_edit.h` の `building_thumbnail_t`、
-  または `display/simgraph.h` の `display_base_img_scaled`。
-
 ### FEAT-26: スケジュール編集で選択した停留所を先頭にする (Make first)
 
 - **分類**: 新機能追加
@@ -1144,7 +1061,8 @@
 - **取り込み時の注意**: `develop-kasumi` は独自に `ja.OTRP.tab` を編集している (`dd440ea4b`, `fa91f31fc` 等) ため
   ファイル単位の cherry-pick は競合しやすい。**対応する機能項目を取り込む際に、必要な行だけを追加する**運用とする。
 - **develop-kasumi 側コミット**: —
-- **備考**: —
+- **備考**: FEAT-24 / FEAT-25 の訳 (「マップ画像を出力」等4語、「同時に表示できないマップ表示オプションが指定されています:」、
+  「サムネイル表示」「大きく表示」) は各機能の取り込みコミット (`90c913f79`, `e9cf6b0d8`, `51a5310ed`) で追加済み。
 
 ### MISC-03: SDL3 バックエンド対応と CI のビルド構成更新
 
