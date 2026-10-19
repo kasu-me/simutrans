@@ -7,6 +7,8 @@
 
 #include "halt_info.h"
 #include "components/gui_button_to_chart.h"
+#include "components/gui_divider.h"
+#include "components/gui_speedbar.h"
 
 #include "../simworld.h"
 #include "../simware.h"
@@ -32,6 +34,8 @@
 #include "../vehicle/simvehicle.h"
 
 #include "../utils/simstring.h"
+
+#include "../sys/simsys.h"
 
 #include "../descriptor/skin_desc.h"
 
@@ -365,12 +369,390 @@ void gui_halt_type_images_t::draw(scr_coord offset)
 	gui_aligned_container_t::draw(offset);
 }
 
+/**
+ * Small marker: round for the color of a player, square for the color of a goods category
+ */
+class gui_color_dot_t : public gui_component_t
+{
+	PIXVAL color;
+	bool square;
+public:
+	gui_color_dot_t(PIXVAL c, bool sq = false) : color(c), square(sq) {}
+
+	void draw(scr_coord offset) OVERRIDE
+	{
+		offset += pos;
+		if(  square  ) {
+			display_ddd_box_clip_rgb(offset.x, offset.y, size.w, size.h, color_idx_to_rgb(MN_GREY0), color_idx_to_rgb(MN_GREY4));
+			display_fillbox_wh_clip_rgb(offset.x + 1, offset.y + 1, size.w - 2, size.h - 2, color, true);
+			return;
+		}
+		const scr_coord_val r = max(2, (min(size.w, size.h) - 1) / 2);
+		const scr_coord_val cx = offset.x + size.w / 2;
+		const scr_coord_val cy = offset.y + size.h / 2;
+		display_filled_circle_rgb(cx, cy, r, color_idx_to_rgb(MN_GREY0));
+		display_filled_circle_rgb(cx, cy, r - 1, color);
+		mark_rect_dirty_wc(cx - r, cy - r, cx + r + 1, cy + r + 1);
+	}
+
+	scr_size get_min_size() const OVERRIDE
+	{
+		const scr_coord_val d = max(9, (LINESPACE * 3) / 4) | 1; // odd, so the dot is centered
+		return scr_size(d, d);
+	}
+
+	scr_size get_max_size() const OVERRIDE { return get_min_size(); }
+};
+
+
+/**
+ * Bar showing the waiting amount relative to the storage capacity
+ */
+class gui_waiting_bar_t : public gui_speedbar_t
+{
+	sint32 value;
+public:
+	gui_waiting_bar_t(sint32 v, sint32 capacity, PIXVAL color) : value(v)
+	{
+		set_base(capacity);
+		add_color_value(&value, color);
+	}
+
+	scr_size get_min_size() const OVERRIDE { return scr_size((D_BUTTON_WIDTH * 3) / 2, max(D_INDICATOR_HEIGHT, LINESPACE / 2)); }
+
+	scr_size get_max_size() const OVERRIDE { return get_min_size(); }
+};
+
+
+/**
+ * List of the waiting goods, grouped by goods category,
+ * with the operators serving the next stop of each entry
+ */
+class gui_halt_waiting_list_t : public gui_aligned_container_t
+{
+	halthandle_t halt;
+
+	// state of the last rebuild; if anything differs, the list is rebuilt
+	uint8 last_sortby;
+	uint8 last_reconnect_counter;
+	uint32 last_line_count, last_convoy_count;
+	uint32 last_capacity[3];
+
+	// rebuilding is throttled, since the goods of busy stops change all the time
+	bool rebuild_pending;
+	uint32 last_rebuild_time;
+
+	// cache for get_serving_players(); only valid during a rebuild
+	vector_tpl<halthandle_t> serving_cache_halt;
+	vector_tpl<uint64> serving_cache_players;
+
+	static void add_players_of_schedule(uint64 &players, const schedule_t *schedule, player_t *owner, halthandle_t next_halt);
+
+	/// bit field of all players which have a line or a lineless convoy calling at this halt and at @p next_halt
+	uint64 get_serving_players(halthandle_t next_halt);
+
+	/// adds a dot for each player in @p players
+	void add_player_dots(uint64 players);
+
+	bool is_rebuild_needed();
+
+	void rebuild();
+
+public:
+	gui_halt_waiting_list_t(halthandle_t h);
+
+	void set_halt(halthandle_t h) { halt = h; last_sortby = 0xFF; rebuild_pending = true; }
+
+	/// rebuilds the list if needed; @returns true, if it was rebuilt (and its size may have changed)
+	bool update();
+};
+
+
+gui_halt_waiting_list_t::gui_halt_waiting_list_t(halthandle_t h) :
+	halt(h),
+	last_sortby(0xFF),
+	last_reconnect_counter(0),
+	last_line_count(0),
+	last_convoy_count(0),
+	rebuild_pending(true),
+	last_rebuild_time(0)
+{
+	last_capacity[0] = last_capacity[1] = last_capacity[2] = 0;
+	set_table_layout(1,0);
+}
+
+
+void gui_halt_waiting_list_t::add_players_of_schedule(uint64 &players, const schedule_t *schedule, player_t *owner, halthandle_t next_halt)
+{
+	if(  schedule == NULL  ||  owner == NULL  ) {
+		return;
+	}
+	FOR(minivec_tpl<schedule_entry_t>, const& e, schedule->get_entries()) {
+		if(  haltestelle_t::get_halt(e.pos, owner) == next_halt  ) {
+			players |= (uint64)1 << owner->get_player_nr();
+			return;
+		}
+	}
+}
+
+
+uint64 gui_halt_waiting_list_t::get_serving_players(halthandle_t next_halt)
+{
+	if(  !next_halt.is_bound()  ) {
+		return 0;
+	}
+	for(  uint32 i = 0;  i < serving_cache_halt.get_count();  i++  ) {
+		if(  serving_cache_halt[i] == next_halt  ) {
+			return serving_cache_players[i];
+		}
+	}
+
+	uint64 players = 0;
+	FOR(vector_tpl<linehandle_t>, const& line, halt->registered_lines) {
+		if(  line.is_bound()  ) {
+			add_players_of_schedule(players, line->get_schedule(), line->get_owner(), next_halt);
+		}
+	}
+	FOR(vector_tpl<convoihandle_t>, const& cnv, halt->registered_convoys) {
+		if(  cnv.is_bound()  ) {
+			add_players_of_schedule(players, cnv->get_schedule(), cnv->get_owner(), next_halt);
+		}
+	}
+	serving_cache_halt.append(next_halt);
+	serving_cache_players.append(players);
+	return players;
+}
+
+
+void gui_halt_waiting_list_t::add_player_dots(uint64 players)
+{
+	for(  uint8 i = 0;  i < MAX_PLAYER_COUNT;  i++  ) {
+		if(  players & ((uint64)1 << i)  ) {
+			if(  player_t *pl = world()->get_player(i)  ) {
+				new_component<gui_color_dot_t>(color_idx_to_rgb(pl->get_player_color1() + env_t::gui_player_color_bright));
+			}
+		}
+	}
+}
+
+
+bool gui_halt_waiting_list_t::is_rebuild_needed()
+{
+	// always ask first, so the flag of the halt is reset
+	bool changed = halt->check_freight_info_changed();
+	changed |= last_sortby != halt->get_sortby();
+	changed |= last_reconnect_counter != halt->get_reconnect_counter();
+	changed |= last_line_count != halt->registered_lines.get_count();
+	changed |= last_convoy_count != halt->registered_convoys.get_count();
+	for(  uint8 i = 0;  i < 3;  i++  ) {
+		changed |= last_capacity[i] != halt->get_capacity(i);
+	}
+	return changed;
+}
+
+
+bool gui_halt_waiting_list_t::update()
+{
+	if(  !halt.is_bound()  ) {
+		return false;
+	}
+	rebuild_pending |= is_rebuild_needed();
+	if(  !rebuild_pending  ) {
+		return false;
+	}
+	// a changed sort order is shown at once, changed amounts at most twice per second
+	if(  last_sortby == halt->get_sortby()  &&  dr_time() - last_rebuild_time < 500  ) {
+		return false;
+	}
+	rebuild();
+	rebuild_pending = false;
+	last_rebuild_time = dr_time();
+	return true;
+}
+
+
+void gui_halt_waiting_list_t::rebuild()
+{
+	last_sortby = halt->get_sortby();
+	last_reconnect_counter = halt->get_reconnect_counter();
+	last_line_count = halt->registered_lines.get_count();
+	last_convoy_count = halt->registered_convoys.get_count();
+	for(  uint8 i = 0;  i < 3;  i++  ) {
+		last_capacity[i] = halt->get_capacity(i);
+	}
+	serving_cache_halt.clear();
+	serving_cache_players.clear();
+
+	remove_all();
+	set_table_layout(1,0);
+
+	// legend: which color belongs to which player
+	uint64 serving = 0;
+	FOR(vector_tpl<linehandle_t>, const& line, halt->registered_lines) {
+		if(  line.is_bound()  &&  line->get_owner()  ) {
+			serving |= (uint64)1 << line->get_owner()->get_player_nr();
+		}
+	}
+	FOR(vector_tpl<convoihandle_t>, const& cnv, halt->registered_convoys) {
+		if(  cnv.is_bound()  &&  cnv->get_owner()  ) {
+			serving |= (uint64)1 << cnv->get_owner()->get_player_nr();
+		}
+	}
+	if(  serving  ) {
+		add_table(4,0)->set_alignment(ALIGN_LEFT | ALIGN_CENTER_V);
+		for(  uint8 i = 0;  i < MAX_PLAYER_COUNT;  i++  ) {
+			player_t *pl = world()->get_player(i);
+			if(  pl  &&  (serving & ((uint64)1 << i))  ) {
+				add_table(2,1)->set_alignment(ALIGN_LEFT | ALIGN_CENTER_V);
+				{
+					add_player_dots((uint64)1 << i);
+					gui_label_buf_t *lb = new_component<gui_label_buf_t>(PLAYER_FLAG | color_idx_to_rgb(pl->get_player_color1() + env_t::gui_player_color_dark));
+					lb->buf().append(pl->get_name());
+					lb->update();
+				}
+				end_table();
+			}
+		}
+		end_table();
+		new_component<gui_divider_t>();
+	}
+
+	const freight_list_sorter_t::sort_mode_t sortby = (freight_list_sorter_t::sort_mode_t)halt->get_sortby();
+	const char *arrow = has_character(0x2192) ? "\xE2\x86\x92 " : "> ";
+
+	bool any_goods = false;
+	vector_tpl<ware_t> wares;
+	vector_tpl<ware_t> sorted;
+	for(  uint8 catg_index = 0;  catg_index < goods_manager_t::get_max_catg_index();  catg_index++  ) {
+		halt->get_waiting_goods(catg_index, wares);
+		uint64 total = 0;
+		FOR(vector_tpl<ware_t>, const& ware, wares) {
+			if(  ware.get_desc() != goods_manager_t::none  ) {
+				total += ware.menge;
+			}
+		}
+		if(  total == 0  ) {
+			continue;
+		}
+		freight_list_sorter_t::sort_ware_list(wares, sortby, sorted);
+
+		if(  any_goods  ) {
+			new_component<gui_margin_t>(0, D_V_SPACE);
+		}
+		any_goods = true;
+
+		// heading: category, amount / capacity and bar
+		const goods_desc_t *info = goods_manager_t::get_info_catg_index(catg_index);
+		const uint32 capacity = halt->get_capacity( catg_index < 2 ? catg_index : 2 );
+		const bool overcrowded = total > capacity;
+		add_table(5,1)->set_alignment(ALIGN_LEFT | ALIGN_CENTER_V);
+		{
+			new_component<gui_color_dot_t>(info->get_color(), true);
+
+			new_component<gui_label_t>(info->get_catg()==0 ? info->get_name() : info->get_catg_name());
+
+			char total_str[64], capacity_str[64];
+			number_to_string(total_str, (double)total, 0);
+			number_to_string(capacity_str, (double)capacity, 0);
+			gui_label_buf_t *lb = new_component<gui_label_buf_t>(overcrowded ? SYSCOL_TEXT_STRONG : SYSCOL_TEXT);
+			lb->buf().printf("%s / %s%s", total_str, capacity_str, translator::translate(info->get_mass()));
+			lb->update();
+
+			if(  capacity > 0  ) {
+				const sint32 value = total > 0x7FFFFFFF ? 0x7FFFFFFF : (sint32)total;
+				new_component<gui_waiting_bar_t>(value, capacity > 0x7FFFFFFF ? 0x7FFFFFFF : (sint32)capacity, overcrowded ? color_idx_to_rgb(COL_RED) : SYSCOL_LOADINGBAR_PROGRESS);
+			}
+			else {
+				new_component<gui_empty_t>();
+			}
+			new_component<gui_fill_t>();
+		}
+		end_table();
+
+		// entries: amount, destination or next stop, and the operators serving the next stop
+		// (right alignment for the amounts; the last column fills the remaining width)
+		add_table(3,0)->set_alignment(ALIGN_RIGHT | ALIGN_CENTER_V);
+		{
+			FOR(vector_tpl<ware_t>, const& ware, sorted) {
+				halthandle_t const target = ware.get_ziel();
+				halthandle_t const via    = ware.get_zwischenziel();
+				const bool is_factory_going = sortby != freight_list_sorter_t::by_via_sum  &&  ware.to_factory; // exclude merged packets
+
+				new_component<gui_margin_t>(D_H_SPACE * 2, 0);
+
+				char amount_str[64];
+				number_to_string(amount_str, (double)ware.menge, 0);
+				gui_label_buf_t *lb_amount = new_component<gui_label_buf_t>();
+				if(  sortby == freight_list_sorter_t::by_via_sum  &&  ware.is_goods_amount_maxed()  ) {
+					lb_amount->buf().append(">=");
+				}
+				lb_amount->buf().append(amount_str);
+				lb_amount->update();
+
+				add_table(0,1)->set_alignment(ALIGN_LEFT | ALIGN_CENTER_V);
+				{
+					char via_text[256] = "";
+					if(  via.is_bound()  ) {
+						snprintf(via_text, lengthof(via_text), translator::translate("via %s\n"), via->get_name());
+						if(  char *nl = strchr(via_text, '\n')  ) {
+							*nl = 0;
+						}
+					}
+
+					gui_label_buf_t *lb_name = new_component<gui_label_buf_t>();
+					lb_name->buf().append(arrow);
+					if(  sortby == freight_list_sorter_t::by_via_sum  &&  via.is_bound()  &&  via != target  ) {
+						// merged packets of different destinations: only the next stop is known
+						lb_name->buf().append(via_text);
+					}
+					else {
+						if(  is_factory_going  ) {
+							const fabrik_t *const factory = fabrik_t::get_fab(ware.get_zielpos());
+							lb_name->buf().printf("%s <%i,%i>", factory ? translator::translate(factory->get_name()) : "Invalid Factory", ware.get_zielpos().x, ware.get_zielpos().y);
+						}
+						else {
+							lb_name->buf().append(target.is_bound() ? target->get_name() : translator::translate("Error in Routing"));
+						}
+						// transfer: show the next stop
+						if(  via.is_bound()  &&  (via != target  ||  is_factory_going)  ) {
+							gui_label_buf_t *lb_via = new_component<gui_label_buf_t>(SYSCOL_BUTTON_TEXT_DISABLED);
+							lb_via->buf().append(via_text);
+							lb_via->update();
+						}
+					}
+					lb_name->update();
+
+					// freight categories may contain several goods
+					if(  info->get_catg() != 0  ) {
+						gui_label_buf_t *lb_goods = new_component<gui_label_buf_t>(SYSCOL_BUTTON_TEXT_DISABLED);
+						lb_goods->buf().printf("(%s)", translator::translate(ware.get_name()));
+						lb_goods->update();
+					}
+
+					add_player_dots( get_serving_players(via) );
+
+					new_component<gui_fill_t>();
+				}
+				end_table();
+			}
+		}
+		end_table();
+	}
+
+	if(  !any_goods  ) {
+		new_component<gui_label_t>("keine");
+	}
+
+	set_size(get_min_size());
+}
+
+
 // main class
 halt_info_t::halt_info_t(halthandle_t halt) :
 		gui_frame_t("", NULL),
+		waiting_list( new gui_halt_waiting_list_t(halt)),
 		departure_board( new gui_departure_board_t()),
 		halt_detail( new gui_halt_detail_t(halt)),
-		text_freight(&freight_info),
 		scrolly_freight(&container_freight, true, true),
 		scrolly_departure(departure_board, true, true),
 		scrolly_details(halt_detail, true, true),
@@ -481,7 +863,8 @@ void halt_info_t::init(halthandle_t halt)
 	container_freight.add_component(&sort_button);
 	container_freight.end_table();
 
-	container_freight.add_component(&text_freight);
+	waiting_list->set_halt(halt);
+	container_freight.add_component(waiting_list);
 
 	// departure board
 	switch_mode.add_tab(&scrolly_departure, translator::translate("Departure board"));
@@ -547,6 +930,7 @@ halt_info_t::~halt_info_t()
 	}
 	delete departure_board;
 	delete halt_detail;
+	delete waiting_list;
 }
 
 
@@ -602,12 +986,10 @@ void halt_info_t::update_components()
 	img_enable[2].set_visible(halt->get_ware_enabled());
 	container_top->set_size( container_top->get_size());
 
-	// buffer update now only when needed by halt itself => dedicated buffer for this
-	int old_len = freight_info.len();
-	halt->get_freight_info(freight_info);
-	if(  old_len != freight_info.len()  ) {
-		text_freight.recalc_size();
-		container_freight.set_size(container_freight.get_min_size());
+	// rebuild the list only when needed by halt itself
+	if(  waiting_list->update()  ) {
+		// let the scrollpane resize the list to the new contents
+		scrolly_freight.set_size(scrolly_freight.get_size());
 	}
 
 	if (switch_mode.get_aktives_tab() == &scrolly_departure) {

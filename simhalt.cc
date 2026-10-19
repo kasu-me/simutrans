@@ -3519,6 +3519,18 @@ void haltestelle_t::get_freight_info(cbuffer_t & buf)
 }
 
 
+void haltestelle_t::get_waiting_goods(uint8 catg_index, vector_tpl<ware_t> &wares) const
+{
+	wares.clear();
+	if(  catg_index >= goods_manager_t::get_max_catg_index()  ||  !cargo[catg_index]  ) {
+		return;
+	}
+	for(const cargo_item_t &w : *cargo[catg_index]) {
+		wares.append(w->goods);
+	}
+}
+
+
 
 void haltestelle_t::get_short_freight_info(cbuffer_t & buf, const char* end) const
 {

@@ -891,6 +891,16 @@ public:
 	void get_freight_info(cbuffer_t & buf);
 
 	/**
+	 * @param[out] wares all goods of the category @p catg_index waiting here
+	 */
+	void get_waiting_goods(uint8 catg_index, vector_tpl<ware_t> &wares) const;
+
+	/**
+	 * @returns true once after the waiting goods (or their sort order) have changed
+	 */
+	bool check_freight_info_changed() { const bool changed = resort_freight_info; resort_freight_info = false; return changed; }
+
+	/**
 	 * @param[out] buf short list of the waiting goods (i.e. 110 Wood, 15 Coal)
 	 */
 	void get_short_freight_info(cbuffer_t & buf, const char* end="\n") const;

@@ -35,6 +35,13 @@ public:
 	 */
 	static void sort_freight(vector_tpl<ware_t> const& warray, cbuffer_t& buf, sort_mode_t sort_mode, const slist_tpl<ware_t>* full_list, const char* what_doing, const slist_tpl<ware_t>* overload_list = NULL);
 
+	/**
+	 * Sorts the goods in the same order as sort_freight(), but returns them as a list instead of text.
+	 * In by_via_sum mode, packets with a common next stop are merged like sort_freight() does.
+	 * @param[out] sorted the sorted (and maybe merged) goods
+	 */
+	static void sort_ware_list(vector_tpl<ware_t> const& warray, sort_mode_t sort_mode, vector_tpl<ware_t>& sorted);
+
 private:
 	static karte_ptr_t welt;
 

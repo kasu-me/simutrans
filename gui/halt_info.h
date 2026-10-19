@@ -27,6 +27,7 @@
 
 class gui_departure_board_t;
 class gui_halt_detail_t;
+class gui_halt_waiting_list_t;
 
 /**
  * Helper class to show type symbols (train, bus, etc)
@@ -56,10 +57,8 @@ private:
 	gui_image_t img_enable[3];
 	gui_halt_type_images_t *img_types;
 
-	/**
-	* Buffer for freight info text string.
-	*/
-	cbuffer_t freight_info;
+	// list of waiting goods
+	gui_halt_waiting_list_t *waiting_list;
 
 	// departure stuff (departure and arrival times display)
 	gui_departure_board_t *departure_board;
@@ -69,7 +68,6 @@ private:
 
 	// other UI definitions
 	gui_aligned_container_t container_freight, container_chart;
-	gui_textarea_t text_freight;
 	gui_scrollpane_t scrolly_freight, scrolly_departure, scrolly_details;
 
 	gui_textinput_t input;

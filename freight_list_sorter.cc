@@ -295,3 +295,36 @@ void freight_list_sorter_t::sort_freight(vector_tpl<ware_t> const& warray, cbuff
 
 	delete[] wlist;
 }
+
+
+void freight_list_sorter_t::sort_ware_list(vector_tpl<ware_t> const& warray, sort_mode_t sort_mode, vector_tpl<ware_t>& sorted)
+{
+	sortby = sort_mode;
+	sorted.clear();
+
+	for(  ware_t const& ware : warray  ) {
+		if(  ware.get_desc() == goods_manager_t::none  ||  ware.menge == 0  ) {
+			continue;
+		}
+
+		bool merged = false;
+		if(  sort_mode == by_via_sum  ) {
+			// via sort mode merges packets with a common next stop (same condition as sort_freight)
+			for(  ware_t &wi : sorted  ) {
+				if(  wi.get_index()==ware.get_index()  &&  wi.get_zwischenziel()==ware.get_zwischenziel()  &&
+					(  (wi.get_zwischenziel().is_bound() && (  wi.get_ziel()==wi.get_zwischenziel() )==( ware.get_ziel()==ware.get_zwischenziel() ) )
+					|| wi.get_ziel() == ware.get_ziel() ) ) {
+					// amounts above the packet limit are dropped here; the packet is then marked as maxed
+					wi.add_goods(ware.menge);
+					merged = true;
+					break;
+				}
+			}
+		}
+		if(  !merged  ) {
+			sorted.append(ware);
+		}
+	}
+
+	std::sort( sorted.begin(), sorted.end(), compare_ware );
+}
