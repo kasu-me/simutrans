@@ -72,7 +72,8 @@ public:
 
 	scr_size get_min_size() const OVERRIDE { return scr_size(LINESPACE, D_LABEL_HEIGHT + 2); } // a little air between the lines
 
-	scr_size get_max_size() const OVERRIDE { return scr_size(LINESPACE, scr_size::inf.h); }
+	// fixed height: an inf height would take the free space of the window and stretch the rows
+	scr_size get_max_size() const OVERRIDE { return get_min_size(); }
 };
 
 
