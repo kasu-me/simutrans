@@ -428,7 +428,7 @@ public:
  * List of the waiting goods, grouped by goods category,
  * with the operators serving the next stop of each entry
  */
-class gui_halt_waiting_list_t : public gui_aligned_container_t
+class gui_halt_waiting_list_t : public gui_aligned_container_t, private action_listener_t
 {
 	halthandle_t halt;
 
@@ -440,7 +440,32 @@ class gui_halt_waiting_list_t : public gui_aligned_container_t
 
 	// rebuilding is throttled, since the goods of busy stops change all the time
 	bool rebuild_pending;
+	bool rebuild_at_once;
 	uint32 last_rebuild_time;
+
+	// transfer entries (sorted by via amount) showing their final destinations; key from expand_key()
+	vector_tpl<uint32> expanded;
+	// the buttons to expand/collapse the entries, and their keys
+	vector_tpl<button_t *> expand_buttons;
+	vector_tpl<uint32> expand_button_keys;
+
+	static uint32 expand_key(const ware_t &ware) { return ((uint32)ware.get_index() << 16) | ware.get_zwischenziel().get_id(); }
+
+	/// adds the final destinations of the goods merged into the transfer entry @p entry
+	void add_final_destinations(const vector_tpl<ware_t> &wares, const ware_t &entry);
+
+	bool action_triggered(gui_action_creator_t *comp, value_t) OVERRIDE;
+
+	// tables added during a rebuild
+	vector_tpl<gui_container_t *> new_tables;
+
+	/// add_table(), remembering the table for rebuild()
+	gui_aligned_container_t *add_list_table(uint16 columns, uint16 rows)
+	{
+		gui_aligned_container_t *table = add_table(columns, rows);
+		new_tables.append(table);
+		return table;
+	}
 
 	// cache for get_serving_players(); only valid during a rebuild
 	vector_tpl<halthandle_t> serving_cache_halt;
@@ -461,7 +486,7 @@ class gui_halt_waiting_list_t : public gui_aligned_container_t
 public:
 	gui_halt_waiting_list_t(halthandle_t h);
 
-	void set_halt(halthandle_t h) { halt = h; last_sortby = 0xFF; rebuild_pending = true; }
+	void set_halt(halthandle_t h) { halt = h; last_sortby = 0xFF; rebuild_pending = true; expanded.clear(); }
 
 	/// rebuilds the list if needed; @returns true, if it was rebuilt (and its size may have changed)
 	bool update();
@@ -475,6 +500,7 @@ gui_halt_waiting_list_t::gui_halt_waiting_list_t(halthandle_t h) :
 	last_line_count(0),
 	last_convoy_count(0),
 	rebuild_pending(true),
+	rebuild_at_once(false),
 	last_rebuild_time(0)
 {
 	last_capacity[0] = last_capacity[1] = last_capacity[2] = 0;
@@ -560,14 +586,92 @@ bool gui_halt_waiting_list_t::update()
 	if(  !rebuild_pending  ) {
 		return false;
 	}
-	// a changed sort order is shown at once, changed amounts at most twice per second
-	if(  last_sortby == halt->get_sortby()  &&  dr_time() - last_rebuild_time < 500  ) {
+	// a changed sort order or expanded entry is shown at once, changed amounts at most twice per second
+	if(  !rebuild_at_once  &&  last_sortby == halt->get_sortby()  &&  dr_time() - last_rebuild_time < 500  ) {
 		return false;
 	}
 	rebuild();
 	rebuild_pending = false;
+	rebuild_at_once = false;
 	last_rebuild_time = dr_time();
 	return true;
+}
+
+
+bool gui_halt_waiting_list_t::action_triggered(gui_action_creator_t *comp, value_t)
+{
+	for(  uint32 i = 0;  i < expand_buttons.get_count();  i++  ) {
+		if(  comp == expand_buttons[i]  ) {
+			const uint32 key = expand_button_keys[i];
+			if(  !expanded.remove(key)  ) {
+				expanded.append(key);
+			}
+			// not here, since this would delete the button which is just calling us
+			rebuild_pending = true;
+			rebuild_at_once = true;
+			return true;
+		}
+	}
+	return false;
+}
+
+
+void gui_halt_waiting_list_t::add_final_destinations(const vector_tpl<ware_t> &wares, const ware_t &entry)
+{
+	struct destination_t {
+		halthandle_t halt;
+		uint64 amount;
+	};
+	vector_tpl<destination_t> destinations;
+	FOR(vector_tpl<ware_t>, const& ware, wares) {
+		// the same goods as merged into the entry by freight_list_sorter_t::sort_ware_list()
+		if(  ware.get_desc() == goods_manager_t::none  ||  ware.menge == 0  ||  ware.get_index() != entry.get_index()  ||
+			ware.get_zwischenziel() != entry.get_zwischenziel()  ||  ware.get_ziel() == ware.get_zwischenziel()  ) {
+			continue;
+		}
+		bool found = false;
+		for(  uint32 i = 0;  i < destinations.get_count();  i++  ) {
+			if(  destinations[i].halt == ware.get_ziel()  ) {
+				destinations[i].amount += ware.menge;
+				found = true;
+				break;
+			}
+		}
+		if(  !found  ) {
+			destination_t d = { ware.get_ziel(), ware.menge };
+			destinations.append(d);
+		}
+	}
+	std::sort( destinations.begin(), destinations.end(), [](const destination_t &a, const destination_t &b) {
+		if(  a.amount != b.amount  ) {
+			return a.amount > b.amount;
+		}
+		if(  a.halt.is_bound()  &&  b.halt.is_bound()  ) {
+			return strcmp(a.halt->get_name(), b.halt->get_name()) < 0;
+		}
+		return b.halt.is_bound(); // unknown destinations last
+	} );
+
+	FOR(vector_tpl<destination_t>, const& d, destinations) {
+		new_component<gui_empty_t>();
+
+		char amount_str[64];
+		number_to_string(amount_str, (double)d.amount, 0);
+		gui_label_buf_t *lb_amount = new_component<gui_label_buf_t>(SYSCOL_BUTTON_TEXT_DISABLED);
+		lb_amount->buf().append(amount_str);
+		lb_amount->update();
+
+		add_list_table(3,1)->set_alignment(ALIGN_LEFT | ALIGN_CENTER_V);
+		{
+			new_component<gui_margin_t>( max(D_ARROW_RIGHT_WIDTH, D_ARROW_DOWN_WIDTH), 0 );
+			gui_label_buf_t *lb_name = new_component<gui_label_buf_t>();
+			lb_name->buf().append( has_character(0x2192) ? "\xE2\x86\x92 " : "> " );
+			lb_name->buf().append( d.halt.is_bound() ? d.halt->get_name() : translator::translate("Error in Routing") );
+			lb_name->update();
+			new_component<gui_fill_t>();
+		}
+		end_table();
+	}
 }
 
 
@@ -582,6 +686,8 @@ void gui_halt_waiting_list_t::rebuild()
 	}
 	serving_cache_halt.clear();
 	serving_cache_players.clear();
+	expand_buttons.clear();
+	expand_button_keys.clear();
 
 	remove_all();
 	set_table_layout(1,0);
@@ -599,11 +705,11 @@ void gui_halt_waiting_list_t::rebuild()
 		}
 	}
 	if(  serving  ) {
-		add_table(4,0)->set_alignment(ALIGN_LEFT | ALIGN_CENTER_V);
+		add_list_table(4,0)->set_alignment(ALIGN_LEFT | ALIGN_CENTER_V);
 		for(  uint8 i = 0;  i < MAX_PLAYER_COUNT;  i++  ) {
 			player_t *pl = world()->get_player(i);
 			if(  pl  &&  (serving & ((uint64)1 << i))  ) {
-				add_table(2,1)->set_alignment(ALIGN_LEFT | ALIGN_CENTER_V);
+				add_list_table(2,1)->set_alignment(ALIGN_LEFT | ALIGN_CENTER_V);
 				{
 					add_player_dots((uint64)1 << i);
 					gui_label_buf_t *lb = new_component<gui_label_buf_t>(PLAYER_FLAG | color_idx_to_rgb(pl->get_player_color1() + env_t::gui_player_color_dark));
@@ -645,7 +751,7 @@ void gui_halt_waiting_list_t::rebuild()
 		const goods_desc_t *info = goods_manager_t::get_info_catg_index(catg_index);
 		const uint32 capacity = halt->get_capacity( catg_index < 2 ? catg_index : 2 );
 		const bool overcrowded = total > capacity;
-		add_table(5,1)->set_alignment(ALIGN_LEFT | ALIGN_CENTER_V);
+		add_list_table(5,1)->set_alignment(ALIGN_LEFT | ALIGN_CENTER_V);
 		{
 			new_component<gui_color_dot_t>(info->get_color(), true);
 
@@ -671,14 +777,26 @@ void gui_halt_waiting_list_t::rebuild()
 
 		// entries: amount, destination or next stop, and the operators serving the next stop
 		// (right alignment for the amounts; the last column fills the remaining width)
-		add_table(3,0)->set_alignment(ALIGN_RIGHT | ALIGN_CENTER_V);
+		add_list_table(3,0)->set_alignment(ALIGN_RIGHT | ALIGN_CENTER_V);
 		{
 			FOR(vector_tpl<ware_t>, const& ware, sorted) {
 				halthandle_t const target = ware.get_ziel();
 				halthandle_t const via    = ware.get_zwischenziel();
 				const bool is_factory_going = sortby != freight_list_sorter_t::by_via_sum  &&  ware.to_factory; // exclude merged packets
+				// merged packets of different destinations: only the next stop is shown, the destinations on demand
+				const bool is_merged_transfer = sortby == freight_list_sorter_t::by_via_sum  &&  via.is_bound()  &&  via != target;
+				const bool is_expanded = is_merged_transfer  &&  expanded.is_contained( expand_key(ware) );
 
-				new_component<gui_margin_t>(D_H_SPACE * 2, 0);
+				if(  is_merged_transfer  ) {
+					button_t *bt = new_component<button_t>();
+					bt->init( is_expanded ? button_t::arrowdown : button_t::arrowright, NULL );
+					bt->add_listener(this);
+					expand_buttons.append(bt);
+					expand_button_keys.append( expand_key(ware) );
+				}
+				else {
+					new_component<gui_margin_t>( max(D_ARROW_RIGHT_WIDTH, D_ARROW_DOWN_WIDTH), 0 );
+				}
 
 				char amount_str[64];
 				number_to_string(amount_str, (double)ware.menge, 0);
@@ -689,7 +807,7 @@ void gui_halt_waiting_list_t::rebuild()
 				lb_amount->buf().append(amount_str);
 				lb_amount->update();
 
-				add_table(0,1)->set_alignment(ALIGN_LEFT | ALIGN_CENTER_V);
+				add_list_table(0,1)->set_alignment(ALIGN_LEFT | ALIGN_CENTER_V);
 				{
 					char via_text[256] = "";
 					if(  via.is_bound()  ) {
@@ -701,8 +819,7 @@ void gui_halt_waiting_list_t::rebuild()
 
 					gui_label_buf_t *lb_name = new_component<gui_label_buf_t>();
 					lb_name->buf().append(arrow);
-					if(  sortby == freight_list_sorter_t::by_via_sum  &&  via.is_bound()  &&  via != target  ) {
-						// merged packets of different destinations: only the next stop is known
+					if(  is_merged_transfer  ) {
 						lb_name->buf().append(via_text);
 					}
 					else {
@@ -734,6 +851,10 @@ void gui_halt_waiting_list_t::rebuild()
 					new_component<gui_fill_t>();
 				}
 				end_table();
+
+				if(  is_expanded  ) {
+					add_final_destinations(wares, ware);
+				}
 			}
 		}
 		end_table();
@@ -742,6 +863,15 @@ void gui_halt_waiting_list_t::rebuild()
 	if(  !any_goods  ) {
 		new_component<gui_label_t>("keine");
 	}
+
+	// Containers ignore the first event after their components changed. Since the list is
+	// rebuilt while drawing and not while handling an event, the new components can get events at once.
+	// Otherwise clicks get lost often, since the list of a busy stop is rebuilt all the time.
+	clear_dirty();
+	FOR(vector_tpl<gui_container_t *>, const table, new_tables) {
+		table->clear_dirty();
+	}
+	new_tables.clear();
 
 	set_size(get_min_size());
 }
