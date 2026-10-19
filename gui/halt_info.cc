@@ -36,6 +36,7 @@
 #include "../utils/simstring.h"
 
 #include "../sys/simsys.h"
+#include "../simevent.h"
 
 #include "../descriptor/skin_desc.h"
 
@@ -406,6 +407,33 @@ public:
 
 
 /**
+ * Tree lines connecting a sub entry to its parent entry above
+ */
+class gui_tree_branch_t : public gui_component_t
+{
+	bool first, last;
+public:
+	gui_tree_branch_t(bool first_, bool last_) : first(first_), last(last_) {}
+
+	void draw(scr_coord offset) OVERRIDE
+	{
+		offset += pos;
+		const PIXVAL color = SYSCOL_BUTTON_TEXT_DISABLED;
+		const scr_coord_val x = offset.x + LINESPACE / 3;
+		const scr_coord_val y_mid = offset.y + size.h / 2;
+		// the first one reaches up through the spacing to the parent entry
+		const scr_coord_val y_top = first ? offset.y - D_V_SPACE : offset.y;
+		display_vline_wh_clip_rgb(x, y_top, (last ? y_mid + 1 : offset.y + size.h) - y_top, color, true);
+		display_fillbox_wh_clip_rgb(x, y_mid, offset.x + size.w - x, 1, color, true);
+	}
+
+	scr_size get_min_size() const OVERRIDE { return scr_size(LINESPACE, D_LABEL_HEIGHT + 2); } // a little air between the lines
+
+	scr_size get_max_size() const OVERRIDE { return scr_size(LINESPACE, scr_size::inf.h); }
+};
+
+
+/**
  * Bar showing the waiting amount relative to the storage capacity
  */
 class gui_waiting_bar_t : public gui_speedbar_t
@@ -442,6 +470,9 @@ class gui_halt_waiting_list_t : public gui_aligned_container_t, private action_l
 	bool rebuild_pending;
 	bool rebuild_at_once;
 	uint32 last_rebuild_time;
+
+	// visible part of the list on screen at the last draw; empty, if it was not drawn
+	scr_rect visible_area;
 
 	// transfer entries (sorted by via amount) showing their final destinations; key from expand_key()
 	vector_tpl<uint32> expanded;
@@ -490,6 +521,8 @@ public:
 
 	/// rebuilds the list if needed; @returns true, if it was rebuilt (and its size may have changed)
 	bool update();
+
+	void draw(scr_coord offset) OVERRIDE;
 };
 
 
@@ -582,12 +615,16 @@ bool gui_halt_waiting_list_t::update()
 	if(  !halt.is_bound()  ) {
 		return false;
 	}
+	// while the mouse is over the list, the entries must not move away under it
+	const bool mouse_over = visible_area.w > 0  &&  visible_area.h > 0  &&  visible_area.contains( scr_coord(get_mouse_x(), get_mouse_y()) );
+	visible_area = scr_rect();
+
 	rebuild_pending |= is_rebuild_needed();
 	if(  !rebuild_pending  ) {
 		return false;
 	}
 	// a changed sort order or expanded entry is shown at once, changed amounts at most twice per second
-	if(  !rebuild_at_once  &&  last_sortby == halt->get_sortby()  &&  dr_time() - last_rebuild_time < 500  ) {
+	if(  !rebuild_at_once  &&  last_sortby == halt->get_sortby()  &&  (mouse_over  ||  dr_time() - last_rebuild_time < 500)  ) {
 		return false;
 	}
 	rebuild();
@@ -595,6 +632,17 @@ bool gui_halt_waiting_list_t::update()
 	rebuild_at_once = false;
 	last_rebuild_time = dr_time();
 	return true;
+}
+
+
+void gui_halt_waiting_list_t::draw(scr_coord offset)
+{
+	// clipped to the scrollpane
+	const clip_dimension cr = display_get_clip_wh();
+	visible_area = scr_rect( offset + pos, size );
+	visible_area.clip( scr_rect(cr.x, cr.y, cr.w, cr.h) );
+
+	gui_aligned_container_t::draw(offset);
 }
 
 
@@ -652,26 +700,39 @@ void gui_halt_waiting_list_t::add_final_destinations(const vector_tpl<ware_t> &w
 		return b.halt.is_bound(); // unknown destinations last
 	} );
 
-	FOR(vector_tpl<destination_t>, const& d, destinations) {
-		new_component<gui_empty_t>();
-
-		char amount_str[64];
-		number_to_string(amount_str, (double)d.amount, 0);
-		gui_label_buf_t *lb_amount = new_component<gui_label_buf_t>(SYSCOL_BUTTON_TEXT_DISABLED);
-		lb_amount->buf().append(amount_str);
-		lb_amount->update();
-
-		add_list_table(3,1)->set_alignment(ALIGN_LEFT | ALIGN_CENTER_V);
-		{
-			new_component<gui_margin_t>( max(D_ARROW_RIGHT_WIDTH, D_ARROW_DOWN_WIDTH), 0 );
-			gui_label_buf_t *lb_name = new_component<gui_label_buf_t>();
-			lb_name->buf().append( has_character(0x2192) ? "\xE2\x86\x92 " : "> " );
-			lb_name->buf().append( d.halt.is_bound() ? d.halt->get_name() : translator::translate("Error in Routing") );
-			lb_name->update();
-			new_component<gui_fill_t>();
-		}
-		end_table();
+	if(  destinations.empty()  ) {
+		return;
 	}
+
+	// below the name of the entry, connected to it by tree lines
+	new_component<gui_empty_t>();
+	new_component<gui_empty_t>();
+	gui_aligned_container_t *tree = add_list_table(3,0);
+	tree->set_alignment(ALIGN_RIGHT | ALIGN_CENTER_V);
+	tree->set_spacing( scr_size(D_H_SPACE, 0) ); // no gaps between the tree lines
+	{
+		for(  uint32 i = 0;  i < destinations.get_count();  i++  ) {
+			const destination_t &d = destinations[i];
+
+			new_component<gui_tree_branch_t>( i == 0, i+1 == destinations.get_count() );
+
+			char amount_str[64];
+			number_to_string(amount_str, (double)d.amount, 0);
+			gui_label_buf_t *lb_amount = new_component<gui_label_buf_t>(SYSCOL_BUTTON_TEXT_DISABLED);
+			lb_amount->buf().append(amount_str);
+			lb_amount->update();
+
+			add_list_table(2,1)->set_alignment(ALIGN_LEFT | ALIGN_CENTER_V);
+			{
+				gui_label_buf_t *lb_name = new_component<gui_label_buf_t>();
+				lb_name->buf().append( d.halt.is_bound() ? d.halt->get_name() : translator::translate("Error in Routing") );
+				lb_name->update();
+				new_component<gui_fill_t>();
+			}
+			end_table();
+		}
+	}
+	end_table();
 }
 
 
