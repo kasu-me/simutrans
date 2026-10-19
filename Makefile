@@ -388,6 +388,7 @@ SOURCES += gui/components/gui_convoiinfo.cc
 SOURCES += gui/components/gui_divider.cc
 SOURCES += gui/components/gui_fixedwidth_textarea.cc
 SOURCES += gui/components/gui_flowtext.cc
+SOURCES += gui/components/gui_freight_list.cc
 SOURCES += gui/components/gui_image.cc
 SOURCES += gui/components/gui_image_list.cc
 SOURCES += gui/components/gui_component.cc

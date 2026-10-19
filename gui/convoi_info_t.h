@@ -29,6 +29,7 @@
 
 class convoi_detail_t;
 class convoi_stops_list_t;
+class gui_convoi_freight_list_t;
 
 /**
  * Displays an information window for a convoi
@@ -45,12 +46,9 @@ public:
 	};
 
 private:
-	/**
-	* Buffer for freight info text string.
-	*/
-	cbuffer_t freight_info;
+	// list of the loaded goods
+	gui_convoi_freight_list_t *freight_list;
 
-	gui_textarea_t text;
 	obj_view_t view;
 	gui_label_buf_t speed_label, profit_label, running_cost_label, weight_label, target_label, line_label;
 	gui_textinput_t input;

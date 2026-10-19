@@ -36,6 +36,8 @@ class vehicle_desc_t;
 class schedule_t;
 class cbuffer_t;
 class signal_t;
+class goods_desc_t;
+class ware_t;
 
 // A struct to represent the directly reachable halts
 struct convoi_reachable_halt_t {
@@ -929,6 +931,19 @@ public:
 	* @param[out] buf Filled with freight description
 	*/
 	void get_freight_info(cbuffer_t & buf);
+
+	/**
+	 * @param[out] cargo the loaded goods, packets of the same destination joined
+	 * @param[out] capacity the capacity for each goods category, indexed by the category index
+	 * @param[out] overload_capacity the same, but including overloading
+	 */
+	void get_freight_list(vector_tpl<ware_t> &cargo, vector_tpl<uint32> &capacity, vector_tpl<uint32> &overload_capacity) const;
+
+	/**
+	 * @returns true once after the loaded goods (or their sort order) have changed
+	 */
+	bool check_freight_info_changed() { const bool changed = freight_info_resort; freight_info_resort = false; return changed; }
+
 	void set_sortby(uint8 order);
 	uint8 get_sortby() const { return freight_info_order; }
 

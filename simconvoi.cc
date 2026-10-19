@@ -3856,6 +3856,50 @@ static void append_capacity_ware( slist_tpl<ware_t> &list, const goods_desc_t *d
 
 
 // caches the last info; resorts only when needed
+void convoi_t::get_freight_list(vector_tpl<ware_t> &cargo, vector_tpl<uint32> &capacity, vector_tpl<uint32> &overload_capacity) const
+{
+	cargo.clear();
+	capacity.clear();
+	overload_capacity.clear();
+	for(  uint32 i = 0;  i < goods_manager_t::get_max_catg_index();  i++  ) {
+		capacity.append(0);
+		overload_capacity.append(0);
+	}
+
+	for(  uint32 i = 0;  i != anz_vehikel;  ++i  ) {
+		const vehicle_t* v = fahr[i];
+
+		const goods_desc_t* ware_desc = v->get_desc()->get_freight_type();
+		const uint16 menge = v->get_desc()->get_capacity();
+		if(  menge>0  &&  ware_desc!=goods_manager_t::none  ) {
+			capacity[ware_desc->get_catg_index()] += menge;
+			// only passenger cars can be overloaded, and only up to the maximum loading of the current schedule entry, @see hat_gehalten()
+			const bool allow_overload_car = (v->get_cargo_type()->get_catg_index()==0)  &&  welt->get_settings().is_allow_overloading();
+			uint16 max_load_percentage = 100;
+			if(  allow_overload_car  &&  schedule  ) {
+				max_load_percentage = (uint16)max( (int)schedule->get_current_entry().maximum_loading, 100 );
+			}
+			overload_capacity[ware_desc->get_catg_index()] += menge*max_load_percentage/100;
+		}
+
+		// join packets with the same destination, like get_freight_info() does,
+		// but keep the next stops apart, since their entries can be expanded to the destinations
+		for(  ware_t ware : v->get_cargo()  ) {
+			for(  ware_t &tmp : cargo  ) {
+				if(  ware.same_destination(tmp)  &&  ware.get_zwischenziel() == tmp.get_zwischenziel()  ) {
+					tmp.menge += ware.menge;
+					ware.menge = 0;
+					break;
+				}
+			}
+			if(  ware.menge != 0  ) {
+				cargo.append(ware);
+			}
+		}
+	}
+}
+
+
 void convoi_t::get_freight_info(cbuffer_t & buf)
 {
 	if(freight_info_resort) {

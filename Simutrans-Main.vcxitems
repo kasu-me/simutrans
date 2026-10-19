@@ -221,6 +221,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)gui\components\gui_divider.cc" />
     <ClCompile Include="$(MSBuildThisFileDirectory)gui\components\gui_fixedwidth_textarea.cc" />
     <ClCompile Include="$(MSBuildThisFileDirectory)gui\components\gui_flowtext.cc" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)gui\components\gui_freight_list.cc" />
     <ClCompile Include="$(MSBuildThisFileDirectory)gui\components\gui_image.cc" />
     <ClCompile Include="$(MSBuildThisFileDirectory)gui\components\gui_image_list.cc" />
     <ClCompile Include="$(MSBuildThisFileDirectory)gui\components\gui_component.cc" />
@@ -584,6 +585,7 @@
     <ClInclude Include="$(MSBuildThisFileDirectory)gui\components\gui_divider.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)gui\components\gui_fixedwidth_textarea.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)gui\components\gui_flowtext.h" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)gui\components\gui_freight_list.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)gui\components\gui_image.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)gui\components\gui_image_list.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)gui\components\gui_component.h" />

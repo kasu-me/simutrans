@@ -106,6 +106,7 @@ target_sources(simutrans PRIVATE
 		gui/components/gui_divider.cc
 		gui/components/gui_fixedwidth_textarea.cc
 		gui/components/gui_flowtext.cc
+		gui/components/gui_freight_list.cc
 		gui/components/gui_image.cc
 		gui/components/gui_image_list.cc
 		gui/components/gui_component.cc

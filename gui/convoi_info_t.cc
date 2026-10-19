@@ -22,6 +22,9 @@
 #include "../dataobj/loadsave.h"
 #include "../simconvoi.h"
 #include "../simline.h"
+#include "../simhalt.h"
+#include "../bauer/goods_manager.h"
+#include "components/gui_freight_list.h"
 
 #include "../player/simplay.h"
 
@@ -60,6 +63,66 @@ static const bool cost_type_money[convoi_t::MAX_CONVOI_COST] =
 };
 
 
+
+/**
+ * List of the loaded goods
+ */
+class gui_convoi_freight_list_t : public gui_freight_list_t
+{
+	convoihandle_t cnv;
+
+	// state of the last rebuild; if anything differs, the list is rebuilt
+	uint32 last_vehicle_count;
+
+protected:
+	bool has_source() const OVERRIDE { return cnv.is_bound(); }
+
+	uint8 get_sortby() const OVERRIDE { return cnv->get_sortby(); }
+
+	bool is_rebuild_needed() OVERRIDE
+	{
+		// always ask first, so the flag of the convoi is reset
+		bool changed = cnv->check_freight_info_changed();
+		changed |= last_vehicle_count != cnv->get_vehicle_count();
+		return changed;
+	}
+
+	void fill() OVERRIDE;
+
+public:
+	gui_convoi_freight_list_t() : last_vehicle_count(0) {}
+
+	void set_convoi(convoihandle_t c) { cnv = c; reset(); }
+};
+
+
+void gui_convoi_freight_list_t::fill()
+{
+	last_vehicle_count = cnv->get_vehicle_count();
+
+	vector_tpl<ware_t> cargo;
+	vector_tpl<uint32> capacity, overload_capacity;
+	cnv->get_freight_list(cargo, capacity, overload_capacity);
+
+	vector_tpl<ware_t> wares;
+	for(  uint8 catg_index = 0;  catg_index < goods_manager_t::get_max_catg_index();  catg_index++  ) {
+		wares.clear();
+		uint64 total = 0;
+		FOR(vector_tpl<ware_t>, const& ware, cargo) {
+			if(  ware.get_desc() != goods_manager_t::none  &&  ware.get_desc()->get_catg_index() == catg_index  ) {
+				wares.append(ware);
+				total += ware.menge;
+			}
+		}
+		const uint32 cap = catg_index < capacity.get_count() ? capacity[catg_index] : 0;
+		if(  total == 0  &&  cap == 0  ) {
+			continue;
+		}
+		add_category(catg_index, wares, total, cap, catg_index < overload_capacity.get_count() ? overload_capacity[catg_index] : 0);
+	}
+}
+
+
 /**
  * This variable defines by which column the table is sorted
  * Values: 0 = destination
@@ -78,7 +141,7 @@ const char *convoi_info_t::sort_text[SORT_MODES] = {
 
 convoi_info_t::convoi_info_t(convoihandle_t cnv) :
 	gui_frame_t(""),
-	text(&freight_info),
+	freight_list(new gui_convoi_freight_list_t()),
 	view(scr_size(max(64, get_base_tile_raster_width()), max(56, (get_base_tile_raster_width() * 7) / 8))),
 	scroll_freight(&container_freight, true, true),
 	scroll_stops_list(&container_stops, true, true)
@@ -222,7 +285,8 @@ void convoi_info_t::init(convoihandle_t cnv)
 		container_freight.add_component(&sort_button);
 	}
 	container_freight.end_table();
-	container_freight.add_component(&text);
+	freight_list->set_convoi(cnv);
+	container_freight.add_component(freight_list);
 
 	switch_mode.add_tab(&container_stats, translator::translate("Chart"));
 
@@ -301,6 +365,7 @@ convoi_info_t::~convoi_info_t()
 	buf_line_memo.clear();
 	// rename if necessary
 	rename_cnv();
+	delete freight_list;
 }
 
 
@@ -382,11 +447,9 @@ void convoi_info_t::update_labels()
 	}
 	line_label.update();
 
-	// buffer update now only when needed by convoi itself => dedicated buffer for this
-	const int old_len=freight_info.len();
-	cnv->get_freight_info(freight_info);
-	if(  old_len!=freight_info.len()  ) {
-		text.recalc_size();
+	// rebuild the list only when needed by the convoi itself
+	if(  freight_list->update()  ) {
+		// let the scrollpane resize the list to the new contents
 		scroll_freight.set_size( scroll_freight.get_size() );
 	}
 
