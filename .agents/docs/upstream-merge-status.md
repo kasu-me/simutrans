@@ -13,9 +13,9 @@
 | キー | 値 |
 | --- | --- |
 | 起点コミット (base) | `d01a02edf26e0faf1c3542d4d854fe6ce52cc9f8` (v58_3) |
-| 追跡済み最新コミット (head) | `e2bdac807d898fb444474c690ffa6b623636a9c5` (increment OTRP_VERSION_MINOR / v62_2) |
-| 対象コミット数 | 104 |
-| 最終更新 | 2026-10-18 |
+| 追跡済み最新コミット (head) | `11a7c338b718346d482da0780e7465838909214d` (increment OTRP_VERSION_MINOR / v62_3) |
+| 対象コミット数 | 109 |
+| 最終更新 | 2026-10-19 |
 
 > `head` より新しい本家コミットが増えた場合は skill `update-upstream-status` で追記する。
 
@@ -75,6 +75,7 @@
 | FEAT-25 | 新機能追加 | マップエディタの建物等をサムネイルで選択する | 取り込み済み |
 | FEAT-26 | 新機能追加 | スケジュール編集で選択した停留所を先頭にする (Make first) | 取り込み不要 |
 | FEAT-27 | 新機能追加 | 市街建築物の選択状態をプリセットとして保存/読込する | 未取り込み |
+| FEAT-28 | 新機能追加 | makeobj 60.12 形式の pak 読み込み (建物 v12・標識の追加画像リスト・近接斜め画像) | 未取り込み |
 | FIX-01 | バグ修正 | choose 標識/choose 区間終端が経路上にある場合の判定 | 取り込み済み |
 | FIX-02 | バグ修正 | pak の `clip_below` 設定の読み込み順序 | 取り込み済み |
 | FIX-03 | バグ修正 | 一方通行詳細設定の waytype 判定漏れと経路喪失時の異常終了 | 取り込み済み |
@@ -92,7 +93,9 @@
 | FIX-15 | バグ修正 | 車庫の車両名フィルタ文字列のコピー長の誤り | 取り込み済み |
 | FIX-16 | バグ修正 | パスワード画面と会社ロック関連のネットワークコマンドの不具合 | 取り込み済み |
 | FIX-17 | バグ修正 | シンプルツール番号のずれ (`TOOL_HALT_PERMISSION` を enum 末尾へ移動) | 取り込み済み |
-| MISC-01 | その他 | 本家バージョン番号のインクリメント (v59〜v62_2) | 取り込み不要 |
+| FIX-18 | バグ修正 | ズーム時・坂の境界で地面画像が隣接タイルの道を上書きする描画不具合 | 未取り込み |
+| FIX-19 | バグ修正 | 複数タイルの建物が道・停留所・他の建物と重なって建つ/壊れた断片が残る | 未取り込み |
+| MISC-01 | その他 | 本家バージョン番号のインクリメント (v59〜v62_3) | 取り込み不要 |
 | MISC-02 | その他 | 日本語訳 `ja.OTRP.tab` の更新 (v59〜v62_2分) | 未取り込み |
 | MISC-03 | その他 | SDL3 バックエンド対応と CI のビルド構成更新 (Ubuntu 分は後に削除) | 未取り込み |
 | MISC-04 | その他 | `obj_t::finish_rd()` にセーブの OTRP バージョンを渡す基盤変更 | 未取り込み |
@@ -115,6 +118,7 @@
   - `eb9dbf485` BUG FIX: alpha channel image fix (#692) — 後続修正
   - `cff33e0d2` BUG FIX: update the number of player_unowned (#693) — 後続修正
   - `03654a9dd` BUG FIX: player frame and player merge frame update (#704) — 後続修正
+  - `7b8e2a174` BUG FIX: fix player color for large player_id (#773) — 後続修正
 - **主な変更箇所**:
   - `simconst.h` — `MAX_PLAYER_COUNT` 16→64、`PLAYER_UNOWNED` 15→63
   - `obj/roadsign.{h,cc}`, `gui/privatesign_info.{h,cc}`, `simtool.cc` — 私有道路マスクを64社分へ拡張、既定値設定
@@ -127,14 +131,25 @@
   - `dataobj/gameinfo.cc`, `dataobj/scenario.{h,cc}`, `dataobj/settings.cc`, `simworld.{h,cc}`, `simhalt.{h,cc}`, `gui/halt_info.cc`, `script/api/api_map_objects.cc`, `script/api_param.cc`, `vehicle/simvehicle.cc`
   - `tests/automated-tests/tests/test_player.nut` — 上限63社に合わせてテスト更新
   - `documentation/ja.OTRP.tab` — 旧形式保存時の警告文言を追加 (`d272db352`)
+  - `dataobj/settings.cc` — `set_player_color_to_default()` の既定色を色系統数 (`SPECIAL_COLOR_COUNT / 8` = 28) で折り返す。
+    ランダム色選択の「使用済みの色」除外処理を修正 (`7b8e2a174`)
+  - `player/simplay.cc` — `player_t::rdwr()` の読み込み時、範囲外の会社色 (`>= SPECIAL_COLOR_COUNT`) を既定色に補正 (`7b8e2a174`)
 - **詳細**:
   - 会社番号を扱う多数の箇所を uint8 前提で見直し、フラグ用ビットマスクを64社分に拡張している。
   - 旧セーブ形式で保存しようとすると、ネットワークモードでは「16社以上あるため現行形式で保存する」旨を通知、
     シングルプレイでは「会社0へ統合が必要。SHIFT+保存で確定」という2段階確認になる。
+  - `7b8e2a174`: 既定の会社色は `player_nr` (色1) / `player_nr + 3` (色2) をそのまま色系統番号にしていたため、
+    会社番号が大きいと色系統数 28 を超えて不正な色になっていた。これを `% 28` で折り返す。
+    ランダム色選択 (`default_player_color_random`) の除外処理は、比較対象の会社を取り違え
+    (`test_sp` ではなく `player` を参照) かつ `1<<(色/8)` という誤った値を除外していたのを修正し、
+    候補が尽きた場合は既定色にフォールバックする。ロード時の会社色補正に OTRP バージョンによる分岐は無い。
+    なおコミット本文には発車案内板など無関係な squash 前コミットの件名が並ぶが、実際の差分は上記2ファイルのみ。
 - **取り込み時の注意**:
   - **セーブデータ形式が変わる** (本家では OTRP v59 相当)。取り込む場合は `simversion.h` の
     `OTRP_VERSION_MAJOR` の扱い (MISC-01) を必ず併せて検討すること。
   - 変更範囲が非常に広くネットワーク互換性にも影響する。単独 cherry-pick の難度は高い。
+  - `7b8e2a174` のうち、ランダム色選択の除外処理の誤り (`settings.cc`) は v58_3 時点から存在し、
+    develop-kasumi (16社) にも同じコードがある。会社数拡張とは独立に `settings.cc` 部分だけ取り込むことも可能。
 - **develop-kasumi 側コミット**: —
 - **備考**: —
 
@@ -978,6 +993,113 @@
 - **備考**: 状態確認用の識別子は `dataobj/citybuilding_preset.h` の `citybuilding_preset_t`、
   または `gui/citybuilding_edit.h` の `bt_preset_load`。
 
+### FEAT-28: makeobj 60.12 形式の pak 読み込み
+
+- **分類**: 新機能追加
+- **状態**: 未取り込み
+- **概要**: makeobj 60.12 で出力される pak を読み込めるようにする
+  (建物ノード v12 の `height_clearance`、標識の追加画像リスト、way/架線の近接斜め (close diagonal) 画像)。
+- **上流コミット**:
+  - `51a401fa9` load makeobj 60_12 (#771)
+- **主な変更箇所**:
+  - `descriptor/reader/building_reader.cc`, `descriptor/building_desc.h` — 建物ノード v12 (旧 `btyp` を廃止し `height_clearance` を追加) の読み込み。
+    v11 以前は `height_clearance = 255` (未設定)。取得用に `get_height_clearance()` を追加
+  - `descriptor/roadsign_desc.h`, `descriptor/reader/roadsign_reader.cc` — 標識のカーソル以降の任意子ノード
+    (斜め・前面・左側通行用とその組合せ、子 4〜10) を子ノード数 (`children`) で判別して参照する
+    `get_image_id(index, diagonal, left)` / `get_front_image_id()` / `has_diagonal_image()` 等を追加
+  - `descriptor/way_desc.h`, `descriptor/reader/way_reader.cc` — 前面画像リストの有無 (`front_image_lists`) と
+    実際に前面画像があるか (`front_images`) を分離。斜め・近接斜め・分岐 (switch / switch_ex) 画像の有無を
+    `register_obj()` で一度だけ計算してビットフィールドにキャッシュ。`get_close_diagonal_image_id()` を追加
+  - `descriptor/way_obj_desc.h`, `descriptor/reader/way_obj_reader.cc` — 架線等の斜め・近接斜め画像の有無をキャッシュし、
+    `get_front/back_close_diagonal_image_id()` を追加
+  - `descriptor/image_list.h` — 画像リストが全て空かを返す `is_empty()` を追加
+  - `boden/wege/weg.{h,cc}` — `close_diagonal_state` と `check_close_diagonal()` を追加。十字 (`ribi_t::all`) の way タイルで
+    周囲4タイルの形から「平行な2本の斜め」かを判定し、近接斜め画像 (`image_close_diagonal`) を使う。
+    `check_diagonal()` は近接斜め画像を持つ way なら両隣が十字/分岐でも斜めとみなす。回転時は状態の縦横を入れ替える
+  - `obj/wayobj.{h,cc}` — 架線等も同様に近接斜め画像を選ぶ
+- **詳細**:
+  - 近接斜め: 1タイル間隔で平行に走る2本の斜め線路/道路で、1タイルおきに十字タイルになる箇所を、
+    交差ではなく2本の斜めとして描画する。`close_diagonal_state` は 1=北西+南東、2=北東+南西。
+    近接斜め画像が pak に無い way では従来どおりで、コード中のコメントでは「1タイルに2本の way」(FEAT-16) で表現する前提。
+  - 標識の追加画像リストは本コミット時点では記述子のアクセサのみで、`obj/roadsign.cc` の描画からは未使用。
+    `height_clearance` も読み込むだけで、建設判定等には未使用。
+  - 標識の子ノード数・建物の `height_clearance` はチェックサムに含めていない (既存 pak のチェックサムは不変)。
+- **取り込み時の注意**:
+  - セーブ形式への影響なし (`close_diagonal_state` は保存せず `calc_image()` で再計算)。
+  - v58_3 の `building_reader_t` は未知の建物ノード版数で `dbg->fatal()` するため、makeobj 60.12 で作った建物 pak は
+    本項目を取り込むまで develop-kasumi では読み込めない。
+  - `weg_t::check_diagonal()` / `calc_image()` は FEAT-16 でも変更されており、FEAT-16 未取り込みのまま cherry-pick すると衝突が見込まれる。
+- **develop-kasumi 側コミット**: —
+- **備考**: 関連: FEAT-16 (1タイルに2本の way を斜めで共存させる)
+
+### FIX-18: ズーム時・坂の境界で地面画像が隣接タイルの道を上書きする
+
+- **分類**: バグ修正
+- **状態**: 未取り込み
+- **概要**: ズームで拡大縮小した地面画像がタイル境界をはみ出し、`draw_as_obj` で描かれる地面が
+  隣接タイルの道を上書きしてしまう描画不具合を修正する (坂の境界を含む)。
+- **上流コミット**:
+  - `73fcb7c27` Fix ground overwriting at zoomed tile (#772)
+- **主な変更箇所**:
+  - `boden/grund.cc` — `grund_t::display_boden()` 内の way 用ポリゴンクリップ処理を `clip_way_background()` に切り出し、
+    `draw_as_obj` かつ way のあるタイル (`simple_drawing` でない場合) では地面画像の描画時にも同じクリップを掛ける。
+    気候・雪のオーバーレイ描画の後でクリップを解除する
+  - `display/simgraph16.cc` — `display_img_alpha_wc()` (アルファ付き画像の描画) がポリゴンクリップ
+    (`number_of_clips > 0`) を考慮していなかったのを、行ごとに `get_xrange_and_step_y()` で範囲を絞るよう修正
+- **詳細**: way 用のクリップは従来 way 自身の描画にしか掛かっておらず、地面画像は矩形クリップのみだった。
+  再ズームで地面画像がタイル外へ広がると、後から描かれる地面が先に描かれた隣タイルの道を覆っていた。
+- **取り込み時の注意**: セーブ形式・ゲーム状態への影響なし (描画のみ)。対象コードは v58_3 時点から存在する。
+- **develop-kasumi 側コミット**: —
+- **備考**: —
+
+### FIX-19: 複数タイルの建物が道・停留所・他の建物と重なって建つ
+
+- **分類**: バグ修正
+- **状態**: 未取り込み
+- **概要**: 市街建築物・役場・工場・本社などの複数タイルの建物が、道や停留所、他の建物と重なって建設され、
+  道が基礎の下に残ったり、他の建物の壊れた断片が残ったりする問題をまとめて修正する。
+  既存セーブに残った不正な状態もロード時に修復する。
+- **上流コミット**:
+  - `d6f09ac46` BUG FIX: multitile buildings (#765)
+- **主な変更箇所**:
+  - `simworld.{h,cc}` — ツールのプレビュー用ダミー地面 (`is_dummy_ground()`) を無視する `lookup_no_dummy()` を新設し、
+    `square_is_free()` の「上に何かあるか」判定で使用 (ダミー地面はツール使用中のクライアントにしか無く、デシンクの原因になる)。
+    ロード時 (`plans_finish_rd` の後) にサーバー/オフラインのみ `hausbauer_t::cleanup_multitile_buildings_finish_rd()` を実行
+  - `bauer/hausbauer.{h,cc}`
+    - `remove_invalid_objects_on_building_tile()` / `remove_invalid_objects_on_multitile_building()` を新設。
+      建物タイル上の不正な物を除去する (他の建物は全タイルごと撤去、木などは削除。送電線・橋脚・ラベル・煙・移動物は残す)
+    - `has_way_objects()` を新設 (基礎の上に移された way で `has_way` フラグが落ちたものも検出)
+    - `build()` で、ドック以外は建設前に全タイルの way/停留所の有無を最終確認し、あれば `NULL` を返す (工場は失敗できないので続行)。
+      複数タイルの建物は各タイルの不正物を除去してから建てる
+    - `remove()` で、他の建物の下に隠れた断片も含めて建物の全パーツを収集 (`collect_building_parts()`) して削除し、
+      都市からの登録解除を先に行う。他の建物が残るタイルは地面を戻さない
+    - `cleanup_multitile_buildings_finish_rd()` — 複数タイル建物と特殊建物 (役場・工場・名所・記念碑・本社) のタイルについて、
+      way フラグの補正、隣接タイルの way からその建物タイルへの接続方向の除去、不正物の除去を行う
+  - `boden/grund.{h,cc}` — 実際の way オブジェクトから `has_way1/2` フラグと way の位置を再計算する `update_way_flags()` を新設
+  - `simcity.{h,cc}`
+    - 役場の配置可否判定を `stadt_t::is_tile_ok_for_townhall()` に切り出し、停留所・way・上空の物があるタイルや、
+      1タイルでない市街建築物の置き換えを不可にする。役場の位置をずらした後の場所も `is_place_ok()` で再確認
+    - 役場の建て替えで、新しい役場が実際に使うレイアウト (`old_layout % get_all_layouts()`) のサイズで判定するよう修正し、
+      建設予定タイルに停留所・way・上空の物があれば移転扱いにする
+    - `first_obj()` ではなく `find<gebaeude_t>()` で建物を取得 (way 等が先頭に来る場合の取り違え修正)
+    - `build_city_house()` / `renovate_city_building()` で、複数タイル建物の建設後に各タイルの不正物を除去
+    - `remove_gebaeude_tile_from_stadt()` を新設 (1タイル分だけ都市の建物リストから外す)
+    - 各所の `lookup()` を `lookup_no_dummy()` へ置き換え、記念碑・役場の `hausbauer_t::build()` 失敗 (`NULL`) を処理
+  - `bauer/fabrikbauer.cc` — 回転できない工場のためにマップを回転させた後、確認済み範囲と同じサイズのレイアウトを選び直す
+    (無ければ回転を戻して建設中止)。上空判定を `lookup_no_dummy()` に
+  - `simtool.cc` — 建物回転・本社の拡張後に不正物を除去、本社建設失敗時に `NOTICE_UNSUITABLE_GROUND`、
+    `tool_city_chain_t` (産業チェーン建設) で市街工場以外は指定位置の空きを事前確認
+  - `simconvoi.cc` — `find_tiles_convoy_on()` で隣接タイルに該当 waytype の way が無い場合は `koord3d::invalid` を返す
+- **詳細**: way が基礎の下に残る/他の建物の一部だけが残るといった状態は、都市の建物リストとの不整合から
+  マップ終了時の異常終了などにつながっていた (コード中のコメントより)。
+  ロード時の修復はネットワーククライアントでは行わず、サーバーの状態をそのまま使う。
+- **取り込み時の注意**:
+  - セーブ形式への影響なし (OTRP バージョンによる分岐なし)。ただしロード時の修復でゲーム状態が変わり得る。
+  - 建設可否の判定が変わるため、ネットワークゲームではサーバーとクライアントの両方が本修正を含む必要がある (片方だけだとデシンク)。
+  - 対象のコードは v58_3 時点から存在する。`simcity.cc` の `renovate_city_building()` は FIX-12 (取り込み済み) でも変更されているので、その上に適用する。
+- **develop-kasumi 側コミット**: —
+- **備考**: 関連: FIX-12 (市街建築物を複数タイルの建物に建て替える際の異常終了)。別 PR のため独立項目とした。
+
 ### MISC-01: 本家バージョン番号のインクリメント
 
 - **分類**: その他
@@ -1003,6 +1125,7 @@
   - `5e2e05510` increment OTRP_VERSION_PATCH (v62_0_3)
   - `e495a7ba5` increment OTRP_VERSION_MINOR (v62_1)
   - `e2bdac807` increment OTRP_VERSION_MINOR (v62_2)
+  - `11a7c338b` increment OTRP_VERSION_MINOR (v62_3)
 - **主な変更箇所**: `simversion.h` — `OTRP_VERSION_MAJOR` / `OTRP_VERSION_MINOR` / `OTRP_VERSION_PATCH`
 - **詳細**: —
 - **取り込み時の注意**:
@@ -1013,7 +1136,7 @@
   - `OTRP_VERSION_MAJOR >= 60` を要求する項目: FEAT-07
   - `OTRP_VERSION_MAJOR >= 61` を要求する項目: FEAT-17 / FEAT-18 / FEAT-19 / MISC-04
   - `OTRP_VERSION_MAJOR >= 62` を要求する項目: FEAT-18 (`8076cc1f8` の航送収入・通行料設定の分)
-  - 上記以外の項目 (FEAT-09 拡張分、FEAT-11〜FEAT-16、FEAT-20〜FEAT-27、FIX-03〜FIX-17、
+  - 上記以外の項目 (FEAT-09 拡張分、FEAT-11〜FEAT-16、FEAT-20〜FEAT-28、FIX-03〜FIX-19、
     MISC-03 / MISC-05) は `get_OTRP_version()` によるセーブ形式の分岐を持たないため、バージョン引き上げは不要。
 - **develop-kasumi 側コミット**: — (独自運用: `cf52a5750` 等)
 - **備考**: バージョン番号自体は取り込まない方針。上記の依存関係のみ管理する。
