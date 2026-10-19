@@ -3883,10 +3883,14 @@ void convoi_t::get_freight_list(vector_tpl<ware_t> &cargo, vector_tpl<uint32> &c
 		}
 
 		// join packets with the same destination, like get_freight_info() does,
-		// but keep the next stops apart, since their entries can be expanded to the destinations
+		// but keep the next two stops to leave apart, since the expanded entries show them
 		for(  ware_t ware : v->get_cargo()  ) {
+			const vector_tpl<halthandle_t> &transit = ware.get_transit_halts();
+			const halthandle_t second_transit = transit.get_count() > 1 ? transit[1] : halthandle_t();
 			for(  ware_t &tmp : cargo  ) {
-				if(  ware.same_destination(tmp)  &&  ware.get_zwischenziel() == tmp.get_zwischenziel()  ) {
+				const vector_tpl<halthandle_t> &tmp_transit = tmp.get_transit_halts();
+				const halthandle_t tmp_second_transit = tmp_transit.get_count() > 1 ? tmp_transit[1] : halthandle_t();
+				if(  ware.same_destination(tmp)  &&  ware.get_zwischenziel() == tmp.get_zwischenziel()  &&  second_transit == tmp_second_transit  ) {
 					tmp.menge += ware.menge;
 					ware.menge = 0;
 					break;

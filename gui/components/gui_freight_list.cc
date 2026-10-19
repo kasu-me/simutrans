@@ -362,6 +362,7 @@ void gui_freight_list_t::add_category(uint8 catg_index, const vector_tpl<ware_t>
 void gui_freight_list_t::add_final_destinations(const vector_tpl<ware_t> &wares, const ware_t &entry)
 {
 	struct destination_t {
+		halthandle_t next_transfer; // where to change after the next stop of the entry, if not going there directly
 		halthandle_t halt;
 		uint64 amount;
 	};
@@ -372,16 +373,19 @@ void gui_freight_list_t::add_final_destinations(const vector_tpl<ware_t> &wares,
 			ware.get_zwischenziel() != entry.get_zwischenziel()  ||  ware.get_ziel() == ware.get_zwischenziel()  ) {
 			continue;
 		}
+		// transit_halts: the stops to leave the convoy, starting with the next stop and ending with the destination
+		const vector_tpl<halthandle_t> &transit = ware.get_transit_halts();
+		const halthandle_t next_transfer = transit.get_count() > 2 ? transit[1] : halthandle_t();
 		bool found = false;
 		for(  uint32 i = 0;  i < destinations.get_count();  i++  ) {
-			if(  destinations[i].halt == ware.get_ziel()  ) {
+			if(  destinations[i].halt == ware.get_ziel()  &&  destinations[i].next_transfer == next_transfer  ) {
 				destinations[i].amount += ware.menge;
 				found = true;
 				break;
 			}
 		}
 		if(  !found  ) {
-			destination_t d = { ware.get_ziel(), ware.menge };
+			destination_t d = { next_transfer, ware.get_ziel(), ware.menge };
 			destinations.append(d);
 		}
 	}
@@ -392,10 +396,17 @@ void gui_freight_list_t::add_final_destinations(const vector_tpl<ware_t> &wares,
 		if(  a.amount != b.amount  ) {
 			return a.amount > b.amount;
 		}
-		if(  a.halt.is_bound()  &&  b.halt.is_bound()  ) {
-			return natural_strcmp(a.halt->get_name(), b.halt->get_name()) < 0;
+		if(  a.halt != b.halt  ) {
+			if(  a.halt.is_bound()  &&  b.halt.is_bound()  ) {
+				return natural_strcmp(a.halt->get_name(), b.halt->get_name()) < 0;
+			}
+			return b.halt.is_bound(); // unknown destinations last
 		}
-		return b.halt.is_bound(); // unknown destinations last
+		// same destination over different transfers: direct ones first
+		if(  a.next_transfer.is_bound()  &&  b.next_transfer.is_bound()  ) {
+			return natural_strcmp(a.next_transfer->get_name(), b.next_transfer->get_name()) < 0;
+		}
+		return b.next_transfer.is_bound();
 	} );
 
 	// below the name of the entry, connected to it by tree lines
@@ -416,9 +427,18 @@ void gui_freight_list_t::add_final_destinations(const vector_tpl<ware_t> &wares,
 			lb_amount->buf().append(amount_str);
 			lb_amount->update();
 
-			add_list_table(2,1)->set_alignment(ALIGN_LEFT | ALIGN_CENTER_V);
+			add_list_table(0,1)->set_alignment(ALIGN_LEFT | ALIGN_CENTER_V);
 			{
+				// further transfer: next transfer -> destination
+				if(  d.next_transfer.is_bound()  ) {
+					gui_label_buf_t *lb_transfer = new_component<gui_label_buf_t>(SYSCOL_BUTTON_TEXT_DISABLED);
+					lb_transfer->buf().append( d.next_transfer->get_name() );
+					lb_transfer->update();
+				}
 				gui_label_buf_t *lb_name = new_component<gui_label_buf_t>();
+				if(  d.next_transfer.is_bound()  ) {
+					lb_name->buf().append( get_list_arrow() );
+				}
 				lb_name->buf().append( d.halt.is_bound() ? d.halt->get_name() : translator::translate("Error in Routing") );
 				lb_name->update();
 				new_component<gui_fill_t>();
