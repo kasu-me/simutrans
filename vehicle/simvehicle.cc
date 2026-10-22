@@ -929,6 +929,9 @@ void vehicle_t::initialise_journey(uint16 start_route_index, bool recalc)
 	}
 
 	route_t const& r = *cnv->get_route();
+	if(  cnv->front() == this  ) {
+		live_changes_t::route_restarted( cnv->self.get_id() );
+	}
 	if(!recalc) {
 		// always set pos_next
 		pos_next = r.at(route_index);

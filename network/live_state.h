@@ -43,6 +43,12 @@ public:
 	/// a signal or roadsign (typ, ribi dir) or a crossing (typ, dir 0) changed its state
 	static void sign(const obj_t *o, uint8 typ, uint8 dir, uint8 state) { if(  recording  ) { record_sign(o, typ, dir, state); } }
 
+	/// a convoy was sold (scrapped): the money (1/100 credits) is booked now (event "sold" of get_changes)
+	static void sold(uint32 convoy, uint8 player_nr, sint64 amount) { if(  recording  ) { record_sold(convoy, player_nr, amount); } }
+
+	/// the leading vehicle of a convoy starts driving its route from the start (the "rlap" of get_live_state)
+	static void route_restarted(uint32 convoy) { if(  recording  ) { route_restarted_intern(convoy); } }
+
 	/// the MCP server started or stopped listening
 	static void set_enabled(bool yesno);
 
@@ -73,7 +79,11 @@ private:
 	static void record_tile(sint16 x, sint16 y);
 	static void record_obj(const obj_t *o);
 	static void record_sign(const obj_t *o, uint8 typ, uint8 dir, uint8 state);
+	static void record_sold(uint32 convoy, uint8 player_nr, sint64 amount);
+	static void route_restarted_intern(uint32 convoy);
 	static void update_recording();
+	/// another world: forgets what the answers of get_live_state compare with
+	static void forget_world();
 
 	static bool enabled;
 	static uint32 world_resets;

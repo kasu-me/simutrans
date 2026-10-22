@@ -6,17 +6,20 @@
 /**
  * Read-only MCP tools for a live view of the game (a web viewer bridge).
  *
- * get_live_state  every convoy and vehicle as it is now (no state is kept
- *                 between calls: the caller computes differences)
+ * get_live_state  every convoy and vehicle as it is now; with `since` only
+ *                 what changed (see live_util::entity_changes_t), and on
+ *                 request halts, factories, cities, players, depots, lines
+ *                 (live_world.cc)
  * get_tiles       a rectangle of tiles in the savegame format
  * get_changes     the tiles and signal states changed since a sequence number
  * dump_vehicles   all fields of some convoys, for diagnosis
  *
  * All of them run on the main thread (from mcp_server_t::step) and do not
- * change the game state.
+ * change the game state (what they remember for `since` and `rlap` is their own).
  */
 
 #include "live_state.h"
+#include "live_util.h"
 #include "mcp_server.h"
 
 #include <time.h>
@@ -27,6 +30,7 @@
 #include <charconv>
 #include <chrono>
 #include <map>
+#include <unordered_map>
 #include <vector>
 
 #include "../simworld.h"
@@ -61,7 +65,14 @@ uint32 live_changes_t::epoch = 0;
 
 namespace {
 
-/// one entry of the change log: a tile (typ 0), or the state of a signal, roadsign or crossing (typ = its obj_t::typ)
+/// typ of the entries of the change log that are events (not tiles or signals)
+const uint8 CHANGE_SOLD = 255;
+
+/**
+ * One entry of the change log: a tile (typ 0), the state of a signal, roadsign
+ * or crossing (typ = its obj_t::typ), or an event (CHANGE_SOLD: id = convoy,
+ * dir = player, value = amount).
+ */
 struct change_t
 {
 	uint32 sync;
@@ -70,6 +81,8 @@ struct change_t
 	uint8 typ;
 	uint8 dir;
 	uint8 state;
+	uint32 id;
+	sint64 value;
 };
 
 const uint32 LOG_SIZE = 1u << 15;
@@ -110,7 +123,7 @@ void live_changes_t::record_tile(sint16 x, sint16 y)
 			return;
 		}
 	}
-	change_t c = { sync, x, y, 0, 0, 0, 0 };
+	change_t c = { sync, x, y, 0, 0, 0, 0, 0, 0 };
 	push_change(c);
 }
 
@@ -132,7 +145,18 @@ void live_changes_t::record_sign(const obj_t *o, uint8 typ, uint8 dir, uint8 sta
 	if(  !welt  ||  !welt->is_within_limits(pos.x, pos.y)  ) {
 		return;
 	}
-	change_t c = { welt->get_sync_steps(), pos.x, pos.y, pos.z, typ, dir, state };
+	change_t c = { welt->get_sync_steps(), pos.x, pos.y, pos.z, typ, dir, state, 0, 0 };
+	push_change(c);
+}
+
+
+void live_changes_t::record_sold(uint32 convoy, uint8 player_nr, sint64 amount)
+{
+	karte_t *welt = world();
+	if(  !welt  ) {
+		return;
+	}
+	change_t c = { welt->get_sync_steps(), 0, 0, 0, CHANGE_SOLD, player_nr, 0, convoy, amount };
 	push_change(c);
 }
 
@@ -168,6 +192,7 @@ live_changes_t::world_reset_t::~world_reset_t()
 			const uint32 now = (uint32)time(NULL);
 			epoch = max(epoch + 1, now);
 			first_seq = next_seq;
+			forget_world();
 		}
 	}
 	update_recording();
@@ -187,28 +212,14 @@ uint32 live_changes_t::get_epoch()
 // JSON output
 // ---------------------------------------------------------------------------
 
+using live_util::add_int;
+using live_util::add_double;
+using live_util::add_str;
+using live_util::error_json;
+using live_util::get_int_arg;
+using live_util::get_bool_arg;
+
 namespace {
-
-void add_int(std::string &out, sint64 v)
-{
-	char buf[24];
-	const std::to_chars_result r = std::to_chars(buf, buf + sizeof(buf), v);
-	out.append(buf, r.ptr - buf);
-}
-
-void add_double(std::string &out, double v, int decimals)
-{
-	char buf[32];
-	snprintf(buf, sizeof(buf), "%.*f", decimals, v);
-	out += buf;
-}
-
-void add_str(std::string &out, const char *s)
-{
-	out += '"';
-	out += mcp_server_t::json_escape(s ? s : "");
-	out += '"';
-}
 
 void add_koord3d(std::string &out, const koord3d &k)
 {
@@ -219,14 +230,6 @@ void add_koord3d(std::string &out, const koord3d &k)
 	out += ',';
 	add_int(out, k.z);
 	out += ']';
-}
-
-std::string error_json(const char *msg)
-{
-	std::string out = "{\"error\":";
-	add_str(out, msg);
-	out += '}';
-	return out;
 }
 
 /// the strings of a JSON array of strings ("[\"a\",\"b\"]")
@@ -261,18 +264,6 @@ std::vector<sint64> parse_int_array(const std::string &raw)
 		}
 	}
 	return list;
-}
-
-/// an integer argument; false if missing or not a number
-bool get_int_arg(const std::string &args_json, const char *key, sint64 &value)
-{
-	const std::string raw = mcp_server_t::json_get_raw(args_json, key);
-	if(  raw.empty()  ||  raw == "null"  ) {
-		return false;
-	}
-	char *end;
-	value = strtoll(raw.c_str(), &end, 10);
-	return end != raw.c_str()  &&  *end == 0;
 }
 
 /// position on the route of the tile the vehicle is on (the route index points at pos_next), -1 if unknown
@@ -347,7 +338,8 @@ enum vehicle_field_t {
 	VF_X, VF_Y, VF_Z, VF_DIR, VF_STEPS, VF_STEPS_NEXT, VF_RI, VF_LOAD, VF_XOFF, VF_YOFF, VF_AIR,
 	VF_NX, VF_NY, VF_NZ, VF_PREV_DIR, VF_DX, VF_DY, VF_HOFF, VF_ZOFF_START, VF_ZOFF_END,
 	VF_LANE, VF_NEXT_LANE, VF_SPEED_LIMIT, VF_ROUTE_INDEX, VF_PX, VF_PY, VF_PZ,
-	VF_LEADING, VF_LAST, VF_CARGO, VF_CAPACITY, VF_OVERTAKING, VF_WITHDRAW, VF_IN_DEPOT
+	VF_LEADING, VF_LAST, VF_CARGO, VF_CAPACITY, VF_OVERTAKING, VF_WITHDRAW, VF_IN_DEPOT,
+	VF_DIST, VF_VID, VF_VSN
 };
 
 struct vehicle_field_name_t {
@@ -380,12 +372,60 @@ const vehicle_field_name_t VEHICLE_FIELDS[] = {
 	// of the convoy
 	{ "overtaking", VF_OVERTAKING },    // tiles_overtaking
 	{ "withdraw", VF_WITHDRAW },
-	{ "in_depot", VF_IN_DEPOT }
+	{ "in_depot", VF_IN_DEPOT },
+	// position and identity
+	{ "dist", VF_DIST },                // steps from the start of the route (route_tile_lengths), -1 unknown
+	{ "vid", VF_VID },                  // vehicle type: index in "vnames"
+	{ "vsn", VF_VSN }                   // place in the convoy as assembled (does not change when the convoy reverses)
 };
 const int NUM_VEHICLE_FIELDS = sizeof(VEHICLE_FIELDS) / sizeof(VEHICLE_FIELDS[0]);
 const int NUM_DEFAULT_FIELDS = VF_AIR + 1;
 
-void add_vehicle_field(std::string &out, vehicle_field_t f, const convoi_t *cnv, vehicle_t *v, const route_t *route)
+/**
+ * Length in steps of every tile of a route, as the vehicles drive it: a
+ * vehicle entering tile i heads from tile i-1 to tile i+1
+ * (vehicle_t::hop -> vehicle_base_t::calc_set_direction): straight across
+ * the tile it takes VEHICLE_STEPS_PER_TILE steps, diagonally (a curve)
+ * diagonal_vehicle_steps_per_tile. The first and the last tile are straight
+ * (vehicle_t::initialise_journey; the end of the route lies straight ahead),
+ * and so is a tile where the route turns back on itself (measured: road
+ * vehicles take a whole tile to turn). Not covered: the shortened last tile
+ * of the leading vehicle at a stop and at a coupling point.
+ */
+void route_tile_lengths(const route_t *route, std::vector<uint32> &len)
+{
+	const uint32 n = route->get_count();
+	const uint32 diagonal = vehicle_base_t::get_diagonal_vehicle_steps_per_tile();
+	len.resize(n);
+	for(  uint32 i = 0;  i < n;  i++  ) {
+		if(  i == 0  ||  i + 1 >= n  ) {
+			len[i] = VEHICLE_STEPS_PER_TILE;
+			continue;
+		}
+		const koord3d &prev = route->at((uint16)(i - 1));
+		const koord3d &next = route->at((uint16)(i + 1));
+		if(  prev == next  ) {
+			len[i] = VEHICLE_STEPS_PER_TILE;
+			continue;
+		}
+		const sint32 di = next.x - prev.x;
+		const sint32 dj = next.y - prev.y;
+		const bool straight = (di == 0  &&  dj != 0)  ||  (dj == 0  &&  di != 0);
+		len[i] = straight ? VEHICLE_STEPS_PER_TILE : diagonal;
+	}
+}
+
+/// what the vehicle fields of one convoy need
+struct convoy_context_t
+{
+	const convoi_t *cnv;
+	const route_t *route;
+	std::vector<uint32> dist_before;   ///< steps from the start of the route to the start of tile i (only if "dist" is asked for)
+	uint8 count;
+	bool reversed;
+};
+
+void add_vehicle_field(std::string &out, vehicle_field_t f, const convoy_context_t &ctx, uint8 index, vehicle_t *v)
 {
 	switch(  f  ) {
 		case VF_X:            add_int(out, v->get_pos().x); break;
@@ -394,7 +434,7 @@ void add_vehicle_field(std::string &out, vehicle_field_t f, const convoi_t *cnv,
 		case VF_DIR:          add_int(out, v->get_direction()); break;
 		case VF_STEPS:        add_int(out, v->get_steps()); break;
 		case VF_STEPS_NEXT:   add_int(out, v->get_steps_next()); break;
-		case VF_RI:           add_int(out, route_index_of_own_tile(v, route)); break;
+		case VF_RI:           add_int(out, route_index_of_own_tile(v, ctx.route)); break;
 		case VF_LOAD:         add_int(out, v->get_total_cargo()); break;
 		case VF_XOFF:         add_int(out, v->get_xoff()); break;
 		case VF_YOFF:         add_int(out, v->get_yoff()); break;
@@ -426,75 +466,84 @@ void add_vehicle_field(std::string &out, vehicle_field_t f, const convoi_t *cnv,
 		case VF_LAST:         add_int(out, v->is_last()); break;
 		case VF_CARGO:        add_cargo(out, v); break;
 		case VF_CAPACITY:     add_int(out, v->get_cargo_max()); break;
-		case VF_OVERTAKING:   add_int(out, cnv->get_tiles_overtaking()); break;
-		case VF_WITHDRAW:     add_int(out, cnv->get_withdraw()); break;
-		case VF_IN_DEPOT:     add_int(out, cnv->in_depot()); break;
+		case VF_OVERTAKING:   add_int(out, ctx.cnv->get_tiles_overtaking()); break;
+		case VF_WITHDRAW:     add_int(out, ctx.cnv->get_withdraw()); break;
+		case VF_IN_DEPOT:     add_int(out, ctx.cnv->in_depot()); break;
+		case VF_DIST: {
+			const sint32 ri = route_index_of_own_tile(v, ctx.route);
+			add_int(out, ri < 0 ? -1 : (sint64)ctx.dist_before[ri] + v->get_steps());
+			break;
+		}
+		case VF_VID:          add_int(out, live_util::vehicle_name_index(v->get_desc())); break;
+		case VF_VSN:          add_int(out, ctx.reversed ? ctx.count - 1 - index : index); break;
 	}
 }
 
-/// waiting goods of every halt: "halts":[[id, owner, total, [[via halt id, goods index, amount], ...]], ...],"goods":[names]
-void add_halts(std::string &out)
+/// route laps of every convoy (see live_changes_t::route_restarted): convoy id -> laps, and the route and position last seen
+struct route_lap_t
 {
-	out += ",\"halts\":[";
-	bool first_halt = true;
-	std::map<std::pair<uint32, uint8>, uint32> via;
-	for(  const halthandle_t &halt : haltestelle_t::get_alle_haltestellen()  ) {
-		if(  !halt.is_bound()  ) {
-			continue;
-		}
-		via.clear();
-		uint32 total = 0;
-		halt->for_each_waiting_ware( [&](const ware_t &w) {
-			via[std::make_pair(w.get_zwischenziel().get_id(), w.get_index())] += w.menge;
-			total += w.menge;
-		} );
-		if(  !first_halt  ) {
-			out += ',';
-		}
-		first_halt = false;
-		out += '[';
-		add_int(out, halt.get_id());
-		out += ',';
-		add_int(out, halt->get_owner() ? halt->get_owner()->get_player_nr() : -1);
-		out += ',';
-		add_int(out, total);
-		out += ",[";
-		bool first = true;
-		for(  const auto &v : via  ) {
-			if(  !first  ) {
-				out += ',';
-			}
-			first = false;
-			out += '[';
-			add_int(out, v.first.first);
-			out += ',';
-			add_int(out, v.first.second);
-			out += ',';
-			add_int(out, v.second);
-			out += ']';
-		}
-		out += "]]";
-	}
-	out += "],\"goods\":[";
-	for(  uint16 i = 0;  i < goods_manager_t::get_count();  i++  ) {
-		if(  i > 0  ) {
-			out += ',';
-		}
-		add_str(out, goods_manager_t::get_info(i)->get_name());
-	}
-	out += ']';
-}
+	uint32 laps;
+	uint32 hash;
+	sint32 front_ri;   ///< route index of the tile of the front vehicle
+	bool hash_known;
+};
+std::unordered_map<uint32, route_lap_t> route_laps;
 
-/// fields of the start of every answer: epoch and time
+/// fields of the start of every answer: the world and its time
 void add_head(std::string &out, karte_t *welt)
 {
+	static const uint8 days_per_month[12] = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
+
 	out += "\"epoch\":";
 	add_int(out, live_changes_t::get_epoch());
 	out += ",\"sync\":";
 	add_int(out, welt->get_sync_steps());
+
+	// [year, month 1-12, day 1-31], as the date display counts days
+	const uint32 month = welt->get_current_month();
+	const uint32 tpm = welt->ticks_per_world_month;
+	const uint32 ticks_this_month = welt->get_ticks() % tpm;
+	out += ",\"date\":[";
+	add_int(out, month / 12);
+	out += ',';
+	add_int(out, month % 12 + 1);
+	out += ',';
+	add_int(out, 1 + (sint64)ticks_this_month * days_per_month[month % 12] / tpm);
+	out += "],\"ticks\":";
+	add_int(out, welt->get_ticks());
+	out += ",\"ticks_per_month\":";
+	add_int(out, tpm);
+
+	// real time of a sync step in ms (karte_t::fix_ratio_frame_time in network games), and the game speed
+	sint64 pace;
+	if(  env_t::networkmode  ) {
+		pace = 1000 / clamp(welt->get_settings().get_frames_per_second(), env_t::min_fps, env_t::max_fps);
+	}
+	else {
+		pace = 1000 / (welt->is_fast_forward() ? env_t::ff_fps : env_t::fps);
+	}
+	out += ",\"pace\":";
+	add_int(out, pace);
+	out += ",\"time_multiplier\":";
+	add_int(out, welt->get_time_multiplier());
+	out += ",\"snowline\":";
+	add_int(out, welt->get_snowline());
 }
 
 } // namespace
+
+
+void live_changes_t::route_restarted_intern(uint32 convoy)
+{
+	route_laps[convoy].laps++;
+}
+
+
+void live_changes_t::forget_world()
+{
+	route_laps.clear();
+	live_util::clear_all_changes();
+}
 
 
 std::string live_state::get_live_state(karte_t *welt, const std::string &args_json)
@@ -527,7 +576,12 @@ std::string live_state::get_live_state(karte_t *welt, const std::string &args_js
 			fields.push_back(i);
 		}
 	}
-	const bool with_halts = mcp_server_t::json_get_raw(args_json, "halts") == "true";
+	bool want_dist = false;
+	bool need_vnames = false;
+	for(  int f : fields  ) {
+		want_dist |= VEHICLE_FIELDS[f].field == VF_DIST;
+		need_vnames |= VEHICLE_FIELDS[f].field == VF_VID;
+	}
 
 	// routes are most of the answer: they can be left out (rt null), sent for some convoys only, and replaced by hashes
 	const bool all_routes = mcp_server_t::json_get_raw(args_json, "routes") != "false";
@@ -538,8 +592,28 @@ std::string live_state::get_live_state(karte_t *welt, const std::string &args_js
 		route_ids = parse_int_array(route_ids_raw);
 		std::sort(route_ids.begin(), route_ids.end());
 	}
-	const bool with_route_hash = mcp_server_t::json_get_raw(args_json, "route_hash") == "true";
-	std::string route_hashes;
+	const bool with_route_hash = get_bool_arg(args_json, "route_hash");
+	const bool with_tile_lens = get_bool_arg(args_json, "tile_lens");
+
+	// only what changed since the caller's previous answer; the convoys are compared only when since is given
+	// (null at first, as for get_changes): hashing all records costs about as much as building them
+	const bool track = !mcp_server_t::json_get_raw(args_json, "since").empty();
+	sint64 since_arg = 0;
+	const bool has_since = get_int_arg(args_json, "since", since_arg)  &&  since_arg >= 0  &&  since_arg <= 0xFFFFFFFFll;
+	const uint32 since = has_since ? (uint32)since_arg : 0;
+	// the records of the convoys depend on what was asked for: one change detection for each kind of request
+	std::string shape = "c";
+	for(  int f : fields  ) {
+		shape += ',';
+		shape += VEHICLE_FIELDS[f].name;
+	}
+	shape += all_routes ? "|r" : "|-";
+	shape += route_ids_raw;
+	shape += with_tile_lens ? "|t" : "";
+	live_util::entity_changes_t &convoy_changes = live_util::changes_of(shape);
+	if(  track  ) {
+		convoy_changes.begin(has_since, since);
+	}
 
 	// frames per second of sync_steps (fixed in network games)
 	sint64 fps = env_t::fps;
@@ -571,89 +645,164 @@ std::string live_state::get_live_state(karte_t *welt, const std::string &args_js
 		}
 		add_str(out, VEHICLE_FIELDS[i].name);
 	}
+	out += "],\"cf\":[\"id\",\"owner\",\"state\",\"speed\",\"reversed\",\"rt0\",\"rt\",\"v\",\"rlap\"";
+	if(  with_tile_lens  ) {
+		out += ",\"tl\"";
+	}
 	out += "],\"c\":[";
 
-	// [id, owner, state, speed (km/h), reversed, rt0, rt, vehicles]
+	// [id, owner, state, speed (km/h), reversed, rt0, rt, vehicles, rlap (, tl)]
 	bool first_cnv = true;
+	std::string rec;
+	std::string route_hashes;
+	std::vector<uint32> lengths;
+	convoy_context_t ctx;
 	for(  const convoihandle_t &cnv : welt->convoys()  ) {
 		if(  !cnv.is_bound()  ) {
 			continue;
 		}
-		if(  !first_cnv  ) {
-			out += ',';
-		}
-		first_cnv = false;
-		out += '[';
-		add_int(out, cnv.get_id());
-		out += ',';
-		add_int(out, cnv->get_owner() ? cnv->get_owner()->get_player_nr() : -1);
-		out += ',';
-		add_int(out, cnv->get_state());
-		out += ',';
-		add_double(out, cnv->get_akt_speed() * (double)VEHICLE_SPEED_FACTOR / 64.0, 1);
-		out += ',';
-		add_int(out, cnv->is_reversed());
-		// the whole route, so rt0 is always 0
 		const route_t *route = cnv->get_route();
-		out += ",0,";
-		if(  some_routes ? std::binary_search(route_ids.begin(), route_ids.end(), (sint64)cnv.get_id()) : all_routes  ) {
-			out += '[';
+		const bool with_route = some_routes ? std::binary_search(route_ids.begin(), route_ids.end(), (sint64)cnv.get_id()) : all_routes;
+
+		// a new lap: the route was driven again from its start (route_restarted), it changed, or the front
+		// vehicle went back on it (vehicle_t::reanchor_route_index finds a tile that a route visits twice)
+		const uint32 hash = route_hash(route);
+		const sint32 front_ri = cnv->get_vehicle_count() > 0 ? route_index_of_own_tile(cnv->front(), route) : -1;
+		route_lap_t &lap = route_laps[cnv.get_id()];
+		if(  lap.hash_known  &&  (lap.hash != hash  ||  front_ri < lap.front_ri)  ) {
+			lap.laps++;
+		}
+		lap.hash = hash;
+		lap.front_ri = front_ri;
+		lap.hash_known = true;
+
+		ctx.cnv = cnv.get_rep();
+		ctx.route = route;
+		ctx.count = cnv->get_vehicle_count();
+		ctx.reversed = cnv->is_reversed();
+		if(  want_dist  ||  (with_tile_lens  &&  with_route)  ) {
+			route_tile_lengths(route, lengths);
+			ctx.dist_before.resize(lengths.size() + 1);
+			ctx.dist_before[0] = 0;
+			for(  size_t i = 0;  i < lengths.size();  i++  ) {
+				ctx.dist_before[i + 1] = ctx.dist_before[i] + lengths[i];
+			}
+		}
+
+		rec = "[";
+		add_int(rec, cnv.get_id());
+		rec += ',';
+		add_int(rec, cnv->get_owner() ? cnv->get_owner()->get_player_nr() : -1);
+		rec += ',';
+		add_int(rec, cnv->get_state());
+		rec += ',';
+		add_double(rec, cnv->get_akt_speed() * (double)VEHICLE_SPEED_FACTOR / 64.0, 1);
+		rec += ',';
+		add_int(rec, cnv->is_reversed());
+		// the whole route, so rt0 is always 0
+		rec += ",0,";
+		if(  with_route  ) {
+			rec += '[';
 			for(  uint32 i = 0;  i < route->get_count();  i++  ) {
 				const koord3d &k = route->at((uint16)i);
 				if(  i > 0  ) {
-					out += ',';
+					rec += ',';
 				}
-				add_int(out, k.x);
-				out += ',';
-				add_int(out, k.y);
-				out += ',';
-				add_int(out, k.z);
+				add_int(rec, k.x);
+				rec += ',';
+				add_int(rec, k.y);
+				rec += ',';
+				add_int(rec, k.z);
 			}
-			out += ']';
+			rec += ']';
 		}
 		else {
-			out += "null";
+			rec += "null";
 		}
-		if(  with_route_hash  ) {
-			if(  !route_hashes.empty()  ) {
-				route_hashes += ',';
-			}
-			add_int(route_hashes, route_hash(route));
-		}
-		out += ",[";
+		rec += ",[";
 		// in the order of the savegame (front() first)
-		for(  uint8 i = 0;  i < cnv->get_vehicle_count();  i++  ) {
+		for(  uint8 i = 0;  i < ctx.count;  i++  ) {
 			vehicle_t *v = cnv->get_vehikel(i);
 			if(  i > 0  ) {
-				out += ',';
+				rec += ',';
 			}
-			out += '[';
+			rec += '[';
 			for(  size_t f = 0;  f < fields.size();  f++  ) {
 				if(  f > 0  ) {
-					out += ',';
+					rec += ',';
 				}
-				add_vehicle_field(out, VEHICLE_FIELDS[fields[f]].field, cnv.get_rep(), v, route);
+				add_vehicle_field(rec, VEHICLE_FIELDS[fields[f]].field, ctx, i, v);
 			}
-			out += ']';
+			rec += ']';
 		}
-		out += "]]";
+		rec += "],";
+		add_int(rec, lap.laps);
+		if(  with_tile_lens  ) {
+			rec += ',';
+			if(  with_route  ) {
+				rec += '[';
+				for(  size_t i = 0;  i < lengths.size();  i++  ) {
+					if(  i > 0  ) {
+						rec += ',';
+					}
+					add_int(rec, lengths[i]);
+				}
+				rec += ']';
+			}
+			else {
+				rec += "null";
+			}
+		}
+		rec += ']';
+
+		if(  !track  ||  convoy_changes.update(cnv.get_id(), rec)  ) {
+			if(  !first_cnv  ) {
+				out += ',';
+			}
+			first_cnv = false;
+			out += rec;
+			if(  with_route_hash  ) {
+				if(  !route_hashes.empty()  ) {
+					route_hashes += ',';
+				}
+				add_int(route_hashes, hash);
+			}
+		}
 	}
-	out += ']';
+	out += "],\"gone\":[";
+	if(  track  ) {
+		bool first = true;
+		for(  uint64 id : convoy_changes.end()  ) {
+			if(  !first  ) {
+				out += ',';
+			}
+			first = false;
+			add_int(out, (sint64)id);
+		}
+	}
+	out += "],\"full\":";
+	out += !track  ||  convoy_changes.is_full() ? "true" : "false";
 
 	if(  with_route_hash  ) {
 		out += ",\"rh\":[" + route_hashes + "]";
 	}
 
-	if(  with_halts  ) {
-		add_halts(out);
+	live_util::add_world_sections(out, welt, args_json, has_since, since, need_vnames);
+
+	if(  need_vnames  ) {
+		out += ',';
+		live_util::add_vehicle_names(out);
 	}
 
+	out += ",\"seq\":";
+	add_int(out, live_util::entity_changes_t::get_seq());
 	const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
 	out += ",\"gen_ms\":";
 	add_double(out, ms, 3);
 	out += '}';
 	return out;
 }
+
 
 
 // ---------------------------------------------------------------------------
@@ -770,8 +919,10 @@ std::string live_state::get_tiles(karte_t *welt, const std::string &args_json)
 	add_int(out, w);
 	out += ",\"h\":";
 	add_int(out, h);
-	out += ",\"data\":\"";
 	file.close();
+	out += ",\"th\":";
+	add_int(out, live_util::fnv1a(data));
+	out += ",\"data\":\"";
 	add_base64(out, data);
 	out += "\"}";
 	return out;
@@ -796,10 +947,25 @@ std::string live_changes_t::get_changes_json(karte_t *welt, bool has_since, uint
 	out += ",\"overflow\":";
 	out += overflow ? "true" : "false";
 
-	std::string tiles, sig;
+	std::string tiles, sig, events;
 	if(  has_since  &&  !overflow  ) {
 		for(  uint32 seq = since;  seq != next_seq;  seq++  ) {
 			const change_t &c = change_log[seq % LOG_SIZE];
+			if(  c.typ == CHANGE_SOLD  ) {
+				if(  !events.empty()  ) {
+					events += ',';
+				}
+				events += "{\"type\":\"sold\",\"sync\":";
+				add_int(events, c.sync);
+				events += ",\"convoy\":";
+				add_int(events, c.id);
+				events += ",\"player\":";
+				add_int(events, c.dir);
+				events += ",\"amount\":";
+				add_double(events, c.value / 100.0, 2);
+				events += '}';
+				continue;
+			}
 			std::string &list = c.typ == 0 ? tiles : sig;
 			if(  !list.empty()  ) {
 				list += ',';
@@ -824,7 +990,7 @@ std::string live_changes_t::get_changes_json(karte_t *welt, bool has_since, uint
 			list += ']';
 		}
 	}
-	out += ",\"tiles\":[" + tiles + "],\"sig\":[" + sig + "]}";
+	out += ",\"tiles\":[" + tiles + "],\"sig\":[" + sig + "],\"events\":[" + events + "]}";
 	return out;
 }
 

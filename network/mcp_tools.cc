@@ -75,6 +75,21 @@ static std::string base64_encode(const std::string &data)
 // Tool implementation
 // ---------------------------------------------------------------------------
 
+std::string mcp_tools::script_error(const script_vm_t *vm, const char *err)
+{
+	// a runtime error only says "Call function failed": the message the script raised is in the
+	// error report of the error handler (_sqstd_aux_printerror: "<st>Error: [message]</st>")
+	if (vm  &&  err  &&  strcmp(err, "Call function failed") == 0) {
+		const std::string report = vm->get_error();
+		const size_t start = report.find("Error: [");
+		const size_t end = report.find("]</st>", start);
+		if (start != std::string::npos  &&  end != std::string::npos) {
+			return report.substr(start + 8, end - start - 8);
+		}
+	}
+	return err ? err : "";
+}
+
 // Start a squirrel script execution.
 // Returns result JSON on immediate completion.
 // On suspension (network mode command_x), sets *out_vm to the live VM and returns "".
@@ -121,12 +136,15 @@ static std::string tool_run_squirrel(const std::string &code, int player_nr,
 		return "";
 	}
 
+	// done at once: the commands took effect in the current sync step
+	const std::string sync = world() ? std::to_string(world()->get_sync_steps()) : "0";
+	const std::string syncs = ",\"sync_start\":" + sync + ",\"sync\":" + sync + "}";
 	std::string result_json;
 	if (err) {
-		result_json = "{\"error\":" + jstr(err) + "}";
+		result_json = "{\"error\":" + jstr(mcp_tools::script_error(vm, err)) + syncs;
 	}
 	else {
-		result_json = "{\"result\":" + jstr(result.c_str()) + "}";
+		result_json = "{\"result\":" + jstr(result.c_str()) + syncs;
 	}
 	delete vm;
 	return result_json;
@@ -238,33 +256,45 @@ static const tool_def_t TOOL_DEFS[] = {
 	{
 		"get_live_state",
 		"Return every convoy and vehicle as it is now, as JSON: "
-		"{schema, epoch, sync, fps, ahead, paused, vf, fields, c, gen_ms}. "
-		"c is a list of [id, owner, state, speed_kmh, reversed, rt0, rt, vehicles]; rt is the whole route "
+		"{schema, epoch, sync, date, ticks, ticks_per_month, pace, time_multiplier, snowline, fps, ahead, paused, "
+		"vf, fields, cf, c, gone, full, seq, gen_ms}. "
+		"c is a list of [id, owner, state, speed_kmh, reversed, rt0, rt, vehicles, rlap (, tl)] (names in cf); rt is the whole route "
 		"as a flat list [x,y,z, ...] starting at route index rt0 (always 0); vehicles (in savegame order) are "
 		"lists of the fields named in vf. fields lists every field name that can be requested. "
-		"Nothing is kept between calls.",
+		"rlap grows whenever the convoy starts its route again or the route changes. "
+		"With since (the seq of a previous answer with the same arguments), only what changed since then is returned "
+		"(gone: convoys that disappeared; full: true if everything was returned anyway).",
 		"{\"type\":\"object\","
 		 "\"properties\":{"
 		   "\"fields\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},"
 		              "\"description\":\"vehicle fields in this order; default "
 		              "[x,y,z,dir,steps,steps_next,ri,load,xoff,yoff,air]\"},"
+		   "\"since\":{\"type\":[\"integer\",\"null\"],"
+		              "\"description\":\"seq of a previous answer: only convoys and records that changed since\"},"
 		   "\"routes\":{\"type\":\"boolean\","
 		              "\"description\":\"false: rt is null for every convoy (default true)\"},"
 		   "\"route_ids\":{\"type\":\"array\",\"items\":{\"type\":\"integer\"},"
 		                 "\"description\":\"only these convoys get rt, the others null\"},"
 		   "\"route_hash\":{\"type\":\"boolean\","
-		                  "\"description\":\"also return rh: a hash of each convoy's route, in the order of c\"},"
+		                  "\"description\":\"also return rh: a hash of each returned convoy's route, in the order of c\"},"
+		   "\"tile_lens\":{\"type\":\"boolean\","
+		                 "\"description\":\"add tl to every convoy: the length in steps of each tile of rt (null without rt)\"},"
 		   "\"halts\":{\"type\":\"boolean\","
 		             "\"description\":\"also return halts: [[id, owner, waiting total, "
-		             "[[via halt id, goods index, amount], ...]], ...] and goods (the goods names by index)\"}"
+		             "[[via halt id, goods index, amount], ...], status 0-3]] and goods (the goods names by index)\"},"
+		   "\"factories\":{\"type\":\"boolean\"},"
+		   "\"cities\":{\"type\":\"boolean\"},"
+		   "\"players\":{\"type\":\"boolean\"},"
+		   "\"depots\":{\"type\":\"boolean\"},"
+		   "\"lines\":{\"type\":\"boolean\",\"description\":\"lines and the schedules of the convoys\"}"
 		 "},"
 		 "\"additionalProperties\":false}"
 	},
 	{
 		"get_tiles",
 		"Return a rectangle of tiles exactly as the savegame stores them: "
-		"{epoch, sync, version, otrp, x0, y0, w, h, data}. data (base64) holds the tiles row by row "
-		"(y outside, x inside), each as the savegame writes it, followed by the w*h climate bytes.",
+		"{epoch, sync, version, otrp, x0, y0, w, h, th, data}. data (base64) holds the tiles row by row "
+		"(y outside, x inside), each as the savegame writes it, followed by the w*h climate bytes; th is a hash (FNV-1a) of data.",
 		"{\"type\":\"object\","
 		 "\"properties\":{"
 		   "\"x0\":{\"type\":\"integer\"},"
@@ -278,7 +308,8 @@ static const tool_def_t TOOL_DEFS[] = {
 	{
 		"get_changes",
 		"Return the changes of the static world since a sequence number: "
-		"{epoch, sync, seq, floor, overflow, tiles:[[sync,x,y],...], sig:[[sync,x,y,z,typ,dir,state],...]}. "
+		"{epoch, sync, seq, floor, overflow, tiles:[[sync,x,y],...], sig:[[sync,x,y,z,typ,dir,state],...], "
+		"events:[{type:sold, sync, convoy, player, amount}, ...]}. "
 		"Pass the seq of the previous answer as since (null at first: then only seq is returned). "
 		"overflow is true when entries since then are lost (reload the whole world). "
 		"Changes are recorded only while the MCP server runs.",

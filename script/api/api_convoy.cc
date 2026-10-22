@@ -125,34 +125,53 @@ uint32 kmh_to_tiles_per_month(uint32 kmh)
 	return welt->speed_to_tiles_per_month( kmh_to_speed(kmh));
 }
 
+// Failures are raised with an error starting with a fixed word: permission, not_found, invalid, busy
+
 call_tool_init convoy_set_name(convoi_t *cnv, const char* name)
 {
-	return command_rename(cnv->get_owner(), 'c', cnv->self.get_id(), name);
+	if (name == NULL) {
+		return "invalid: no name";
+	}
+	call_tool_init call = command_rename(cnv->get_owner(), 'c', cnv->self.get_id(), name);
+	call.require_owner(cnv->get_owner());
+	return call;
 }
 
 call_tool_init convoy_set_line(convoi_t *cnv, player_t *player, linehandle_t line)
 {
 	if (!line.is_bound()) {
-		return "Invalid line handle provided";
+		return "not_found: Invalid line handle provided";
+	}
+	// the tool would ignore these silently (tool_change_convoi_t::init)
+	if (line->get_owner() != cnv->get_owner()) {
+		return "permission: the line belongs to another player";
+	}
+	const schedule_t *own = cnv->get_schedule();
+	if (own  &&  line->get_schedule()  &&  own->get_type() != line->get_schedule()->get_type()) {
+		return "invalid: the line is for another waytype";
 	}
 	// see depot_frame_t::apply_line() and convoi_t::call_convoi_tool()
 	cbuffer_t buf;
 	buf.printf("%c,%u,%i", 'l', cnv->self.get_id(), line->get_handle().get_id());
 
-	return call_tool_init(TOOL_CHANGE_CONVOI | SIMPLE_TOOL, buf, 0, player);
+	call_tool_init call(TOOL_CHANGE_CONVOI | SIMPLE_TOOL, buf, 0, player);
+	call.require_owner(cnv->get_owner());
+	return call;
 }
 
 call_tool_init convoy_generic_tool(convoi_t *cnv, player_t *player, uint8 cnvtool)
 {
 	char c = (char)cnvtool;
 	if (strchr("wx", c) == NULL) {
-		return "Invalid convoy tool called";
+		return "invalid: Invalid convoy tool called";
 	}
 	// see convoi_t::call_convoi_tool()
 	cbuffer_t buf;
 	buf.printf("%c,%u", c, cnv->self.get_id());
 
-	return call_tool_init(TOOL_CHANGE_CONVOI | SIMPLE_TOOL, buf, 0, player);
+	call_tool_init call(TOOL_CHANGE_CONVOI | SIMPLE_TOOL, buf, 0, player);
+	call.require_owner(cnv->get_owner());
+	return call;
 }
 
 call_tool_init convoy_change_schedule(convoi_t *cnv, player_t *player, schedule_t *sched)
@@ -166,12 +185,14 @@ call_tool_init convoy_change_schedule(convoi_t *cnv, player_t *player, schedule_
 		}
 		else {
 			delete copy;
-			return "Invalid schedule provided: less than two entries remained after removing doubles";
+			return "invalid: Invalid schedule provided: less than two entries remained after removing doubles";
 		}
 		delete copy;
-		return call_tool_init(TOOL_CHANGE_CONVOI | SIMPLE_TOOL, buf, 0, player);
+		call_tool_init call(TOOL_CHANGE_CONVOI | SIMPLE_TOOL, buf, 0, player);
+		call.require_owner(cnv->get_owner());
+		return call;
 	}
-	return "Invalid schedule provided";
+	return "invalid: Invalid schedule provided";
 }
 
 bool convoy_is_schedule_editor_open(convoi_t *cnv)

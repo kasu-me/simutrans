@@ -222,11 +222,14 @@ void mcp_server_t::step_pending()
 		plainstring result;
 		const char *err = p->vm->try_continue(result);
 
+		// when the call was made, and when the server executed the commands (the script resumes after them)
+		char syncs[64];
+		snprintf(syncs, sizeof(syncs), ",\"sync_start\":%u,\"sync\":%u}", p->sync_start, world ? world->get_sync_steps() : 0);
 		std::string result_json;
 		if (err == NULL) {
 			// Completed successfully
 			result_json = std::string("{\"result\":\"")
-			            + json_escape(result.c_str() ? result.c_str() : "") + "\"}";
+			            + json_escape(result.c_str() ? result.c_str() : "") + "\"" + syncs;
 		}
 		else if (strcmp(err, "suspended") == 0) {
 			// Still waiting for network command
@@ -235,7 +238,7 @@ void mcp_server_t::step_pending()
 		}
 		else {
 			// Error
-			result_json = std::string("{\"error\":\"") + json_escape(err) + "\"}";
+			result_json = std::string("{\"error\":\"") + json_escape(mcp_tools::script_error(p->vm, err)) + "\"" + syncs;
 		}
 
 		// Wrap and send response
@@ -421,7 +424,7 @@ std::string mcp_server_t::dispatch(mcp_connection_t   *c,
 		                                                 &pending_vm);
 		if (pending_vm) {
 			// Script suspended (network mode command_x) — response will be sent later
-			pending_scripts.push_back(new mcp_pending_t{pending_vm, c, id_json});
+			pending_scripts.push_back(new mcp_pending_t{pending_vm, c, id_json, world ? world->get_sync_steps() : 0});
 			return "";
 		}
 		return make_response(id_json, result_json);

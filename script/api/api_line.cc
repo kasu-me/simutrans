@@ -64,9 +64,11 @@ call_tool_init line_change_schedule(simline_t* line, player_t *player, schedule_
 		buf.printf( "g,%i,", line->get_handle().get_id() );
 		sched->sprintf_schedule( buf );
 
-		return call_tool_init(TOOL_CHANGE_LINE | SIMPLE_TOOL, buf, 0, player);
+		call_tool_init call(TOOL_CHANGE_LINE | SIMPLE_TOOL, buf, 0, player);
+		call.require_owner(line->get_owner());
+		return call;
 	}
-	return "Invalid schedule provided";
+	return "invalid: Invalid schedule provided";
 }
 
 call_tool_init line_delete(simline_t* line, player_t *player)
@@ -75,9 +77,11 @@ call_tool_init line_delete(simline_t* line, player_t *player)
 		cbuffer_t buf;
 		buf.printf( "d,%i", line->get_handle().get_id() );
 
-		return call_tool_init(TOOL_CHANGE_LINE | SIMPLE_TOOL, buf, 0, player);
+		call_tool_init call(TOOL_CHANGE_LINE | SIMPLE_TOOL, buf, 0, player);
+		call.require_owner(line->get_owner());
+		return call;
 	}
-	return "Cannot delete lines with associated convoys";
+	return "invalid: Cannot delete lines with associated convoys";
 }
 
 SQInteger line_export_convoy_list(HSQUIRRELVM vm)
@@ -94,7 +98,12 @@ SQInteger line_export_convoy_list(HSQUIRRELVM vm)
 
 call_tool_init line_set_name(simline_t* line, const char* name)
 {
-	return command_rename(line->get_owner(), 'l', line->get_handle().get_id(), name);
+	if (name == NULL) {
+		return "invalid: no name";
+	}
+	call_tool_init call = command_rename(line->get_owner(), 'l', line->get_handle().get_id(), name);
+	call.require_owner(line->get_owner());
+	return call;
 }
 
 vector_tpl<linehandle_t> const* generic_get_line_list(HSQUIRRELVM vm, SQInteger index)

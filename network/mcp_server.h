@@ -58,6 +58,7 @@ private:
 		script_vm_t      *vm;
 		mcp_connection_t *conn;
 		std::string       id_json;
+		uint32            sync_start; ///< sync step when the script was called
 	};
 
 	static SOCKET listen_sock;  ///< 127.0.0.1

@@ -111,9 +111,9 @@ public:
 	* @author teamhimeH
 	*/
 	overtaking_mode_t get_overtaking_mode() const { return overtaking_mode; };
-	void set_overtaking_mode(overtaking_mode_t o) { overtaking_mode = o; };
+	void set_overtaking_mode(overtaking_mode_t o) { if(  overtaking_mode != o  ) { live_changes_t::tile(get_pos().x, get_pos().y); } overtaking_mode = o; };
 
-	void set_ribi_mask_oneway(ribi_t::ribi ribi) { ribi_mask_oneway = (uint8)ribi; }
+	void set_ribi_mask_oneway(ribi_t::ribi ribi) { if(  ribi_mask_oneway != ribi  ) { live_changes_t::tile(get_pos().x, get_pos().y); } ribi_mask_oneway = (uint8)ribi; }
 	// used in wegbauer. param @allow is ribi in which vehicles can go. without this, ribi cannot be updated correctly at intersections.
 	void update_ribi_mask_oneway(ribi_t::ribi mask, ribi_t::ribi allow);
 	ribi_t::ribi get_ribi_mask_oneway() const { return (ribi_t::ribi)ribi_mask_oneway; }
@@ -144,19 +144,19 @@ public:
 	bool is_reserved_by_others(vehicle_base_t* r, bool is_overtaking, koord3d pos_prev, koord3d pos_next);
 	
 	uint8 get_street_flag() const { return street_flags; }
-	void set_street_flag(uint8 s) { street_flags = s; }
+	void set_street_flag(uint8 s) { if(  street_flags != s  ) { live_changes_t::tile(get_pos().x, get_pos().y); } street_flags = s; }
 	bool get_avoid_cityroad() const { return street_flags&AVOID_CITYROAD; }
-	void set_avoid_cityroad(bool s) { s ? street_flags |= AVOID_CITYROAD : street_flags &= ~AVOID_CITYROAD; }
+	void set_avoid_cityroad(bool s) { set_street_flag( (uint8)(s ? (street_flags | AVOID_CITYROAD) : (street_flags & ~AVOID_CITYROAD)) ); }
 	bool get_citycar_no_entry() const { return street_flags&CITYCAR_NO_ENTRY; }
-	void set_citycar_no_entry(bool s) { s ? street_flags |= CITYCAR_NO_ENTRY : street_flags &= ~CITYCAR_NO_ENTRY; }
+	void set_citycar_no_entry(bool s) { set_street_flag( (uint8)(s ? (street_flags | CITYCAR_NO_ENTRY) : (street_flags & ~CITYCAR_NO_ENTRY)) ); }
 	bool get_pedestrian_no_entry() const { return street_flags&PEDESTRIAN_NO_ENTRY; }
-	void set_pedestrian_no_entry(bool s) { s ? street_flags |= PEDESTRIAN_NO_ENTRY : street_flags &= ~PEDESTRIAN_NO_ENTRY; }
+	void set_pedestrian_no_entry(bool s) { set_street_flag( (uint8)(s ? (street_flags | PEDESTRIAN_NO_ENTRY) : (street_flags & ~PEDESTRIAN_NO_ENTRY)) ); }
 
 	bool get_allow_branch_cityroad() const { return street_flags&ALLOW_BRANCH_CITYROAD; }
-	void set_allow_branch_cityroad(bool s) { s ? street_flags |= ALLOW_BRANCH_CITYROAD : street_flags &= ~ALLOW_BRANCH_CITYROAD; }
+	void set_allow_branch_cityroad(bool s) { set_street_flag( (uint8)(s ? (street_flags | ALLOW_BRANCH_CITYROAD) : (street_flags & ~ALLOW_BRANCH_CITYROAD)) ); }
 
 	bool get_no_building() const { return street_flags&NO_BUILDING; }
-	void set_no_building(bool s) { s ? street_flags |= NO_BUILDING : street_flags &= ~NO_BUILDING; }
+	void set_no_building(bool s) { set_street_flag( (uint8)(s ? (street_flags | NO_BUILDING) : (street_flags & ~NO_BUILDING)) ); }
 
 
 };

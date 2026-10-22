@@ -169,7 +169,7 @@ public:
 	 */
 	bool check_season(const bool calc_only_season_change) OVERRIDE;
 
-	void set_max_speed(uint16 s) { max_speed = s; }
+	void set_max_speed(uint16 s) { if(  max_speed != s  ) { live_changes_t::tile(get_pos().x, get_pos().y); } max_speed = s; }
 	uint16 get_max_speed() const { return max_speed; }
 
 	// vehicle offset value for left/right
@@ -282,7 +282,7 @@ public:
 	void count_sign();
 
 	/* flag query routines */
-	void set_gehweg(const bool yesno) { flags = (yesno ? flags | HAS_SIDEWALK : flags & ~HAS_SIDEWALK); }
+	void set_gehweg(const bool yesno) { live_changes_t::tile(get_pos().x, get_pos().y); flags = (yesno ? flags | HAS_SIDEWALK : flags & ~HAS_SIDEWALK); }
 	inline bool hat_gehweg() const { return flags & HAS_SIDEWALK; }
 
 	void set_electrify(bool janein) {janein ? flags |= IS_ELECTRIFIED : flags &= ~IS_ELECTRIFIED;}

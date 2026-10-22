@@ -17,6 +17,12 @@ class script_vm_t;
  */
 namespace mcp_tools {
 
+/**
+ * The message of a failed script call: the error the script raised (for example
+ * "permission: ...") instead of the generic "Call function failed".
+ */
+std::string script_error(const script_vm_t *vm, const char *err);
+
 /** JSON array string suitable for the "tools" field in tools/list response. */
 std::string tools_list_json();
 

@@ -61,17 +61,25 @@ namespace script_api {
 		player_t *player;
 		// error message when calling, returned by push
 		const char* error;
+		// if set, the acting player must be allowed to change objects of this owner (player_t::check_owner)
+		const player_t *required_owner;
 	public:
 		call_tool_base_t(tool_t* t, player_t* pl)
-		: tool(t), tool_id(0), default_param(NULL), flags(0), player(pl), error(NULL)  { }
+		: tool(t), tool_id(0), default_param(NULL), flags(0), player(pl), error(NULL), required_owner(NULL)  { }
 
 		call_tool_base_t(uint16 id, const char* dp, uint8 f, player_t* pl)
-		: tool(NULL), tool_id(id), default_param(dp), flags(f), player(pl), error(NULL) { }
+		: tool(NULL), tool_id(id), default_param(dp), flags(f), player(pl), error(NULL), required_owner(NULL) { }
 
 		call_tool_base_t(const char* err)
-		: tool(NULL), tool_id(0), default_param(NULL), flags(0), player(NULL), error(err)  { }
+		: tool(NULL), tool_id(0), default_param(NULL), flags(0), player(NULL), error(err), required_owner(NULL)  { }
 
 		tool_t * create_tool();
+
+		/**
+		 * The tool changes an object of @p owner: calling it as another player raises
+		 * "permission: ..." (the tools themselves fail silently, and only in network games).
+		 */
+		void require_owner(const player_t *owner) { required_owner = owner; }
 	};
 
 	class call_tool_init : public call_tool_base_t {

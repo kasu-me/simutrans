@@ -5023,6 +5023,7 @@ void convoi_t::destroy()
 	}
 
 	// pay the current value
+	live_changes_t::sold( self.get_id(), owner->get_player_nr(), calc_restwert() );
 	owner->book_new_vehicle( calc_restwert(), get_pos().get_2d(), fahr[0] ? fahr[0]->get_desc()->get_waytype() : ignore_wt );
 
 	for(  uint8 i = anz_vehikel;  i-- != 0;  ) {

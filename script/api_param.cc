@@ -371,7 +371,7 @@ namespace script_api {
 	{
 		convoihandle_t cnv = param<convoihandle_t>::get(vm, index);
 		if (!cnv.is_bound()) {
-			sq_raise_error(vm, "Invalid convoi id %d", cnv.get_id());
+			sq_raise_error(vm, "not_found: Invalid convoi id %d", cnv.get_id());
 		}
 		return cnv.get_rep();
 	}
@@ -667,7 +667,7 @@ namespace script_api {
 	{
 		linehandle_t line = param<linehandle_t>::get(vm, index);
 		if (!line.is_bound()) {
-			sq_raise_error(vm, "Invalid line id %d", line.get_id());
+			sq_raise_error(vm, "not_found: Invalid line id %d", line.get_id());
 		}
 		return line.get_rep();
 	}

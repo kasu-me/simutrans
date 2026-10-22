@@ -81,9 +81,12 @@ SQInteger param<call_tool_init>::push(HSQUIRRELVM vm, call_tool_init v)
 	if (player == NULL) {
 		return sq_raise_error(vm, "Called tool with player == null");
 	}
+	if (v.required_owner  &&  !player_t::check_owner(v.required_owner, player)) {
+		return sq_raise_error(vm, "permission: the object belongs to another player");
+	}
 	// check if calling suspendable tools is blocked
 	if (const char* blocker = env_t::networkmode ? sq_get_suspend_blocker(vm) : NULL) {
-		return sq_raise_error(vm, "Cannot call this tool from within `%s'.", blocker);
+		return sq_raise_error(vm, "busy: Cannot call this tool from within `%s'.", blocker);
 	}
 
 	// register this tool call for callback with this id
@@ -234,7 +237,7 @@ SQInteger param<call_tool_work>::push(HSQUIRRELVM vm, call_tool_work v)
 	}
 	// check if calling suspendable tools is blocked
 	if (const char* blocker = env_t::networkmode ? sq_get_suspend_blocker(vm) : NULL) {
-		return sq_raise_error(vm, "Cannot call this tool from within `%s'.", blocker);
+		return sq_raise_error(vm, "busy: Cannot call this tool from within `%s'.", blocker);
 	}
 
 	bool suspended = false;
