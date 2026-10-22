@@ -79,6 +79,7 @@ std::string env_t::nickname = "";
 const char *env_t::language_iso = "en";
 sint16 env_t::scroll_multi = -1; // start with same scrool as mouse as nowadays standard
 bool env_t::scroll_infinite = false; // since it fails with touch devices
+bool env_t::scroll_inertia = true;
 sint16 env_t::global_volume = 127;
 uint32 env_t::sound_distance_scaling;
 sint16 env_t::midi_volume = 127;
@@ -240,6 +241,7 @@ void env_t::init()
 	cursor_hide_range = 5;
 
 	scroll_infinite = false;
+	scroll_inertia = true;
 
 	visualize_schedule = true;
 
@@ -719,6 +721,9 @@ void env_t::rdwr_fork(loadsave_t *file)
 
 	if(  fork_version>=1  ) {
 		file->rdwr_bool(show_only_displayed_height_vehicle_states);
+	}
+	if(  fork_version>=2  ) {
+		file->rdwr_bool(scroll_inertia);
 	}
 	// entries of a newer version are simply left unread
 }

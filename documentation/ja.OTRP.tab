@@ -77,6 +77,10 @@ Screen scale:
 画面スケール
 Infinite mouse scrolling
 無限マウススクロール
+Inertial mouse scrolling
+慣性スクロール
+Keep the map moving for a while after releasing a drag
+ドラッグを離した後も、その勢いでしばらく地図が動き続けます。
 Install
 インストール
 # ja.OTRP.tab

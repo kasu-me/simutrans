@@ -174,6 +174,9 @@ public:
 	/// enables infinite scrolling with trackball or mouse, by may fail with sytlus
 	static bool scroll_infinite;
 
+	/// keeps the map moving for a while after a mouse drag is released
+	static bool scroll_inertia;
+
 	/// converts numpad keys to arrows no matter of numlock state
 	static bool numpad_always_moves_map;
 

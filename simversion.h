@@ -87,7 +87,7 @@
 #define SETTINGS_XML_PAK    SETTINGS_XML_MARKER "/"
 
 // version of the fork specific part of settings.xml. Increment whenever entries are added.
-#define SETTINGS_XML_FORK_VERSION 1
+#define SETTINGS_XML_FORK_VERSION 2
 
 #ifdef REVISION
 #	define SIM_TITLE_REVISION_STRING " - r" QUOTEME(REVISION)

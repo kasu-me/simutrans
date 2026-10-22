@@ -6,6 +6,8 @@
 #ifndef SIMINTERACTION_H
 #define SIMINTERACTION_H
 
+#include "simtypes.h"
+
 
 class karte_ptr_t;
 class viewport_t;
@@ -58,6 +60,45 @@ private:
 	bool process_event( event_t &ev );
 
 	bool is_dragging;
+
+	/**
+	 * Recent map drag movements, used to estimate the speed when the drag is released.
+	 */
+	struct drag_sample_t {
+		uint32 time;
+		sint16 dx, dy;
+	};
+	enum { DRAG_SAMPLES = 64 };
+	drag_sample_t drag_samples[DRAG_SAMPLES];
+	uint8 drag_sample_head;
+	uint8 drag_sample_count;
+	uint32 drag_start_time;
+
+	/// inertial scrolling after the drag was released: speed in pixels per ms
+	bool inertia_active;
+	double inertia_vx, inertia_vy;
+	double inertia_rest_x, inertia_rest_y;
+	uint32 inertia_last_time;
+
+	/**
+	 * Forgets the recorded drag movements and stops the inertial scrolling.
+	 */
+	void reset_drag_tracking();
+
+	/**
+	 * Records a map drag movement of (dx,dy) pixels.
+	 */
+	void record_drag(sint16 dx, sint16 dy);
+
+	/**
+	 * Called when a map drag is released, starts the inertial scrolling if the drag was fast enough.
+	 */
+	void start_inertia();
+
+	/**
+	 * Moves the map according to the inertial scrolling speed and decelerates it.
+	 */
+	void step_inertia();
 
 public:
 	/**

@@ -58,6 +58,7 @@ enum {
 	IDBTN_SHOW_WAY_OFFSET_LABEL,
 	IDBTN_SHOW_ONLY_OWN_VEHICLE_STATES,
 	IDBTN_SHOW_ONLY_DISPLAYED_HEIGHT_VEHICLE_STATES,
+	IDBTN_SCROLL_INERTIA,
 	COLORS_MAX_BUTTONS, 
 };
 
@@ -271,6 +272,11 @@ map_settings_t::map_settings_t()
 	buttons[IDBTN_INFINITE_SCROLL].init(button_t::square_state, "Infinite mouse scrolling");
 	buttons[IDBTN_INFINITE_SCROLL].set_tooltip("Infinite scrolling using mouse");
 	add_component(buttons + IDBTN_INFINITE_SCROLL, 2);
+
+	// Inertial scroll checkbox
+	buttons[IDBTN_SCROLL_INERTIA].init(button_t::square_state, "Inertial mouse scrolling");
+	buttons[IDBTN_SCROLL_INERTIA].set_tooltip("Keep the map moving for a while after releasing a drag");
+	add_component(buttons + IDBTN_SCROLL_INERTIA, 2);
 
 	// Numpad key
 	buttons[ IDBTN_IGNORE_NUMLOCK ].init( button_t::square_state, "Num pad keys always move map" );
@@ -670,6 +676,9 @@ bool color_gui_t::action_triggered( gui_action_creator_t *comp, value_t p)
 	case IDBTN_INFINITE_SCROLL:
 		env_t::scroll_infinite ^= 1;
 		break;
+	case IDBTN_SCROLL_INERTIA:
+		env_t::scroll_inertia ^= 1;
+		break;
 	case IDBTN_PEDESTRIANS_AT_STOPS:
 		if( !env_t::networkmode || welt->get_active_player_nr() == PUBLIC_PLAYER_NR ) {
 			welt->set_tool( tool_t::simple_tool[ TOOL_TOOGLE_PAX & 0xFFF ], welt->get_active_player() );
@@ -811,6 +820,7 @@ void color_gui_t::draw(scr_coord pos, scr_size size)
 	buttons[IDBTN_SIMPLE_DRAWING].enable(welt->is_paused());
 	buttons[IDBTN_SCROLL_INVERSE].pressed = env_t::scroll_multi < 0;
 	buttons[IDBTN_INFINITE_SCROLL].pressed = env_t::scroll_infinite;
+	buttons[IDBTN_SCROLL_INERTIA].pressed = env_t::scroll_inertia;
 	buttons[IDBTN_DAY_NIGHT_CHANGE].pressed = env_t::night_shift;
 	buttons[IDBTN_SHOW_SLICE_MAP_VIEW].pressed = grund_t::underground_mode == grund_t::ugm_level;
 	buttons[IDBTN_UNDERGROUND_VIEW].pressed = grund_t::underground_mode == grund_t::ugm_all;
