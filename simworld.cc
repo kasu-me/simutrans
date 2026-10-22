@@ -1188,6 +1188,7 @@ sint8 *humidity;
 
 void karte_t::init(settings_t* const sets, sint8 const* const h_field)
 {
+	live_changes_t::world_reset_t live_reset;
 	humidity = NULL;
 
 	step_year_count=0;
@@ -1776,6 +1777,7 @@ void karte_t::distribute_trees_region( sint16 xtop, sint16 ytop, sint16 xbottom,
 
 void karte_t::enlarge_map(settings_t const* sets, sint8 const* const h_field)
 {
+	live_changes_t::world_reset_t live_reset;
 	sint16 new_size_x = sets->get_size_x();
 	sint16 new_size_y = sets->get_size_y();
 
@@ -3329,6 +3331,7 @@ void karte_t::rotate90_plans(sint16 x_min, sint16 x_max, sint16 y_min, sint16 y_
 
 void karte_t::rotate90()
 {
+	live_changes_t::world_reset_t live_reset;
 DBG_MESSAGE( "karte_t::rotate90()", "called" );
 	// assume we can save this rotation
 	nosave_warning = nosave = false;
@@ -5459,6 +5462,7 @@ void karte_t::plans_finish_rd( sint16 x_min, sint16 x_max, sint16 y_min, sint16 
 
 void karte_t::load(loadsave_t *file)
 {
+	live_changes_t::world_reset_t live_reset;
 	intr_disable();
 	dbg->message("karte_t::load()", "Prepare for loading" );
 
@@ -6434,6 +6438,7 @@ void karte_t::calc_climate(koord k, bool recalc)
 	if(  !pl  ) {
 		return;
 	}
+	live_changes_t::tile(k.x, k.y);
 
 	if( (unsigned)k.x >= climate_map.get_width()  ||  (unsigned)k.y >= climate_map.get_height()  ) {
 		// not initialised yet (may happend during river creation)

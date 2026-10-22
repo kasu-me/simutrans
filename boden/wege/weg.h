@@ -13,6 +13,7 @@
 #include "../../descriptor/way_desc.h"
 #include "../../dataobj/koord3d.h"
 #include "../../simskin.h"
+#include "../../network/live_state.h"
 
 
 class karte_t;
@@ -217,7 +218,7 @@ public:
 	* @note After changing of ribi the image of the way is wrong. To correct this,
 	* grund_t::calc_image needs to be called. This is not done here (Too expensive).
 	*/
-	void ribi_add(ribi_t::ribi ribi) { this->ribi |= (uint8)ribi;}
+	void ribi_add(ribi_t::ribi ribi) { if(  (this->ribi | ribi) != this->ribi  ) { live_changes_t::tile(get_pos().x, get_pos().y); } this->ribi |= (uint8)ribi;}
 
 	/**
 	* Remove direction bits (ribi) for a way.
@@ -225,7 +226,7 @@ public:
 	* @note After changing of ribi the image of the way is wrong. To correct this,
 	* grund_t::calc_image needs to be called. This is not done here (Too expensive).
 	*/
-	void ribi_rem(ribi_t::ribi ribi) { this->ribi &= (uint8)~ribi;}
+	void ribi_rem(ribi_t::ribi ribi) { if(  this->ribi & ribi  ) { live_changes_t::tile(get_pos().x, get_pos().y); } this->ribi &= (uint8)~ribi;}
 
 	/**
 	* Set direction bits (ribi) for the way.
@@ -233,7 +234,7 @@ public:
 	* @note After changing of ribi the image of the way is wrong. To correct this,
 	* grund_t::calc_image needs to be called. This is not done here (Too expensive).
 	*/
-	void set_ribi(ribi_t::ribi ribi) { this->ribi = (uint8)ribi;}
+	void set_ribi(ribi_t::ribi ribi) { if(  this->ribi != ribi  ) { live_changes_t::tile(get_pos().x, get_pos().y); } this->ribi = (uint8)ribi;}
 
 	/**
 	* Get the unmasked direction bits (ribi) for the way (without signals or other ribi changer).

@@ -514,6 +514,7 @@ SOURCES += network/network_cmp_pakset.cc
 SOURCES += network/network_file_transfer.cc
 SOURCES += network/network_packet.cc
 SOURCES += network/network_socket_list.cc
+SOURCES += network/live_state.cc
 SOURCES += network/mcp_server.cc
 SOURCES += network/mcp_tools.cc
 SOURCES += network/pakset_info.cc

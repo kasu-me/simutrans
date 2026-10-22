@@ -17,6 +17,7 @@
 
 zeiger_t::zeiger_t(loadsave_t *file) : obj_no_info_t()
 {
+	set_flag(no_change_log);
 	image = IMG_EMPTY;
 	foreground_image = IMG_EMPTY;
 	area = koord(0,0);
@@ -28,6 +29,7 @@ zeiger_t::zeiger_t(loadsave_t *file) : obj_no_info_t()
 zeiger_t::zeiger_t(koord3d pos, player_t *player) :
 	obj_no_info_t(pos)
 {
+	set_flag(no_change_log);
 	set_owner( player );
 	image = IMG_EMPTY;
 	foreground_image = IMG_EMPTY;

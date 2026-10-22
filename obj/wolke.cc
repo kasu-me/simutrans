@@ -50,6 +50,7 @@ void wolke_t::operator delete(void *p)
 wolke_t::wolke_t(koord3d pos, sint8 b_x_off, sint8 b_y_off, sint16 b_h_off, uint16 lt, uint16 ul, const skin_desc_t* desc ) :
 	obj_no_info_t(pos)
 {
+	set_flag(no_change_log);
 	cloud_nr = all_clouds.index_of(desc);
 	base_y_off = b_h_off;
 	set_xoff( b_x_off );
@@ -71,6 +72,7 @@ wolke_t::~wolke_t()
 
 wolke_t::wolke_t(loadsave_t* const file) : obj_no_info_t()
 {
+	set_flag(no_change_log);
 	rdwr(file);
 }
 

@@ -31,6 +31,7 @@
 #include <list>
 #include <vector>
 #include <memory>
+#include <functional>
 
 
 #define RECONNECTING (1)
@@ -794,6 +795,9 @@ public:
 	 * total amount of freight with specified next hop
 	 */
 	uint32 get_ware_fuer_zwischenziel(const goods_desc_t *warentyp, const halthandle_t zwischenziel) const;
+
+	/// calls @p f for every packet of goods waiting at this halt
+	void for_each_waiting_ware(const std::function<void(const ware_t &)> &f) const;
 
 	/// true, if we accept/deliver this kind of good
 	bool gibt_ab(const goods_desc_t *warentyp) const { return cargo[warentyp->get_catg_index()] != NULL; }

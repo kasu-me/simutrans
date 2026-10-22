@@ -31,6 +31,8 @@
 #include "simplan.h"
 #include "simdebug.h"
 
+#include "network/live_state.h"
+
 
 struct sound_info;
 class stadt_t;
@@ -1207,6 +1209,7 @@ public:
 		planquadrat_t *plan = access(k);
 		if(  plan  ) {
 			plan->set_climate(cl);
+			live_changes_t::tile(k.x, k.y);
 			if(  recalc  ) {
 				recalc_transitions(k);
 				for(  int i = 0;  i < 8;  i++  ) {
@@ -1215,6 +1218,9 @@ public:
 			}
 		}
 	}
+
+	/// the intended climate of a tile (as saved), see climate_map
+	uint8 get_default_climate(koord k) { return climate_map.at(k); }
 
 	void set_mouse_rest_time(uint32 new_val) { mouse_rest_time = new_val; }
 	void set_sound_wait_time(uint32 new_val) { sound_wait_time = new_val; }
@@ -1733,7 +1739,7 @@ public:
 	/**
 	 * Sets water height.
 	 */
-	void set_water_hgt(sint16 x, sint16 y, sint8 hgt) { water_hgts[x + y * (cached_grid_size.x)] = (hgt); }
+	void set_water_hgt(sint16 x, sint16 y, sint8 hgt) { water_hgts[x + y * (cached_grid_size.x)] = (hgt); live_changes_t::tile(x, y); }
 
 	inline void set_water_hgt(koord k, sint8 hgt) {  set_water_hgt(k.x, k.y, hgt); }
 

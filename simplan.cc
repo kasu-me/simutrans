@@ -89,6 +89,9 @@ grund_t *planquadrat_t::get_boden_von_obj(obj_t *obj) const
 void planquadrat_t::boden_hinzufuegen(grund_t *bd)
 {
 	assert(!bd->ist_karten_boden());
+	if(  !bd->is_dummy_ground()  ) {
+		live_changes_t::tile(bd->get_pos().x, bd->get_pos().y);
+	}
 	if(ground_size==0) {
 		// completely empty
 		data.one = bd;
@@ -146,6 +149,9 @@ DBG_MESSAGE("planquadrat_t::boden_hinzufuegen()","addition ground %s at (%i,%i,%
 bool planquadrat_t::boden_entfernen(grund_t *bd)
 {
 	assert(!bd->ist_karten_boden()  &&  ground_size>0);
+	if(  !bd->is_dummy_ground()  ) {
+		live_changes_t::tile(bd->get_pos().x, bd->get_pos().y);
+	}
 	if(ground_size==1) {
 		ground_size = 0;
 		data.one = NULL;
@@ -178,6 +184,7 @@ bool planquadrat_t::boden_entfernen(grund_t *bd)
 void planquadrat_t::kartenboden_setzen(grund_t *bd, bool startup)
 {
 	assert(bd);
+	live_changes_t::tile(bd->get_pos().x, bd->get_pos().y);
 	grund_t *tmp = get_kartenboden();
 	if(tmp) {
 		boden_ersetzen(tmp,bd);
@@ -201,6 +208,7 @@ void planquadrat_t::kartenboden_setzen(grund_t *bd, bool startup)
 void planquadrat_t::boden_ersetzen(grund_t *alt, grund_t *neu)
 {
 	assert(alt!=NULL  &&  neu!=NULL  &&  !alt->is_halt()  );
+	live_changes_t::tile(neu->get_pos().x, neu->get_pos().y);
 
 	if(ground_size<=1) {
 		assert(data.one==alt  ||  ground_size==0);

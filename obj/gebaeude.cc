@@ -268,6 +268,7 @@ void gebaeude_t::add_alter(uint32 a)
 void gebaeude_t::set_tile( const building_tile_desc_t *new_tile, bool start_with_construction )
 {
 	insta_zeit = welt->get_ticks();
+	live_changes_t::obj(this);
 
 	if(!zeige_baugrube  &&  tile!=NULL) {
 		// mark old tile dirty

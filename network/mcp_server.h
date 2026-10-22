@@ -37,7 +37,7 @@ public:
 	/** Close all connections and the listen socket. */
 	static void shutdown();
 
-	static bool is_active() { return listen_sock != INVALID_SOCKET; }
+	static bool is_active() { return listen_sock != INVALID_SOCKET  ||  listen_sock6 != INVALID_SOCKET; }
 
 	// --- public JSON helpers (used by mcp_tools.cc) ---
 	static std::string json_escape(const std::string &s);
@@ -60,12 +60,14 @@ private:
 		std::string       id_json;
 	};
 
-	static SOCKET listen_sock;
+	static SOCKET listen_sock;  ///< 127.0.0.1
+	static SOCKET listen_sock6; ///< ::1
 	static std::vector<mcp_connection_t *> connections;
 	static std::vector<mcp_pending_t *>    pending_scripts;
 	static karte_t *world; ///< current world, set each step()
 
-	static void accept_new();
+	static SOCKET open_listener(int family, uint16 port);
+	static void accept_new(SOCKET listener);
 	static void io_connection(mcp_connection_t *c);
 	static void handle_line(mcp_connection_t *c, const std::string &line);
 	static void step_pending();
@@ -86,6 +88,11 @@ private:
 	                            const std::string  &params_json);
 
 	static void close_socket(SOCKET s);
+
+	/** Reads 4 hex digits at pos (for \uXXXX). */
+	static bool parse_hex4(const std::string &s, size_t pos, uint32 &value);
+
+	static void append_utf8(std::string &out, uint32 cp);
 };
 
 #endif // NETWORK_MCP_SERVER_H

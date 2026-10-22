@@ -12,10 +12,14 @@
  *
  * A fresh VM is created for each run_squirrel call and destroyed afterwards,
  * so no state (global variables, defined functions, etc.) leaks between calls.
+ *
+ * get_live_state, get_tiles, get_changes and dump_vehicles are the read-only
+ * tools for a live web view of the game (see live_state.cc).
  */
 
 #include "mcp_tools.h"
 #include "mcp_server.h"
+#include "live_state.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -230,6 +234,70 @@ static const tool_def_t TOOL_DEFS[] = {
 		                 "PAX_DEST, OWNER, LINES, LEVEL, WAITCHANGE, HIDE_CONTOUR, CLIMATES, CITIZENS, CITY_GROWTH, LABELS\"}"
 		 "},"
 		 "\"additionalProperties\":false}"
+	},
+	{
+		"get_live_state",
+		"Return every convoy and vehicle as it is now, as JSON: "
+		"{schema, epoch, sync, fps, ahead, paused, vf, fields, c, gen_ms}. "
+		"c is a list of [id, owner, state, speed_kmh, reversed, rt0, rt, vehicles]; rt is the whole route "
+		"as a flat list [x,y,z, ...] starting at route index rt0 (always 0); vehicles (in savegame order) are "
+		"lists of the fields named in vf. fields lists every field name that can be requested. "
+		"Nothing is kept between calls.",
+		"{\"type\":\"object\","
+		 "\"properties\":{"
+		   "\"fields\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},"
+		              "\"description\":\"vehicle fields in this order; default "
+		              "[x,y,z,dir,steps,steps_next,ri,load,xoff,yoff,air]\"},"
+		   "\"routes\":{\"type\":\"boolean\","
+		              "\"description\":\"false: rt is null for every convoy (default true)\"},"
+		   "\"route_ids\":{\"type\":\"array\",\"items\":{\"type\":\"integer\"},"
+		                 "\"description\":\"only these convoys get rt, the others null\"},"
+		   "\"route_hash\":{\"type\":\"boolean\","
+		                  "\"description\":\"also return rh: a hash of each convoy's route, in the order of c\"},"
+		   "\"halts\":{\"type\":\"boolean\","
+		             "\"description\":\"also return halts: [[id, owner, waiting total, "
+		             "[[via halt id, goods index, amount], ...]], ...] and goods (the goods names by index)\"}"
+		 "},"
+		 "\"additionalProperties\":false}"
+	},
+	{
+		"get_tiles",
+		"Return a rectangle of tiles exactly as the savegame stores them: "
+		"{epoch, sync, version, otrp, x0, y0, w, h, data}. data (base64) holds the tiles row by row "
+		"(y outside, x inside), each as the savegame writes it, followed by the w*h climate bytes.",
+		"{\"type\":\"object\","
+		 "\"properties\":{"
+		   "\"x0\":{\"type\":\"integer\"},"
+		   "\"y0\":{\"type\":\"integer\"},"
+		   "\"w\":{\"type\":\"integer\"},"
+		   "\"h\":{\"type\":\"integer\",\"description\":\"w*h must not exceed 4096\"}"
+		 "},"
+		 "\"required\":[\"x0\",\"y0\",\"w\",\"h\"],"
+		 "\"additionalProperties\":false}"
+	},
+	{
+		"get_changes",
+		"Return the changes of the static world since a sequence number: "
+		"{epoch, sync, seq, floor, overflow, tiles:[[sync,x,y],...], sig:[[sync,x,y,z,typ,dir,state],...]}. "
+		"Pass the seq of the previous answer as since (null at first: then only seq is returned). "
+		"overflow is true when entries since then are lost (reload the whole world). "
+		"Changes are recorded only while the MCP server runs.",
+		"{\"type\":\"object\","
+		 "\"properties\":{"
+		   "\"since\":{\"type\":[\"integer\",\"null\"]}"
+		 "},"
+		 "\"additionalProperties\":false}"
+	},
+	{
+		"dump_vehicles",
+		"Return all fields of the given convoys and their vehicles by name, with the whole route (for diagnosis).",
+		"{\"type\":\"object\","
+		 "\"properties\":{"
+		   "\"ids\":{\"type\":\"array\",\"items\":{\"type\":\"integer\"},"
+		           "\"description\":\"convoy ids (at most 50)\"}"
+		 "},"
+		 "\"required\":[\"ids\"],"
+		 "\"additionalProperties\":false}"
 	}
 };
 static const int NUM_TOOLS = sizeof(TOOL_DEFS) / sizeof(TOOL_DEFS[0]);
@@ -283,6 +351,22 @@ std::string mcp_tools::tools_call(const std::string &name,
 
 	if (name == "export_minimap") {
 		return tool_export_minimap(welt, args_json);
+	}
+
+	if (name == "get_live_state") {
+		return text_content(live_state::get_live_state(welt, args_json));
+	}
+
+	if (name == "get_tiles") {
+		return text_content(live_state::get_tiles(welt, args_json));
+	}
+
+	if (name == "get_changes") {
+		return text_content(live_state::get_changes(welt, args_json));
+	}
+
+	if (name == "dump_vehicles") {
+		return text_content(live_state::dump_vehicles(welt, args_json));
 	}
 
 	return text_content("{\"error\":\"unknown tool: " + jesc(name) + "\"}");

@@ -12,6 +12,7 @@
 #include "../descriptor/roadsign_desc.h"
 #include "../ifc/sync_steppable.h"
 #include "../tpl/stringhashtable_tpl.h"
+#include "../network/live_state.h"
 
 template<class T> class vector_tpl;
 class tool_selector_t;
@@ -88,7 +89,13 @@ public:
 	bool get_two_ways() const { return ticks_ns != 0; }
 	void set_two_ways(bool yesno);
 
-	void set_state(signalstate z) {state = z; calc_image();}
+	void set_state(signalstate z) {
+		if(  state != z  ) {
+			live_changes_t::sign(this, get_typ(), dir, z);
+		}
+		state = z;
+		calc_image();
+	}
 	signalstate get_state() { return (signalstate)state; }
 
 	typ get_typ() const OVERRIDE { return roadsign; }

@@ -10,6 +10,7 @@
 #include "network_socket_list.h"
 #include "network_cmp_pakset.h"
 #include "network_cmd_scenario.h"
+#include "live_state.h"
 
 #include "../dataobj/loadsave.h"
 #include "../dataobj/gameinfo.h"
@@ -768,6 +769,8 @@ void nwc_sync_t::do_command(karte_t *welt)
 
 		welt->save( fn, true, SERVER_SAVEGAME_VER_NR, false );
 		uint32 old_sync_steps = welt->get_sync_steps();
+		// the same world comes back: the live view keeps its static world
+		live_changes_t::keep_epoch_on_next_load();
 		welt->load( fn );
 		env_t::restore_UI = old_restore_UI;
 
@@ -818,6 +821,8 @@ void nwc_sync_t::do_command(karte_t *welt)
 		}
 
 		uint32 old_sync_steps = welt->get_sync_steps();
+		// the same world comes back: the live view keeps its static world
+		live_changes_t::keep_epoch_on_next_load();
 		welt->load( fn );
 		env_t::restore_UI = old_restore_UI;
 
@@ -1275,6 +1280,10 @@ void nwc_tool_t::do_command(karte_t *welt)
 			active_tool->cleanup();
 		}
 		err = tool->work( player, pos );
+		if(  err == NULL  ) {
+			// a hint for the live view: tools may change things in place (no object added or removed)
+			live_changes_t::tile( pos.x, pos.y );
+		}
 		// only local players get the callback
 		if (local  &&  callback_id == 0  &&  player) {
 			player->tell_tool_result(tool, pos, err);

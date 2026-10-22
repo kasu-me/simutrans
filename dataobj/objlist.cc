@@ -440,6 +440,7 @@ void objlist_t::sort_trees(uint8 index, uint8 count)
 
 bool objlist_t::add(obj_t* new_obj)
 {
+	live_changes_t::obj(new_obj);
 	if(capacity==0) {
 		// the first one save direct
 		obj.one = new_obj;
@@ -554,6 +555,9 @@ obj_t *objlist_t::remove_last()
 			obj.some[top] = NULL;
 		}
 	}
+	if(  last_obj  ) {
+		live_changes_t::obj(last_obj);
+	}
 	return last_obj;
 }
 
@@ -563,7 +567,8 @@ bool objlist_t::remove(const obj_t* remove_obj)
 	if(  capacity == 0  ) {
 		return false;
 	}
-	else if(  capacity == 1  ) {
+	live_changes_t::obj(remove_obj);
+	if(  capacity == 1  ) {
 		if(  obj.one == remove_obj  ) {
 			obj.one = NULL;
 			capacity = 0;
@@ -625,6 +630,7 @@ bool objlist_t::loesche_alle(player_t *player, uint8 offset)
 	if(capacity>1) {
 		while(  top>offset  ) {
 			top --;
+			live_changes_t::obj(obj.some[top]);
 			local_delete_object(obj.some[top], player);
 			obj.some[top] = NULL;
 			ok = true;
@@ -632,6 +638,7 @@ bool objlist_t::loesche_alle(player_t *player, uint8 offset)
 	}
 	else {
 		if(capacity==1) {
+			live_changes_t::obj(obj.one);
 			local_delete_object(obj.one, player);
 			ok = true;
 			obj.one = NULL;

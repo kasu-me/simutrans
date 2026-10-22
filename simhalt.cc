@@ -3304,6 +3304,18 @@ uint32 haltestelle_t::get_ware_fuer_zwischenziel(const goods_desc_t *wtyp, const
 }
 
 
+void haltestelle_t::for_each_waiting_ware(const std::function<void(const ware_t &)> &f) const
+{
+	for(  uint8 catg_idx = 0;  catg_idx < goods_manager_t::get_max_catg_index();  catg_idx++  ) {
+		if(  const cargo_queue_t *warray = cargo[catg_idx]  ) {
+			for(  const cargo_item_t& ware : *warray  ) {
+				f( ware->goods );
+			}
+		}
+	}
+}
+
+
 bool haltestelle_t::vereinige_waren(const ware_t &ware)
 {
 	// merge cargos only when "load nearest first" policy is applied.

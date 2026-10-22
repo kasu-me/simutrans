@@ -184,6 +184,7 @@ void roadsign_t::set_dir(ribi_t::ribi dir)
 
 	this->dir = dir;
 	if (!preview) {
+		live_changes_t::obj(this);
 		weg_t *weg = welt->lookup(get_pos())->get_weg(desc->get_wtyp()!=tram_wt ? desc->get_wtyp() : track_wt);
 		if(  desc->get_wtyp()!=track_wt  &&  desc->get_wtyp()!=monorail_wt  &&  desc->get_wtyp()!=maglev_wt  &&  desc->get_wtyp()!=narrowgauge_wt  ) {
 			weg->count_sign();
@@ -611,6 +612,7 @@ sync_result roadsign_t::sync_step(uint32 /*delta_t*/)
 			  dir = ribi_t::none;
 			  break;
 			}
+			live_changes_t::sign(this, get_typ(), dir, state);
 			calc_image();
 		}
 	}

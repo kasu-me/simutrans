@@ -35,9 +35,11 @@
 #include "../script/script.h"
 #include "../utils/plainstring.h"
 #include "mcp_tools.h"
+#include "live_state.h"
 
 // ---- static member storage ----
 SOCKET mcp_server_t::listen_sock = INVALID_SOCKET;
+SOCKET mcp_server_t::listen_sock6 = INVALID_SOCKET;
 std::vector<mcp_server_t::mcp_connection_t *> mcp_server_t::connections;
 std::vector<mcp_server_t::mcp_pending_t *>    mcp_server_t::pending_scripts;
 karte_t *mcp_server_t::world = NULL;
@@ -74,7 +76,7 @@ void mcp_server_t::close_socket(SOCKET s)
 
 bool mcp_server_t::init(uint16 port)
 {
-	if (listen_sock != INVALID_SOCKET) {
+	if (is_active()) {
 		dbg->warning("mcp_server_t::init", "already running");
 		return false;
 	}
@@ -87,70 +89,68 @@ bool mcp_server_t::init(uint16 port)
 	}
 #endif
 
-	// Try IPv6 dual-stack first, fall back to IPv4
-	SOCKET s = socket(AF_INET6, SOCK_STREAM, 0);
-	bool use_ipv6 = (s != INVALID_SOCKET);
-
-	if (!use_ipv6) {
-		s = socket(AF_INET, SOCK_STREAM, 0);
-		if (s == INVALID_SOCKET) {
-			dbg->warning("mcp_server_t::init", "socket() failed");
-			return false;
-		}
+	// One socket per loopback address: a dual-stack socket bound to ::1 does not accept 127.0.0.1
+	listen_sock  = open_listener(AF_INET, port);
+	listen_sock6 = open_listener(AF_INET6, port);
+	if (!is_active()) {
+		return false;
 	}
 
-	{
-		int on = 1;
-		setsockopt(s, SOL_SOCKET, SO_REUSEADDR, (const char *)&on, sizeof(on));
+	live_changes_t::set_enabled(true);
+	dbg->message("mcp_server_t::init", "MCP server listening on port %u (%s%s%s)", port,
+		listen_sock != INVALID_SOCKET ? "127.0.0.1" : "",
+		listen_sock != INVALID_SOCKET  &&  listen_sock6 != INVALID_SOCKET ? ", " : "",
+		listen_sock6 != INVALID_SOCKET ? "::1" : "");
+	return true;
+}
+
+
+SOCKET mcp_server_t::open_listener(int family, uint16 port)
+{
+	const char *addr_name = family == AF_INET6 ? "::1" : "127.0.0.1";
+	SOCKET s = socket(family, SOCK_STREAM, 0);
+	if (s == INVALID_SOCKET) {
+		dbg->warning("mcp_server_t::init", "socket() failed for %s", addr_name);
+		return INVALID_SOCKET;
 	}
 
-	if (use_ipv6) {
-		// Disable IPV6_V6ONLY so IPv4 clients connect too (dual-stack)
-		int off = 0;
-		setsockopt(s, IPPROTO_IPV6, IPV6_V6ONLY, (const char *)&off, sizeof(off));
+	int on = 1;
+	setsockopt(s, SOL_SOCKET, SO_REUSEADDR, (const char *)&on, sizeof(on));
+
+	int err;
+	if (family == AF_INET6) {
+		// the IPv4 loopback has its own socket
+		setsockopt(s, IPPROTO_IPV6, IPV6_V6ONLY, (const char *)&on, sizeof(on));
 
 		struct sockaddr_in6 addr;
 		memset(&addr, 0, sizeof(addr));
 		addr.sin6_family = AF_INET6;
 		addr.sin6_port   = htons(port);
 		addr.sin6_addr   = in6addr_loopback;
-		if (bind(s, (struct sockaddr *)&addr, sizeof(addr)) != 0) {
-			close_socket(s);
-			// Fallback to IPv4
-			use_ipv6 = false;
-			s = socket(AF_INET, SOCK_STREAM, 0);
-			if (s == INVALID_SOCKET) {
-				dbg->warning("mcp_server_t::init", "socket() failed (ipv4 fallback)");
-				return false;
-			}
-			int on = 1;
-			setsockopt(s, SOL_SOCKET, SO_REUSEADDR, (const char *)&on, sizeof(on));
-		}
+		err = bind(s, (struct sockaddr *)&addr, sizeof(addr));
 	}
-
-	if (!use_ipv6) {
+	else {
 		struct sockaddr_in addr;
 		memset(&addr, 0, sizeof(addr));
 		addr.sin_family      = AF_INET;
 		addr.sin_port        = htons(port);
 		addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-		if (bind(s, (struct sockaddr *)&addr, sizeof(addr)) != 0) {
-			dbg->warning("mcp_server_t::init", "bind() failed on port %u (error %d)", port, (int)GET_LAST_ERROR());
-			close_socket(s);
-			return false;
-		}
+		err = bind(s, (struct sockaddr *)&addr, sizeof(addr));
+	}
+	if (err != 0) {
+		dbg->warning("mcp_server_t::init", "bind() failed on %s port %u (error %d)", addr_name, port, (int)GET_LAST_ERROR());
+		close_socket(s);
+		return INVALID_SOCKET;
 	}
 
 	if (listen(s, 8) != 0) {
-		dbg->warning("mcp_server_t::init", "listen() failed (error %d)", (int)GET_LAST_ERROR());
+		dbg->warning("mcp_server_t::init", "listen() failed on %s (error %d)", addr_name, (int)GET_LAST_ERROR());
 		close_socket(s);
-		return false;
+		return INVALID_SOCKET;
 	}
 
 	mcp_set_nonblocking(s);
-	listen_sock = s;
-	dbg->message("mcp_server_t::init", "MCP server listening on port %u", port);
-	return true;
+	return s;
 }
 
 
@@ -169,17 +169,21 @@ void mcp_server_t::shutdown()
 	connections.clear();
 	close_socket(listen_sock);
 	listen_sock = INVALID_SOCKET;
+	close_socket(listen_sock6);
+	listen_sock6 = INVALID_SOCKET;
+	live_changes_t::set_enabled(false);
 }
 
 
 void mcp_server_t::step(karte_t *welt)
 {
 	world = welt;
-	if (listen_sock == INVALID_SOCKET) {
+	if (!is_active()) {
 		return;
 	}
 
-	accept_new();
+	accept_new(listen_sock);
+	accept_new(listen_sock6);
 
 	// Process existing connections; collect dead ones
 	std::vector<mcp_connection_t *> dead;
@@ -248,12 +252,15 @@ void mcp_server_t::step_pending()
 
 // ---- private: network I/O ----
 
-void mcp_server_t::accept_new()
+void mcp_server_t::accept_new(SOCKET listener)
 {
+	if (listener == INVALID_SOCKET) {
+		return;
+	}
 	for (;;) {
 		struct sockaddr_storage addr;
 		socklen_t addrlen = sizeof(addr);
-		SOCKET client = accept(listen_sock, (struct sockaddr *)&addr, &addrlen);
+		SOCKET client = accept(listener, (struct sockaddr *)&addr, &addrlen);
 		if (client == INVALID_SOCKET) {
 			break; // no more pending connections
 		}
@@ -560,6 +567,25 @@ std::string mcp_server_t::json_get_string(const std::string &json, const std::st
 				case 'n':  out += '\n'; break;
 				case 'r':  out += '\r'; break;
 				case 't':  out += '\t'; break;
+				case 'b':  out += '\b'; break;
+				case 'f':  out += '\f'; break;
+				case 'u': {
+					// \uXXXX (clients like Python's json escape all non-ASCII text this way), surrogate pairs included
+					uint32 cp;
+					if (!parse_hex4(raw, i + 1, cp)) {
+						out += raw[i];
+						break;
+					}
+					i += 4;
+					uint32 low;
+					if (cp >= 0xD800 && cp < 0xDC00 && i + 6 < raw.size() && raw[i + 1] == '\\' && raw[i + 2] == 'u'
+					    && parse_hex4(raw, i + 3, low) && low >= 0xDC00 && low < 0xE000) {
+						cp = 0x10000 + ((cp - 0xD800) << 10) + (low - 0xDC00);
+						i += 6;
+					}
+					append_utf8(out, cp);
+					break;
+				}
 				default:   out += raw[i]; break;
 			}
 		} else {
@@ -567,4 +593,45 @@ std::string mcp_server_t::json_get_string(const std::string &json, const std::st
 		}
 	}
 	return out;
+}
+
+
+bool mcp_server_t::parse_hex4(const std::string &s, size_t pos, uint32 &value)
+{
+	if (pos + 4 > s.size()) {
+		return false;
+	}
+	value = 0;
+	for (size_t k = pos; k < pos + 4; ++k) {
+		const char c = s[k];
+		value <<= 4;
+		if (c >= '0' && c <= '9')      value |= c - '0';
+		else if (c >= 'a' && c <= 'f') value |= c - 'a' + 10;
+		else if (c >= 'A' && c <= 'F') value |= c - 'A' + 10;
+		else return false;
+	}
+	return true;
+}
+
+
+void mcp_server_t::append_utf8(std::string &out, uint32 cp)
+{
+	if (cp < 0x80) {
+		out += (char)cp;
+	}
+	else if (cp < 0x800) {
+		out += (char)(0xC0 | (cp >> 6));
+		out += (char)(0x80 | (cp & 0x3F));
+	}
+	else if (cp < 0x10000) {
+		out += (char)(0xE0 | (cp >> 12));
+		out += (char)(0x80 | ((cp >> 6) & 0x3F));
+		out += (char)(0x80 | (cp & 0x3F));
+	}
+	else {
+		out += (char)(0xF0 | (cp >> 18));
+		out += (char)(0x80 | ((cp >> 12) & 0x3F));
+		out += (char)(0x80 | ((cp >> 6) & 0x3F));
+		out += (char)(0x80 | (cp & 0x3F));
+	}
 }

@@ -118,6 +118,9 @@ void obj_t::set_owner(player_t *player)
 {
 	int i = welt->sp2num(player);
 	assert(i>=0);
+	if(  owner_n != (uint8)i  ) {
+		live_changes_t::obj(this);
+	}
 	owner_n = (uint8)i;
 }
 

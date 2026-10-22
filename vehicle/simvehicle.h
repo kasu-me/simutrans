@@ -139,6 +139,12 @@ public:
 
 	sint16 get_hoff(const sint16 raster_width=1) const;
 	uint8 get_steps() const {return steps;}
+	uint8 get_steps_next() const {return steps_next;}
+	sint8 get_dx() const {return dx;}
+	sint8 get_dy() const {return dy;}
+	uint8 get_zoff_start() const {return zoff_start;}
+	uint8 get_zoff_end() const {return zoff_end;}
+	sint8 get_next_lane() const {return next_lane;}
 
 	uint8 get_disp_lane() const { return disp_lane; }
 
@@ -864,6 +870,11 @@ public:
 
 	int get_flyingheight() const {return flying_height-get_hoff()-2;}
 	int get_targetheight() const {return target_height-get_hoff()-2;}
+
+	// the values as saved
+	flight_state get_flight_state() const {return state;}
+	sint16 get_raw_flying_height() const {return flying_height;}
+	sint16 get_raw_target_height() const {return target_height;}
 
 	// image: when flying empty, on ground the plane
 	image_id get_image() const OVERRIDE {return !is_on_ground() ? IMG_EMPTY : image;}

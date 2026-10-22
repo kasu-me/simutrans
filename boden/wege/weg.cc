@@ -121,6 +121,9 @@ const char *weg_t::waytype_to_string(waytype_t wt)
 
 void weg_t::set_desc(const way_desc_t *b)
 {
+	if(  desc != b  ) {
+		live_changes_t::tile(get_pos().x, get_pos().y);
+	}
 	desc = b;
 
 	if(  desc == NULL  ) {
