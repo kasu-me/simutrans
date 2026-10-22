@@ -47,6 +47,11 @@ void set_zoom_factor_safe(int)
 {
 }
 
+int get_zoom_factor()
+{
+	return 3;
+}
+
 int zoom_factor_up()
 {
 	return false;

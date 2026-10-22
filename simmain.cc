@@ -404,6 +404,8 @@ void print_help()
 		"                     (default: left to the operating system;\n"
 		"                      ignored in fullscreen and borderless mode)\n"
 		" -mcp-port PORT      start MCP (Model Context Protocol) server on PORT\n"
+		" -mcp-token-file F   MCP clients must send the token in the first line of F\n"
+		"                     (initialize: params.auth_token)\n"
 		" -server [PORT]      starts program as server (for network game)\n"
 		"                     without port specified uses 13353\n"
 		" -announce           Enable server announcements\n"
@@ -862,6 +864,12 @@ int simu_main(int argc, char** argv)
 		const char *p = args.gimme_arg("-mcp-port", 1);
 		uint16 mcp_port = p ? (uint16)atoi(p) : 13354;
 		if (mcp_port == 0) { mcp_port = 13354; }
+		if (args.has_arg("-mcp-token-file")) {
+			const char *token_file = args.gimme_arg("-mcp-token-file", 1);
+			if (!token_file  ||  !mcp_server_t::read_token_file(token_file)) {
+				dbg->fatal("simu_main()", "cannot read the MCP token from '%s'", token_file ? token_file : "");
+			}
+		}
 		mcp_server_t::init(mcp_port);
 	}
 

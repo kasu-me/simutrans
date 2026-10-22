@@ -39,6 +39,20 @@ public:
 
 	static bool is_active() { return listen_sock != INVALID_SOCKET  ||  listen_sock6 != INVALID_SOCKET; }
 
+	/**
+	 * While the main loop does not run (the game is saved, loaded, sent to a joining client):
+	 * accepts connections and answers every request at once, tool calls with the error
+	 * "busy: <reason>" (see live_changes_t::busy_t).
+	 */
+	static void step_busy(const char *reason);
+
+	/**
+	 * Requires the clients to authenticate: the token is the first line of the file.
+	 * A connection must send it in initialize (params.auth_token) before anything else.
+	 * @return false if the file cannot be read or the token is empty
+	 */
+	static bool read_token_file(const char *filename);
+
 	// --- public JSON helpers (used by mcp_tools.cc) ---
 	static std::string json_escape(const std::string &s);
 	static std::string json_get_raw(const std::string &json, const std::string &key);
@@ -50,7 +64,8 @@ private:
 		std::string recv_buf;
 		std::string send_buf;
 		bool initialized; ///< true after "initialize" handshake completed
-		explicit mcp_connection_t(SOCKET s) : sock(s), initialized(false) {}
+		bool authorized;  ///< true if no token is required or the client sent it
+		explicit mcp_connection_t(SOCKET s) : sock(s), initialized(false), authorized(token.empty()) {}
 	};
 
 	/// A run_squirrel call that suspended mid-execution (network mode command_x).
@@ -59,6 +74,7 @@ private:
 		mcp_connection_t *conn;
 		std::string       id_json;
 		uint32            sync_start; ///< sync step when the script was called
+		uint32            started_ms; ///< dr_time() when the script was called (for its time limit)
 	};
 
 	static SOCKET listen_sock;  ///< 127.0.0.1
@@ -66,6 +82,12 @@ private:
 	static std::vector<mcp_connection_t *> connections;
 	static std::vector<mcp_pending_t *>    pending_scripts;
 	static karte_t *world; ///< current world, set each step()
+	static std::string token; ///< required in initialize if not empty
+	static const char *busy; ///< reason while step_busy() handles the requests
+	static bool stepping;    ///< in step(): requests are being handled
+
+	/** Reads the connections and handles the complete lines, then writes what is pending. */
+	static void io_connections();
 
 	static SOCKET open_listener(int family, uint16 port);
 	static void accept_new(SOCKET listener);

@@ -4,6 +4,7 @@
  */
 
 #include "simloadingscreen.h"
+#include "network/live_state.h"
 
 #include "sys/simsys.h"
 #include "descriptor/image.h"
@@ -103,6 +104,8 @@ void loadingscreen_t::display()
 
 void loadingscreen_t::set_progress( uint32 progress )
 {
+	// also without a display (a dedicated server saving, sending or loading a game)
+	live_changes_t::busy_poll();
 	if(!is_display_init()  &&  (progress != this->progress  ||  progress == 0)  ) {
 		return;
 	}

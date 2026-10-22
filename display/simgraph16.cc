@@ -1134,6 +1134,12 @@ void set_zoom_factor(int z)
 	}
 }
 
+int get_zoom_factor()
+{
+	return zoom_factor;
+}
+
+
 void set_zoom_factor_safe(int z)
 {
 	if(  z < 0  ||  MAX_ZOOM_FACTOR < z  ) {

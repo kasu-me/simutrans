@@ -43,6 +43,9 @@ SOCKET mcp_server_t::listen_sock6 = INVALID_SOCKET;
 std::vector<mcp_server_t::mcp_connection_t *> mcp_server_t::connections;
 std::vector<mcp_server_t::mcp_pending_t *>    mcp_server_t::pending_scripts;
 karte_t *mcp_server_t::world = NULL;
+std::string mcp_server_t::token;
+const char *mcp_server_t::busy = NULL;
+bool mcp_server_t::stepping = false;
 
 
 // ---- platform helpers ----
@@ -182,6 +185,47 @@ void mcp_server_t::step(karte_t *welt)
 		return;
 	}
 
+	stepping = true;
+	io_connections();
+	step_pending();
+	stepping = false;
+}
+
+
+void mcp_server_t::step_busy(const char *reason)
+{
+	// not from within a request (a tool that saves or loads)
+	if (!is_active()  ||  stepping) {
+		return;
+	}
+	busy = reason;
+	io_connections();
+	busy = NULL;
+}
+
+
+bool mcp_server_t::read_token_file(const char *filename)
+{
+	FILE *f = fopen(filename, "rb");
+	if (!f) {
+		return false;
+	}
+	char buf[256];
+	const bool ok = fgets(buf, sizeof(buf), f) != NULL;
+	fclose(f);
+	if (!ok) {
+		return false;
+	}
+	token = buf;
+	while (!token.empty()  &&  (token.back() == '\n'  ||  token.back() == '\r'  ||  token.back() == ' ')) {
+		token.pop_back();
+	}
+	return !token.empty();
+}
+
+
+void mcp_server_t::io_connections()
+{
 	accept_new(listen_sock);
 	accept_new(listen_sock6);
 
@@ -197,8 +241,6 @@ void mcp_server_t::step(karte_t *welt)
 		connections.erase(std::find(connections.begin(), connections.end(), c));
 		delete c;
 	}
-
-	step_pending();
 }
 
 
@@ -229,16 +271,20 @@ void mcp_server_t::step_pending()
 		if (err == NULL) {
 			// Completed successfully
 			result_json = std::string("{\"result\":\"")
-			            + json_escape(result.c_str() ? result.c_str() : "") + "\"" + syncs;
+			            + json_escape(result.c_str() ? result.c_str() : "") + "\"" + mcp_tools::script_ops(p->vm) + syncs;
 		}
 		else if (strcmp(err, "suspended") == 0) {
-			// Still waiting for network command
-			still_pending.push_back(p);
-			continue;
+			// Still waiting for network command, or more opcodes to run: unless the script ran out of its limits
+			const char *limit = mcp_tools::script_limit(p->vm, p->started_ms);
+			if (!limit) {
+				still_pending.push_back(p);
+				continue;
+			}
+			result_json = std::string("{\"error\":\"") + json_escape(limit) + "\"" + mcp_tools::script_ops(p->vm) + syncs;
 		}
 		else {
 			// Error
-			result_json = std::string("{\"error\":\"") + json_escape(mcp_tools::script_error(p->vm, err)) + "\"" + syncs;
+			result_json = std::string("{\"error\":\"") + json_escape(mcp_tools::script_error(p->vm, err)) + "\"" + mcp_tools::script_ops(p->vm) + syncs;
 		}
 
 		// Wrap and send response
@@ -363,6 +409,18 @@ void mcp_server_t::handle_line(mcp_connection_t *c, const std::string &line)
 		return;
 	}
 
+	if (!c->authorized) {
+		if (method == "initialize"  &&  json_get_string(params, "auth_token") == token) {
+			c->authorized = true;
+		}
+		else {
+			if (!id_json.empty()  &&  id_json != "null") {
+				c->send_buf += make_error(id_json, -32001, "unauthorized: send the token as params.auth_token of initialize") + '\n';
+			}
+			return;
+		}
+	}
+
 	std::string response = dispatch(c, method, id_json, params);
 	if (!response.empty()) {
 		c->send_buf += response;
@@ -419,12 +477,17 @@ std::string mcp_server_t::dispatch(mcp_connection_t   *c,
 		std::string args_json = json_get_raw(params_json, "arguments");
 		if (args_json.empty()) args_json = "{}";
 
+		if (busy) {
+			// the game is not in a state to be read or changed: answer at once instead of after the save
+			return make_response(id_json, mcp_tools::busy_result(busy));
+		}
+
 		script_vm_t *pending_vm = nullptr;
 		std::string result_json = mcp_tools::tools_call(tool_name, args_json, world,
 		                                                 &pending_vm);
 		if (pending_vm) {
 			// Script suspended (network mode command_x) — response will be sent later
-			pending_scripts.push_back(new mcp_pending_t{pending_vm, c, id_json, world ? world->get_sync_steps() : 0});
+			pending_scripts.push_back(new mcp_pending_t{pending_vm, c, id_json, world ? world->get_sync_steps() : 0, mcp_tools::script_started_ms()});
 			return "";
 		}
 		return make_response(id_json, result_json);

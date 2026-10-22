@@ -22,6 +22,7 @@
 #include "../../descriptor/building_desc.h"
 #include "../../descriptor/roadsign_desc.h"
 #include "../../descriptor/way_obj_desc.h"
+#include "../../network/live_state.h"
 
 #include <memory> // auto_ptr
 
@@ -84,6 +85,9 @@ SQInteger param<call_tool_init>::push(HSQUIRRELVM vm, call_tool_init v)
 	if (v.required_owner  &&  !player_t::check_owner(v.required_owner, player)) {
 		return sq_raise_error(vm, "permission: the object belongs to another player");
 	}
+	if (v.paying_player  &&  !v.paying_player->can_afford(v.cost)  &&  script_vm_t::is_mcp(vm)) {
+		return sq_raise_error(vm, "funds: Insufficient funds!");
+	}
 	// check if calling suspendable tools is blocked
 	if (const char* blocker = env_t::networkmode ? sq_get_suspend_blocker(vm) : NULL) {
 		return sq_raise_error(vm, "busy: Cannot call this tool from within `%s'.", blocker);
@@ -94,7 +98,14 @@ SQInteger param<call_tool_init>::push(HSQUIRRELVM vm, call_tool_init v)
 	tool->callback_id = callback_id;
 
 	// HACK call karte_t::set_tool
-	welt->set_tool(tool, player);
+	{
+		// a tool of an MCP script that runs at once is reported to it (in network games: nwc_tool_t::do_command)
+		live_changes_t::tool_op_t op(player);
+		welt->set_tool(tool, player);
+		if (!env_t::networkmode  &&  script_vm_t::is_mcp(vm)) {
+			op.done(vm, tool->get_id(), tool->get_default_param(), NULL);
+		}
+	}
 	// in networkmode, call is suspended
 
 	if (env_t::networkmode) {
@@ -253,6 +264,7 @@ SQInteger param<call_tool_work>::push(HSQUIRRELVM vm, call_tool_work v)
 		// register this tool call for callback with this id
 		uint32 callback_id = suspended_scripts_t::get_unique_key(tool);
 		tool->callback_id = callback_id;
+		live_changes_t::tool_op_t op(player);
 		err = welt->call_work(tool, player, v.twoclick ? v.end : v.start, suspended);
 
 		if (suspended) {
@@ -261,9 +273,12 @@ SQInteger param<call_tool_work>::push(HSQUIRRELVM vm, call_tool_work v)
 			// suspend vm for now, after wakeup it returns to the script
 			return sq_suspendvm(vm);
 		}
+		if (script_vm_t::is_mcp(vm)) {
+			op.done(vm, tool->get_id(), tool->get_default_param(), err);
+		}
 	}
 	// return error message or NULL if tool was called
-	return param<const char*>::push(vm, err);
+	return param<const char*>::push(vm, script_vm_t::with_error_word(vm, err));
 }
 
 

@@ -18,6 +18,7 @@
 #include "../../simware.h"
 #include "../../vehicle/simvehicle.h"
 #include "../../dataobj/schedule.h"
+#include "../../network/live_util.h"
 
 // for convoy tools
 #include "../../simmenu.h"
@@ -126,6 +127,11 @@ uint32 kmh_to_tiles_per_month(uint32 kmh)
 }
 
 // Failures are raised with an error starting with a fixed word: permission, not_found, invalid, busy
+
+uint32 convoy_get_schedule_hash(convoi_t *cnv)
+{
+	return live_util::schedule_hash(cnv->get_schedule());
+}
 
 call_tool_init convoy_set_name(convoi_t *cnv, const char* name)
 {
@@ -308,6 +314,12 @@ void export_convoy(HSQUIRRELVM vm)
 	 * Schedule of this convoy.
 	 */
 	register_method(vm, &convoi_t::get_schedule, "get_schedule");
+	/**
+	 * Hash of the schedule without its current stop: the same value as get_changes / get_live_state
+	 * of the MCP server give (a script can check that nobody changed the schedule since it was read).
+	 * @returns hash (FNV-1a, 32 bit), 0 if there is no schedule
+	 */
+	register_method(vm, &convoy_get_schedule_hash, "get_schedule_hash", true);
 	/**
 	 * Get monthly statistics of capacity.
 	 * @returns array, index [0] corresponds to current month

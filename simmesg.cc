@@ -6,6 +6,7 @@
 #include "macros.h"
 #include "simdebug.h"
 #include "simmesg.h"
+#include "network/live_state.h"
 #include "simticker.h"
 #include "display/simgraph.h"
 #include "simcolor.h"
@@ -189,6 +190,7 @@ DBG_MESSAGE("message_t::add_msg()","%40s (at %i,%i)", text, pos.x, pos.y );
 
 	// insert at the top
 	list.insert(n);
+	live_changes_t::message(n->msg, n->type, n->pos, n->color);
 	char* p = list.front()->msg;
 
 	// if we are not current player, do not open windows

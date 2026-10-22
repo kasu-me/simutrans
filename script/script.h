@@ -55,6 +55,25 @@ public:
 	 */
 	void set_my_player(uint8 player_nr);
 
+	/**
+	 * Marks the vm as run by the MCP server: the errors that tools return to it start
+	 * with a fixed word (see with_error_word), and the tools it calls are reported.
+	 */
+	void set_mcp();
+
+	/// true for a vm (or its thread) marked by set_mcp()
+	static bool is_mcp(HSQUIRRELVM vm);
+
+	/**
+	 * The error a tool returned, for a vm marked by set_mcp() with a leading word:
+	 * funds, permission, busy, not_found or invalid (for example "funds: Insufficient funds!").
+	 * Unchanged for other vms and for NULL.
+	 */
+	static const char *with_error_word(HSQUIRRELVM vm, const char *err);
+
+	/// number of opcodes the script ran so far (in the vm and its thread)
+	sint64 get_ops_total() const;
+
 	/// priority of function call
 	enum call_type_t {
 		FORCE,   ///< function has to return, raise error if not
@@ -238,6 +257,9 @@ private:
 public:
 	bool pause_on_error;
 
+	/// set by set_mcp()
+	bool mcp = false;
+
 private:
 	/// @{
 	/// @name Helper functions to call, suspend, queue calls to scripted functions
@@ -303,6 +325,9 @@ public:
 	static uint32 get_unique_key(void* key);
 
 	static void register_suspended_script(uint32 key, HSQUIRRELVM vm);
+
+	/// the vm waiting for the tool call with this key, NULL if none
+	static HSQUIRRELVM get_suspended_script(uint32 key);
 
 	// remove any reference to given vm
 	static void remove_vm(HSQUIRRELVM vm);

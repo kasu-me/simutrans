@@ -75,13 +75,16 @@ void script_vm_t::errorfunc(HSQUIRRELVM vm, const SQChar *s_, ...)
 	}
 	else if (strcmp(s, "</error>")==0) {
 		// end of error message
-		help_frame_t *win = dynamic_cast<help_frame_t*>(win_get_magic(magic_script_error));
-		if (win == NULL) {
-			win = new help_frame_t();
-			create_win( win, w_info, magic_script_error);
+		// the MCP server returns the error to its client: no window on the screen of the game
+		if (script == NULL  ||  !script->mcp) {
+			help_frame_t *win = dynamic_cast<help_frame_t*>(win_get_magic(magic_script_error));
+			if (win == NULL) {
+				win = new help_frame_t();
+				create_win( win, w_info, magic_script_error);
+			}
+			win->set_text(buf);
+			win->set_name("Script error occurred");
 		}
-		win->set_text(buf);
-		win->set_name("Script error occurred");
 
 		if (script) {
 			script->set_error(buf);
@@ -779,6 +782,77 @@ void script_vm_t::set_my_player(uint8 player_nr)
 }
 
 
+void script_vm_t::set_mcp()
+{
+	mcp = true;
+	sq_pushregistrytable(vm);
+	script_api::create_slot(vm, "mcp", true);
+	sq_poptop(vm);
+}
+
+
+bool script_vm_t::is_mcp(HSQUIRRELVM vm)
+{
+	if (vm == NULL) {
+		return false;
+	}
+	bool mcp = false;
+	sq_pushregistrytable(vm);
+	script_api::get_slot(vm, "mcp", mcp, -1);
+	sq_poptop(vm);
+	return mcp;
+}
+
+
+const char *script_vm_t::with_error_word(HSQUIRRELVM vm, const char *err)
+{
+	if (err == NULL  ||  !is_mcp(vm)) {
+		return err;
+	}
+	// the errors of the tools are untranslated texts (simtool.cc)
+	static const struct { const char *text; const char *word; } words[] = {
+		{ "Insufficient funds!", "funds" },
+		{ "Out of funds", "funds" },
+		{ "Das Feld gehoert\neinem anderen Spieler\n", "permission" },
+		{ "Different player's stop!", "permission" },
+		{ "Die Bruecke ist nicht frei!\n", "busy" },
+		{ "Der Tunnel ist nicht frei!\n", "busy" },
+		{ "No stop found!", "not_found" },
+		{ "No city found!", "not_found" },
+	};
+	const char *word = "invalid";
+	for (size_t i = 0; i < lengthof(words); i++) {
+		if (strcmp(err, words[i].text) == 0) {
+			word = words[i].word;
+			break;
+		}
+	}
+	static std::string buf;
+	buf = word;
+	buf += ": ";
+	// an empty error: the tool failed without saying why
+	buf += *err ? err : "the tool failed";
+	return buf.c_str();
+}
+
+
+sint64 script_vm_t::get_ops_total() const
+{
+	sint64 total = 0;
+	HSQUIRRELVM vms[2] = { vm, thread };
+	for (HSQUIRRELVM v : vms) {
+		if (v) {
+			sq_get_ops_total(v);
+			SQInteger n = 0;
+			sq_getinteger(v, -1, &n);
+			sq_poptop(v);
+			total += n;
+		}
+	}
+	return total;
+}
+
+
 /* -------- management of suspended scripts that wait for return value ----------- */
 
 inthashtable_tpl<uint32,HSQUIRRELVM> suspended_scripts_t::suspended_scripts;
@@ -803,6 +877,12 @@ void suspended_scripts_t::register_suspended_script(uint32 key, HSQUIRRELVM vm)
 	bool wait = true;
 	script_api::create_slot(vm, "wait_external", wait);
 	sq_poptop(vm);
+}
+
+
+HSQUIRRELVM suspended_scripts_t::get_suspended_script(uint32 key)
+{
+	return suspended_scripts.get(key);
 }
 
 

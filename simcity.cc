@@ -23,6 +23,7 @@
 #include "simhalt.h"
 #include "simfab.h"
 #include "simcity.h"
+#include "network/live_state.h"
 #include "simmesg.h"
 #include "simcolor.h"
 
@@ -978,6 +979,7 @@ void stadt_t::factory_set_t::resolve_factories()
 
 stadt_t::~stadt_t()
 {
+	live_changes_t::entity_at(live_changes_t::K_CITY, koord3d(pos, 0), live_changes_t::W_GONE);
 	// close info win
 	destroy_win((ptrdiff_t)this);
 
@@ -1163,6 +1165,7 @@ stadt_t::stadt_t(player_t* player, koord pos, sint32 citizens) :
 #ifdef DESTINATION_CITYCARS
 	number_of_cars = 0;
 #endif
+	live_changes_t::entity_at(live_changes_t::K_CITY, koord3d(pos, 0), live_changes_t::W_NEW);
 }
 
 
@@ -1490,9 +1493,12 @@ void stadt_t::set_name(const char *new_name)
 		return;
 	}
 	name = new_name;
+	live_changes_t::entity_at(live_changes_t::K_CITY, koord3d(pos, 0), live_changes_t::W_NAME);
 	grund_t *gr = welt->lookup_kartenboden(pos);
 	if(gr) {
 		gr->set_text( new_name );
+		// the name is the text of the town hall tile (get_tiles)
+		live_changes_t::tile(pos.x, pos.y);
 	}
 	city_info_t *win = dynamic_cast<city_info_t*>(win_get_magic((ptrdiff_t)this));
 	if (win) {

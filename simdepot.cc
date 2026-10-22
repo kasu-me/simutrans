@@ -13,6 +13,7 @@
 #include "player/simplay.h"
 #include "simworld.h"
 #include "simdepot.h"
+#include "network/live_state.h"
 #include "simline.h"
 #include "simlinemgmt.h"
 #include "simmenu.h"
@@ -63,11 +64,13 @@ depot_t::depot_t(koord3d pos, player_t *player, const building_tile_desc_t *t) :
 	replacement_seed = convoihandle_t();
 	strcpy( depot_filter ,"");
 	name = init_name();
+	live_changes_t::entity_at(live_changes_t::K_DEPOT, pos, live_changes_t::W_NEW);
 }
 
 
 depot_t::~depot_t()
 {
+	live_changes_t::entity_at(live_changes_t::K_DEPOT, get_pos(), live_changes_t::W_GONE);
 	destroy_win((ptrdiff_t)this);
 	all_depots.remove(this);
 }
@@ -88,6 +91,7 @@ const char *depot_t::make_depot_name(const char *type_name) const
 
 void depot_t::set_name(const char* new_name){
 	name = new_name;
+	live_changes_t::entity_at(live_changes_t::K_DEPOT, get_pos(), live_changes_t::W_NAME);
 }
 
 // finds the next/previous depot relative to the current position

@@ -33,6 +33,7 @@
 
 // for depot tools
 #include "../../simconvoi.h"
+#include "../../dataobj/schedule.h"
 #include "../../simmenu.h"
 #include "../../descriptor/building_desc.h"
 #include "../../descriptor/vehicle_desc.h"
@@ -390,17 +391,35 @@ sint32 roadsign_get_state(roadsign_t* rs)
 }
 
 // depot
+// Failures are raised with an error starting with a fixed word: permission, not_found, invalid, busy, funds
+
+/// the convoy is in this depot (as the depot tool needs it)
+static bool convoy_in_depot(const depot_t *depot, convoihandle_t cnv)
+{
+	return cnv->in_depot()  &&  cnv->get_home_depot() == depot->get_pos();
+}
+
 call_tool_init depot_append_vehicle(depot_t *depot, player_t *player, convoihandle_t cnv, const vehicle_desc_t *desc)
 {
 	if (desc == NULL) {
-		return "Invalid vehicle_desc_x provided";
+		return "invalid: Invalid vehicle_desc_x provided";
+	}
+	// the tool ignores these silently (tool_change_depot_t::init)
+	if (!depot->can_accept_waytype(desc->get_waytype())) {
+		return "invalid: the vehicle is for another waytype";
+	}
+	if (cnv.is_bound()  &&  !convoy_in_depot(depot, cnv)) {
+		return "invalid: the convoy is not in this depot";
 	}
 	// see depot_frame_t::image_from_storage_list: tool = 'a'
 	// see depot_t::call_depot_tool for command string composition
 	cbuffer_t buf;
 	buf.printf( "%c,%s,%u,%s", 'a', depot->get_pos().get_str(), cnv.get_id(), desc->get_name());
 
-	return call_tool_init(TOOL_CHANGE_DEPOT | SIMPLE_TOOL, buf, 0, player);
+	call_tool_init call(TOOL_CHANGE_DEPOT | SIMPLE_TOOL, buf, 0, player);
+	call.require_owner(depot->get_owner());
+	call.require_funds(depot->get_owner(), -desc->get_price());
+	return call;
 }
 
 call_tool_init depot_start_convoy(depot_t *depot, player_t *player, convoihandle_t cnv)
@@ -409,13 +428,22 @@ call_tool_init depot_start_convoy(depot_t *depot, player_t *player, convoihandle
 	// see depot_t::call_depot_tool for command string composition
 	cbuffer_t buf;
 	if (cnv.is_bound()) {
+		// the tool ignores these silently (depot_t::start_convoi)
+		if (!convoy_in_depot(depot, cnv)) {
+			return "invalid: the convoy is not in this depot";
+		}
+		if (!cnv->get_line().is_bound()  &&  (cnv->get_schedule() == NULL  ||  cnv->get_schedule()->empty())) {
+			return "invalid: the convoy has no schedule";
+		}
 		buf.printf( "%c,%s,%u", 'b', depot->get_pos().get_str(), cnv->self.get_id());
 	}
 	else {
 		buf.printf( "%c,%s,%u", 'B', depot->get_pos().get_str(), 0);
 	}
 
-	return call_tool_init(TOOL_CHANGE_DEPOT | SIMPLE_TOOL, buf, 0, player);
+	call_tool_init call(TOOL_CHANGE_DEPOT | SIMPLE_TOOL, buf, 0, player);
+	call.require_owner(depot->get_owner());
+	return call;
 }
 
 vector_tpl<convoihandle_t> const& depot_get_convoy_list(depot_t *depot)

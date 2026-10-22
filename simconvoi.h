@@ -1220,6 +1220,8 @@ public:
 	void set_arrived_time(uint32 t) { arrived_time = t; }
 	uint32 get_arrived_time() const { return arrived_time; }
 	uint32 get_departure_time() const { return scheduled_departure_time; } // in ticks.
+	uint32 get_distance_since_last_stop() const { return distance_since_last_stop; }
+	uint32 get_sum_speed_limit() const { return sum_speed_limit; }
 	void reset_departure_time() { scheduled_departure_time = 0; }
 	/**
 	 * Cancel the departure slot booked at the halt this convoy is standing on
