@@ -654,6 +654,11 @@ public:
 	void remove_field_at(koord pos);
 
 	uint32 get_field_count() const { return fields.get_count(); }
+	koord get_field_pos(uint32 i) const { return fields[i].location; }
+	uint16 get_field_class(uint32 i) const { return fields[i].field_class_index; }
+
+	/// the name given by a player, "" if none (get_name() falls back to the translated factory name)
+	const char *get_custom_name() const { return name ? name.c_str() : ""; }
 
 	uint32 get_min_field_count() const
 	{

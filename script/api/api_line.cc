@@ -20,6 +20,7 @@
 // for manipulation of lines
 #include "../../simmenu.h"
 #include "../../dataobj/schedule.h"
+#include "../../network/live_util.h"
 
 // template<> schedule_t* script_api::param<schedule_t*>::get(HSQUIRRELVM, SQInteger);
 
@@ -94,6 +95,11 @@ SQInteger line_export_convoy_list(HSQUIRRELVM vm)
 	}
 	sq_raise_error(vm, "Invalid line handle provided");
 	return SQ_ERROR;
+}
+
+uint32 line_get_schedule_hash(simline_t *line)
+{
+	return live_util::schedule_hash(line->get_schedule());
 }
 
 call_tool_init line_set_name(simline_t* line, const char* name)
@@ -210,6 +216,11 @@ void export_line(HSQUIRRELVM vm)
 	 * Schedule of this line.
 	 */
 	register_method(vm, &simline_t::get_schedule, "get_schedule");
+	/**
+	 * Hash of the schedule without its current stop, see convoy_x::get_schedule_hash.
+	 * @returns hash (FNV-1a, 32 bit)
+	 */
+	register_method(vm, &line_get_schedule_hash, "get_schedule_hash", true);
 	/**
 	 * Returns array of goods categories that can be transported by this convoy.
 	 * @returns array

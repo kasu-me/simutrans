@@ -10,6 +10,7 @@
 #include <string.h>
 
 #include "simdebug.h"
+#include "network/live_state.h"
 #include "display/simimg.h"
 #include "simcolor.h"
 #include "simmesg.h"
@@ -887,11 +888,13 @@ fabrik_t::fabrik_t(koord3d pos_, player_t* owner, const factory_desc_t* factory_
 
 	no_close_factory = false;
 	shipment_size = SHIPMENT_MAX_SIZE;
+	live_changes_t::entity_at(live_changes_t::K_FACTORY, pos, live_changes_t::W_NEW);
 }
 
 
 fabrik_t::~fabrik_t()
 {
+	live_changes_t::entity_at(live_changes_t::K_FACTORY, pos, live_changes_t::W_GONE);
 	while(!fields.empty()) {
 		planquadrat_t *plan = welt->access( fields.back().location );
 		// if destructor is called when world is destroyed, plan is already invalid
@@ -1089,6 +1092,7 @@ bool fabrik_t::add_random_field(uint16 probability)
 		new_field.field_class_index = pick_any_weighted(field_class_indices);
 		const field_class_desc_t *const field_class = fd->get_field_class( new_field.field_class_index );
 		fields.append(new_field);
+		live_changes_t::entity_at(live_changes_t::K_FACTORY, pos, live_changes_t::W_FIELDS);
 		grund_t *gr2 = new fundament_t(gr->get_pos(), gr->get_grund_hang());
 		welt->access(k)->boden_ersetzen(gr, gr2);
 		gr2->obj_add( new field_t(gr2->get_pos(), owner, field_class, this ) );
@@ -1111,6 +1115,7 @@ void fabrik_t::remove_field_at(koord pos)
 	field = fields[ fields.index_of(field) ];
 	const field_class_desc_t *const field_class = desc->get_field_group()->get_field_class( field.field_class_index );
 	fields.remove(field);
+	live_changes_t::entity_at(live_changes_t::K_FACTORY, this->pos, live_changes_t::W_FIELDS);
 	// revert the field's effect on production base and storage capacities
 	set_base_production( prodbase - field_class->get_field_production() );
 }
@@ -1153,6 +1158,7 @@ void fabrik_t::set_name(const char *new_name)
 	else {
 		name = new_name;
 	}
+	live_changes_t::entity_at(live_changes_t::K_FACTORY, pos, live_changes_t::W_NAME);
 
 	fabrik_info_t *win = dynamic_cast<fabrik_info_t*>(win_get_magic((ptrdiff_t)this));
 	if (win) {

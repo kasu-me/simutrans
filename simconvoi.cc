@@ -13,6 +13,7 @@
 #include "player/finance.h" // convert_money
 #include "player/simplay.h"
 #include "simconvoi.h"
+#include "network/live_state.h"
 #include "simhalt.h"
 #include "simdepot.h"
 #include "gui/simwin.h"
@@ -221,6 +222,7 @@ convoi_t::convoi_t(player_t* player) : fahr(default_vehicle_length, NULL)
 	set_name( "Unnamed" );
 	welt->add_convoi( self );
 	init_financial_history();
+	live_changes_t::entity(live_changes_t::K_CONVOY, self.get_id(), live_changes_t::W_NEW);
 }
 
 
@@ -230,6 +232,7 @@ convoi_t::~convoi_t()
 
 	assert(self.is_bound());
 	assert(anz_vehikel==0);
+	live_changes_t::entity(live_changes_t::K_CONVOY, self.get_id(), live_changes_t::W_GONE);
 
 	// close windows
 	destroy_win( magic_convoi_info+self.get_id() );
@@ -753,6 +756,7 @@ koord3d convoi_t::get_pos() const
  */
 void convoi_t::set_name(const char *name, bool with_new_id)
 {
+	live_changes_t::entity(live_changes_t::K_CONVOY, self.get_id(), live_changes_t::W_NAME);
 	if(  with_new_id  ) {
 		char buf[128];
 		name_offset = sprintf(buf,"(%i) ",self.get_id() );
@@ -2362,6 +2366,7 @@ void convoi_t::warten_bis_weg_frei(sint32 restart_speed)
 
 bool convoi_t::add_vehikel(vehicle_t *v, bool infront)
 {
+	live_changes_t::entity(live_changes_t::K_CONVOY, self.get_id(), live_changes_t::W_VEHICLES);
 DBG_MESSAGE("convoi_t::add_vehikel()","at pos %i of %i total vehikels.",anz_vehikel,fahr.get_count());
 	// extend array if requested
 	if(anz_vehikel == fahr.get_count()) {
@@ -2429,6 +2434,7 @@ vehicle_t *convoi_t::remove_vehikel_bei(uint16 i)
 {
 	vehicle_t *v = NULL;
 	if(i<anz_vehikel) {
+		live_changes_t::entity(live_changes_t::K_CONVOY, self.get_id(), live_changes_t::W_VEHICLES);
 		v = fahr[i];
 		if(v != NULL) {
 			for(unsigned j=i; j<anz_vehikel-1u; j++) {
@@ -2595,6 +2601,7 @@ bool convoi_t::set_schedule(schedule_t * f)
 	// to avoid jumping trains
 	alte_richtung = fahr[0]->get_direction();
 	wait_lock = 0;
+	live_changes_t::entity(live_changes_t::K_CONVOY, self.get_id(), live_changes_t::W_SCHEDULE);
 	return true;
 }
 
@@ -5165,6 +5172,7 @@ DBG_DEBUG("convoi_t::unset_line()", "removing old destinations from line=%d, sch
 		line->remove_convoy(self);
 		line = linehandle_t();
 		line_update_pending = linehandle_t();
+		live_changes_t::entity(live_changes_t::K_CONVOY, self.get_id(), live_changes_t::W_LINE);
 	}
 }
 
@@ -5273,6 +5281,8 @@ void convoi_t::check_pending_updates()
 		}
 		line = line_update_pending;
 		line_update_pending = linehandle_t();
+		// the schedule of the line is copied below
+		live_changes_t::entity(live_changes_t::K_CONVOY, self.get_id(), live_changes_t::W_LINE | live_changes_t::W_SCHEDULE);
 
 		// destroy old schedule and all related windows
 		if(!schedule->is_editing_finished()) {

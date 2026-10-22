@@ -13,8 +13,9 @@
  * A fresh VM is created for each run_squirrel call and destroyed afterwards,
  * so no state (global variables, defined functions, etc.) leaks between calls.
  *
- * get_live_state, get_tiles, get_changes and dump_vehicles are the read-only
- * tools for a live web view of the game (see live_state.cc).
+ * get_live_state, get_tiles, get_changes, dump_vehicles, get_info,
+ * get_history and get_messages are the read-only tools for a live web view of
+ * the game (see live_state.cc and live_info.cc).
  */
 
 #include "mcp_tools.h"
@@ -34,6 +35,11 @@
 #include "../simconst.h"
 #include "../simworld.h"
 #include "../gui/minimap.h"
+#include "../display/viewport.h"
+#include "../display/simview.h"
+#include "../sys/simsys.h"
+#include "../dataobj/koord3d.h"
+#include "../boden/grund.h"
 
 
 // ---------------------------------------------------------------------------
@@ -90,6 +96,40 @@ std::string mcp_tools::script_error(const script_vm_t *vm, const char *err)
 	return err ? err : "";
 }
 
+/// a script may run this many opcodes in all (10000 per frame) and this long (also waiting for its commands)
+static const sint64 SCRIPT_MAX_OPS = 2000000;
+static const uint32 SCRIPT_MAX_MS = 60000;
+
+std::string mcp_tools::script_ops(const script_vm_t *vm)
+{
+	return ",\"ops\":" + live_changes_t::take_tool_results([vm](const void *v) { return vm  &&  vm->uses_vm((HSQUIRRELVM)v); });
+}
+
+uint32 mcp_tools::script_started_ms()
+{
+	return dr_time();
+}
+
+const char *mcp_tools::script_limit(const script_vm_t *vm, uint32 started_ms)
+{
+	if (vm->get_ops_total() > SCRIPT_MAX_OPS) {
+		return "limit: the script ran more than 2000000 opcodes";
+	}
+	if (dr_time() - started_ms > SCRIPT_MAX_MS) {
+		return "limit: the script ran longer than 60 seconds";
+	}
+	return NULL;
+}
+
+std::string mcp_tools::busy_result(const char *reason)
+{
+	std::string text = "{\"error\":" + jstr(std::string("busy: ") + reason) + ",\"busy\":" + jstr(reason)
+		+ ",\"saving\":" + (strcmp(reason, "saving") == 0 ? "true" : "false")
+		+ ",\"joining\":" + (live_changes_t::is_joining() ? "true" : "false")
+		+ ",\"epoch\":" + std::to_string(live_changes_t::get_epoch()) + "}";
+	return text_content(text);
+}
+
 // Start a squirrel script execution.
 // Returns result JSON on immediate completion.
 // On suspension (network mode command_x), sets *out_vm to the live VM and returns "".
@@ -109,6 +149,7 @@ static std::string tool_run_squirrel(const std::string &code, int player_nr,
 		return "{\"error\":\"failed to initialize Squirrel VM\"}";
 	}
 	vm->set_my_player((uint8)player_nr);
+	vm->set_mcp();
 	vm->pause_on_error = false;
 
 	// Wrap the user code in a named function so we can call it with
@@ -131,14 +172,14 @@ static std::string tool_run_squirrel(const std::string &code, int player_nr,
 	err = vm->call_function(script_vm_t::QUEUE, "__mcp_fn__", result);
 
 	if (script_vm_t::is_call_suspended(err)) {
-		// Script suspended waiting for a network command — hand VM to caller
+		// Script suspended waiting for a network command or for more opcodes — hand VM to caller
 		*out_vm = vm;
 		return "";
 	}
 
 	// done at once: the commands took effect in the current sync step
 	const std::string sync = world() ? std::to_string(world()->get_sync_steps()) : "0";
-	const std::string syncs = ",\"sync_start\":" + sync + ",\"sync\":" + sync + "}";
+	const std::string syncs = mcp_tools::script_ops(vm) + ",\"sync_start\":" + sync + ",\"sync\":" + sync + "}";
 	std::string result_json;
 	if (err) {
 		result_json = "{\"error\":" + jstr(mcp_tools::script_error(vm, err)) + syncs;
@@ -148,6 +189,72 @@ static std::string tool_run_squirrel(const std::string &code, int player_nr,
 	}
 	delete vm;
 	return result_json;
+}
+
+// Renders the world at a given position and zoom (without the windows) and returns it as PNG.
+// The view of the player is restored afterwards. The image cannot be larger than the game window.
+static std::string tool_capture_view(karte_t *welt, const std::string &args_json)
+{
+	if (!welt  ||  !welt->get_view()) {
+		return text_content("{\"error\":\"world not ready\"}");
+	}
+	const std::string xs = mcp_server_t::json_get_raw(args_json, "x");
+	const std::string ys = mcp_server_t::json_get_raw(args_json, "y");
+	if (xs.empty()  ||  ys.empty()) {
+		return text_content("{\"error\":\"x and y are required\"}");
+	}
+	const koord pos(atoi(xs.c_str()), atoi(ys.c_str()));
+	if (!welt->is_within_limits(pos)) {
+		return text_content("{\"error\":\"position outside the map\"}");
+	}
+	const std::string zs = mcp_server_t::json_get_raw(args_json, "z");
+	const grund_t *gr = welt->lookup_kartenboden(pos);
+	const sint8 z = zs.empty()  ||  zs == "null" ? (gr ? gr->get_hoehe() : 0) : (sint8)atoi(zs.c_str());
+	const std::string zooms = mcp_server_t::json_get_raw(args_json, "zoom");
+	const int zoom = zooms.empty()  ||  zooms == "null" ? get_zoom_factor() : atoi(zooms.c_str());
+	if (zoom < 0  ||  zoom > 9) {
+		return text_content("{\"error\":\"zoom: 0 (largest) to 9, 3 is 1:1\"}");
+	}
+	const std::string ws = mcp_server_t::json_get_raw(args_json, "w");
+	const std::string hs = mcp_server_t::json_get_raw(args_json, "h");
+	const scr_coord_val disp_w = display_get_width();
+	const scr_coord_val disp_h = display_get_height();
+	const scr_coord_val w = ws.empty() ? disp_w : min((scr_coord_val)atoi(ws.c_str()), disp_w);
+	const scr_coord_val h = hs.empty() ? disp_h : min((scr_coord_val)atoi(hs.c_str()), disp_h);
+	if (w <= 0  ||  h <= 0) {
+		return text_content("{\"error\":\"bad size\"}");
+	}
+
+	viewport_t *view = welt->get_viewport();
+	const koord old_pos = view->get_world_position();
+	const sint16 old_x_off = view->get_x_off();
+	const sint16 old_y_off = view->get_y_off();
+	const int old_zoom = get_zoom_factor();
+
+	set_zoom_factor_safe(zoom);
+	view->metrics_updated();
+	view->change_world_position(koord3d(pos, z));
+	welt->get_view()->display(true);
+	// the tile in the middle of the window
+	const scr_rect area((disp_w - w) / 2, (disp_h - h) / 2, w, h);
+	std::string png_data;
+	const bool ok = display_snapshot_png(area, png_data);
+	const scr_coord_val tile_width = get_tile_raster_width();
+
+	set_zoom_factor_safe(old_zoom);
+	view->metrics_updated();
+	view->change_world_position(old_pos, old_x_off, old_y_off);
+	welt->set_dirty();
+	if (!ok) {
+		return text_content("{\"error\":\"failed to capture the view\"}");
+	}
+	return "{\"content\":[{\"type\":\"image\",\"data\":"
+		+ jstr(base64_encode(png_data))
+		+ ",\"mimeType\":\"image/png\"},{\"type\":\"text\",\"text\":"
+		+ jstr("{\"x\":" + std::to_string(pos.x) + ",\"y\":" + std::to_string(pos.y) + ",\"z\":" + std::to_string(z)
+		       + ",\"zoom\":" + std::to_string(zoom) + ",\"tile_width\":" + std::to_string(tile_width)
+		       + ",\"w\":" + std::to_string(w) + ",\"h\":" + std::to_string(h) + ",\"sync\":" + std::to_string(welt->get_sync_steps()) + "}")
+		+ "}]}";
 }
 
 static std::string tool_capture_screen()
@@ -329,6 +436,74 @@ static const tool_def_t TOOL_DEFS[] = {
 		 "},"
 		 "\"required\":[\"ids\"],"
 		 "\"additionalProperties\":false}"
+	},
+	{
+		"get_info",
+		"Return the basic information of halts, convoys, lines, factories, cities, players or depots as rows "
+		"(the last value of a row is its hash, FNV-1a of the row without the current stop of a schedule): "
+		"{epoch, sync, ..., kind, level, hash_only, rows, gone (ids asked for that do not exist), vnames (convoys)}. "
+		"halts: [id, name, owner, [[x,y,z],...], station type bits, enabled bits (1 passengers 2 mail 4 goods), hash]; "
+		"convoys: [id, name, owner, line (-1), state, home depot [x,y,z], [vehicle types (vnames index)], schedule, hash]; "
+		"lines: [id, name, owner, line type, colour, schedule, [convoy ids], hash]; "
+		"factories: [x, y, z, name, custom name, owner, base production, [[field x, y, class],...], [input goods], [output goods], hash]; "
+		"cities: [x, y, name, population, [lo x, lo y, ur x, ur y], bev, arb, won, hash]; "
+		"players: [nr, name, colour 1, colour 2, ai type, locked, hash]; depots: [x, y, z, owner, waytype, name, hash]. "
+		"schedule: [current, flags, max speed, base waiting time, next line (-1), [[x,y,z,stop flags,min load,waiting time shift],...]]; "
+		"level full adds the departure slot group line and the waytype before the entries, and every other entry field. "
+		"level area (halts): [id, [[y, x0, x1], ...], hash], the tiles the halt serves.",
+		"{\"type\":\"object\","
+		 "\"properties\":{"
+		   "\"kind\":{\"type\":\"string\",\"enum\":[\"halts\",\"convoys\",\"lines\",\"factories\",\"cities\",\"players\",\"depots\"]},"
+		   "\"ids\":{\"type\":\"array\",\"description\":\"ids, or [x,y] / [x,y,z] for factories, cities, depots; default all\"},"
+		   "\"level\":{\"type\":\"string\",\"enum\":[\"basic\",\"full\",\"area\"]},"
+		   "\"hash_only\":{\"type\":\"boolean\",\"description\":\"rows are [key..., hash] only\"}"
+		 "},"
+		 "\"required\":[\"kind\"],"
+		 "\"additionalProperties\":false}"
+	},
+	{
+		"get_history",
+		"Return the statistics as the savegame stores them (month or year 0 is the current one): "
+		"{epoch, sync, ..., kind, month (month counter), rows, gone}. halts [id, [cost][month]], convoys [id, [cost][month], total distance], "
+		"lines [id, [cost][month]], cities [x, y, [year][type], [month][type]], "
+		"factories [x, y, z, [type][month], [[type][month] per input], [[type][month] per output]], "
+		"players [nr, [year][type], [month][type], [transport type][year][type], [transport type][month][type]], "
+		"world: one row [[year][type], [month][type], [decade][type]].",
+		"{\"type\":\"object\","
+		 "\"properties\":{"
+		   "\"kind\":{\"type\":\"string\",\"enum\":[\"halts\",\"convoys\",\"lines\",\"cities\",\"factories\",\"players\",\"world\"]},"
+		   "\"ids\":{\"type\":\"array\",\"description\":\"as for get_info; default all\"}"
+		 "},"
+		 "\"required\":[\"kind\"],"
+		 "\"additionalProperties\":false}"
+	},
+	{
+		"get_messages",
+		"Return the messages of the game recorded while the MCP server runs (the last 1024): "
+		"{epoch, sync, ..., seq, floor, overflow, messages:[{seq, sync, month, type, text, player (-1 none), x, y}]}. "
+		"Pass the seq of the previous answer as since; without since every message kept is returned.",
+		"{\"type\":\"object\","
+		 "\"properties\":{"
+		   "\"since\":{\"type\":[\"integer\",\"null\"]}"
+		 "},"
+		 "\"additionalProperties\":false}"
+	},
+	{
+		"capture_view",
+		"Render the world (without windows) centred on a tile at a zoom step and return it as PNG, "
+		"followed by a text with the parameters used. The size is limited to the game window. "
+		"The view of the player is restored afterwards.",
+		"{\"type\":\"object\","
+		 "\"properties\":{"
+		   "\"x\":{\"type\":\"integer\"},"
+		   "\"y\":{\"type\":\"integer\"},"
+		   "\"z\":{\"type\":\"integer\",\"description\":\"default: the height of the ground\"},"
+		   "\"zoom\":{\"type\":\"integer\",\"description\":\"zoom step 0 (largest) to 9; 3 is 1:1; default: the current one\"},"
+		   "\"w\":{\"type\":\"integer\"},"
+		   "\"h\":{\"type\":\"integer\"}"
+		 "},"
+		 "\"required\":[\"x\",\"y\"],"
+		 "\"additionalProperties\":false}"
 	}
 };
 static const int NUM_TOOLS = sizeof(TOOL_DEFS) / sizeof(TOOL_DEFS[0]);
@@ -398,6 +573,22 @@ std::string mcp_tools::tools_call(const std::string &name,
 
 	if (name == "dump_vehicles") {
 		return text_content(live_state::dump_vehicles(welt, args_json));
+	}
+
+	if (name == "get_info") {
+		return text_content(live_state::get_info(welt, args_json));
+	}
+
+	if (name == "get_history") {
+		return text_content(live_state::get_history(welt, args_json));
+	}
+
+	if (name == "get_messages") {
+		return text_content(live_state::get_messages(welt, args_json));
+	}
+
+	if (name == "capture_view") {
+		return tool_capture_view(welt, args_json);
 	}
 
 	return text_content("{\"error\":\"unknown tool: " + jesc(name) + "\"}");

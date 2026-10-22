@@ -6,6 +6,7 @@
 #include <algorithm>
 #include "simlinemgmt.h"
 #include "simline.h"
+#include "network/live_state.h"
 #include "tpl/inthashtable_tpl.h"
 #include "simconvoi.h"
 #include "gui/simwin.h"
@@ -55,6 +56,7 @@ void simlinemgmt_t::delete_line(linehandle_t line)
 
 void simlinemgmt_t::update_line(linehandle_t line)
 {
+	live_changes_t::entity(live_changes_t::K_LINE, line.get_id(), live_changes_t::W_SCHEDULE);
 	// invalidate cached routes for this line since the schedule changed
 	world()->get_route_cache().remove_line(line);
 	// when a line is updated, all managed convoys must get the new schedule!

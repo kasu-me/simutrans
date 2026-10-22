@@ -5,6 +5,7 @@
 
 #include "simtypes.h"
 #include "simline.h"
+#include "network/live_state.h"
 #include "simhalt.h"
 #include "simworld.h"
 
@@ -57,6 +58,7 @@ simline_t::simline_t(player_t* player, linetype type)
 	withdraw = false;
 	state_color = SYSCOL_TEXT;
 	create_schedule();
+	live_changes_t::entity(live_changes_t::K_LINE, self.get_id(), live_changes_t::W_NEW);
 }
 
 
@@ -84,6 +86,7 @@ simline_t::~simline_t()
 	DBG_DEBUG("simline_t::~simline_t()", "deleting schedule=%p", schedule);
 
 	assert(count_convoys()==0);
+	live_changes_t::entity(live_changes_t::K_LINE, self.get_id(), live_changes_t::W_GONE);
 	unregister_stops();
 
 	delete schedule;
@@ -124,6 +127,7 @@ waytype_t simline_t::linetype_to_waytype(const linetype lt)
 
 void simline_t::set_schedule(schedule_t* schedule)
 {
+	live_changes_t::entity(live_changes_t::K_LINE, self.get_id(), live_changes_t::W_SCHEDULE);
 	if (this->schedule) {
 		unregister_stops();
 		delete this->schedule;
@@ -135,6 +139,7 @@ void simline_t::set_schedule(schedule_t* schedule)
 void simline_t::set_name(const char *new_name)
 {
 	name = new_name;
+	live_changes_t::entity(live_changes_t::K_LINE, self.get_id(), live_changes_t::W_NAME);
 
 	/// Update window title if window is open
 	gui_frame_t *line_info = win_get_magic(magic_line_schedule(self));
@@ -160,6 +165,7 @@ void simline_t::set_memo(const char* new_memo)
 void simline_t::set_colour(const uint8 new_colour)
 {
 	colour = new_colour;
+	live_changes_t::entity(live_changes_t::K_LINE, self.get_id(), live_changes_t::W_COLOUR);
 }
 
 void simline_t::create_schedule()

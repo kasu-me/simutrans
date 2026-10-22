@@ -8,11 +8,15 @@
 
 
 #include "../simtypes.h"
+#include "../simconst.h"
+#include "../dataobj/koord3d.h"
 
 #include <string>
+#include <vector>
 
 class karte_t;
 class obj_t;
+class player_t;
 
 
 /**
@@ -49,6 +53,98 @@ public:
 	/// the leading vehicle of a convoy starts driving its route from the start (the "rlap" of get_live_state)
 	static void route_restarted(uint32 convoy) { if(  recording  ) { route_restarted_intern(convoy); } }
 
+	/// kinds of the entity events of get_changes (named in the event's "type")
+	enum entity_kind_t { K_STATION, K_CONVOY, K_LINE, K_FACTORY, K_CITY, K_PLAYER, K_DEPOT, K_MAX };
+
+	/// what changed (the event's "what", several at once when merged)
+	enum {
+		W_NEW      = 1 << 0,
+		W_GONE     = 1 << 1,
+		W_NAME     = 1 << 2,
+		W_TILES    = 1 << 3,
+		W_LINE     = 1 << 4,
+		W_SCHEDULE = 1 << 5,
+		W_VEHICLES = 1 << 6,
+		W_COLOUR   = 1 << 7,
+		W_FIELDS   = 1 << 8,
+		W_MAX_BIT  = 9
+	};
+
+	/// an entity identified by its id (station, convoy, line, player) changed
+	static void entity(entity_kind_t kind, uint32 id, uint16 what) { if(  recording  ) { record_entity(kind, id, koord3d::invalid, what); } }
+
+	/// an entity identified by its position (factory, city, depot) changed
+	static void entity_at(entity_kind_t kind, koord3d pos, uint16 what) { if(  recording  ) { record_entity(kind, 0, pos, what); } }
+
+	/// a savegame was written (event "saved")
+	static void saved(const char *filename) { if(  recording  ) { record_saved(filename); } }
+
+	/// a new month began (event "month")
+	static void new_month() { if(  recording  ) { record_month(); } }
+
+	/// a message was added to the message list (get_messages)
+	static void message(const char *text, sint32 type, koord pos, uint32 color) { if(  recording  ) { record_message(text, type, pos, color); } }
+
+	/**
+	 * A tool executed for a script (network game: nwc_tool_t::do_command; else at once).
+	 * The cost, the tiles changed and the events are kept for the MCP call that ran the
+	 * script (see take_tool_results).
+	 */
+	class tool_op_t
+	{
+	public:
+		explicit tool_op_t(const player_t *player);
+		/// @param vm the script vm (HSQUIRRELVM) that called the tool
+		void done(const void *vm, uint16 tool_id, const char *default_param, const char *err);
+	private:
+		const player_t *player;
+		sint64 balance[MAX_PLAYER_COUNT]; ///< of every player: a tool may book to another player (a depot's owner)
+		uint32 seq;
+		bool active;
+	};
+
+	/// the results of the tools that ran for the script vms that match, as a JSON array ("[...]"), removed from the list
+	template<class MATCH> static std::string take_tool_results(MATCH match)
+	{
+		std::string out = "[";
+		for(  size_t i = 0;  i < tool_results.size();  ) {
+			if(  match(tool_results[i].vm)  ) {
+				if(  out.size() > 1  ) {
+					out += ',';
+				}
+				out += tool_results[i].json;
+				tool_results.erase(tool_results.begin() + i);
+			}
+			else {
+				i++;
+			}
+		}
+		return out + "]";
+	}
+
+	/**
+	 * While a game is saved, loaded or sent to a joining client, the main loop does not run:
+	 * busy_t marks such a section, and busy_poll() (called from its loops) answers the MCP
+	 * clients with a "busy" error instead of leaving them waiting.
+	 */
+	class busy_t
+	{
+	public:
+		explicit busy_t(const char *reason);
+		~busy_t();
+	private:
+		const char *outer;
+	};
+
+	/// in a busy section: answer the MCP clients (at most every few milliseconds)
+	static void busy_poll() { if(  busy_reason  &&  enabled  ) { busy_poll_intern(); } }
+
+	/// the innermost busy section, NULL outside
+	static const char *get_busy_reason() { return busy_reason; }
+
+	/// true while a client joins (saving, sending and reloading the game)
+	static bool is_joining() { return joining > 0; }
+
 	/// the MCP server started or stopped listening
 	static void set_enabled(bool yesno);
 
@@ -80,21 +176,34 @@ private:
 	static void record_obj(const obj_t *o);
 	static void record_sign(const obj_t *o, uint8 typ, uint8 dir, uint8 state);
 	static void record_sold(uint32 convoy, uint8 player_nr, sint64 amount);
+	static void record_entity(entity_kind_t kind, uint32 id, koord3d pos, uint16 what);
+	static void record_saved(const char *filename);
+	static void record_month();
+	static void record_message(const char *text, sint32 type, koord pos, uint32 color);
 	static void route_restarted_intern(uint32 convoy);
+	static void busy_poll_intern();
 	static void update_recording();
 	/// another world: forgets what the answers of get_live_state compare with
 	static void forget_world();
+
+	struct tool_result_t {
+		const void *vm;
+		std::string json;
+	};
+	static std::vector<tool_result_t> tool_results;
 
 	static bool enabled;
 	static uint32 world_resets;
 	static bool keep_epoch;
 	static uint32 epoch;
+	static const char *busy_reason;
+	static int joining;
 };
 
 
 /**
  * Read-only MCP tools for the live view of the game: get_live_state,
- * get_tiles, get_changes and dump_vehicles.
+ * get_tiles, get_changes, dump_vehicles, get_info, get_history and get_messages.
  * Each returns the JSON object that goes into the text content of the result.
  */
 namespace live_state {
@@ -106,6 +215,18 @@ std::string get_tiles(karte_t *welt, const std::string &args_json);
 std::string get_changes(karte_t *welt, const std::string &args_json);
 
 std::string dump_vehicles(karte_t *welt, const std::string &args_json);
+
+/// the basic information of stations, convoys, lines, factories, cities, players, depots (live_info.cc)
+std::string get_info(karte_t *welt, const std::string &args_json);
+
+/// the monthly and yearly statistics, as the savegame stores them (live_info.cc)
+std::string get_history(karte_t *welt, const std::string &args_json);
+
+/// the messages of the game since a sequence number
+std::string get_messages(karte_t *welt, const std::string &args_json);
+
+/// the head of every answer: epoch, sync, date, ticks and the time of the world, without braces
+void add_head(std::string &out, karte_t *welt);
 
 }
 

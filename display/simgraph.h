@@ -128,6 +128,8 @@ inline scr_coord_val get_base_tile_raster_width(){return base_tile_raster_width;
 scr_coord_val display_set_base_raster_width(scr_coord_val new_raster);
 
 void set_zoom_factor_safe(int);
+/// the current zoom step (0 largest, 3 = 1:1)
+int get_zoom_factor();
 int zoom_factor_up();
 int zoom_factor_down();
 

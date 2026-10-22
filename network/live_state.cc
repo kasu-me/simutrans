@@ -46,11 +46,24 @@
 #include "../dataobj/loadsave.h"
 #include "../dataobj/environment.h"
 #include "../dataobj/route.h"
+#include "../dataobj/schedule.h"
 #include "../io/rdwr/rdwr_stream.h"
 #include "../bauer/goods_manager.h"
 #include "../descriptor/goods_desc.h"
 #include "../descriptor/vehicle_desc.h"
 #include "../utils/simstring.h"
+#include "../simcolor.h"
+#include "../sys/simsys.h"
+#include "../player/finance.h"
+
+using live_util::add_int;
+using live_util::add_double;
+using live_util::add_str;
+using live_util::error_json;
+using live_util::get_int_arg;
+using live_util::get_bool_arg;
+using live_util::parse_string_array;
+using live_util::parse_int_array;
 
 
 // ---------------------------------------------------------------------------
@@ -62,16 +75,31 @@ bool live_changes_t::enabled = false;
 uint32 live_changes_t::world_resets = 0;
 bool live_changes_t::keep_epoch = false;
 uint32 live_changes_t::epoch = 0;
+const char *live_changes_t::busy_reason = NULL;
+int live_changes_t::joining = 0;
+std::vector<live_changes_t::tool_result_t> live_changes_t::tool_results;
 
 namespace {
 
 /// typ of the entries of the change log that are events (not tiles or signals)
 const uint8 CHANGE_SOLD = 255;
+const uint8 CHANGE_ENTITY = 254;
+const uint8 CHANGE_SAVED = 253;
+const uint8 CHANGE_MONTH = 252;
+
+/// the "type" of the entity events, by live_changes_t::entity_kind_t
+const char *const ENTITY_TYPES[live_changes_t::K_MAX] = { "station", "convoy", "line", "factory", "city", "player", "depot" };
+
+/// the names of the bits of "what", by bit
+const char *const WHAT_NAMES[live_changes_t::W_MAX_BIT] = { "new", "gone", "name", "tiles", "line", "schedule", "vehicles", "colour", "fields" };
 
 /**
  * One entry of the change log: a tile (typ 0), the state of a signal, roadsign
- * or crossing (typ = its obj_t::typ), or an event (CHANGE_SOLD: id = convoy,
- * dir = player, value = amount).
+ * or crossing (typ = its obj_t::typ), or an event:
+ * CHANGE_SOLD (id = convoy, dir = player, value = amount),
+ * CHANGE_ENTITY (dir = entity_kind_t, id or x, y, z, value = what bits),
+ * CHANGE_SAVED (value = ticks, file name in saved_files),
+ * CHANGE_MONTH (id = month counter, value = ticks).
  */
 struct change_t
 {
@@ -94,6 +122,9 @@ uint32 read_seq = 0;   ///< next_seq at the last get_changes: entries before it 
 /// entries of the same sync looked at for merging a tile
 const uint32 MERGE_LOOKBACK = 16;
 
+/// the file names of the CHANGE_SAVED entries, by sequence number
+std::map<uint32, std::string> saved_files;
+
 void push_change(const change_t &c)
 {
 	change_log[next_seq % LOG_SIZE] = c;
@@ -101,7 +132,29 @@ void push_change(const change_t &c)
 	if(  next_seq - first_seq > LOG_SIZE  ) {
 		first_seq = next_seq - LOG_SIZE;
 	}
+	while(  !saved_files.empty()  &&  saved_files.begin()->first < first_seq  ) {
+		saved_files.erase(saved_files.begin());
+	}
 }
+
+/// one message of the game (get_messages)
+struct message_entry_t
+{
+	uint32 seq;
+	uint32 sync;
+	sint32 type;
+	sint16 x, y;
+	sint16 player;
+	sint32 month;
+	std::string text;
+};
+
+const size_t MESSAGE_LOG_SIZE = 1024;
+std::vector<message_entry_t> message_log;   ///< ring of MESSAGE_LOG_SIZE
+uint32 message_next_seq = 0;
+uint32 message_first_seq = 0;
+
+void add_event(std::string &out, const change_t &c, uint32 seq);
 
 }
 
@@ -161,6 +214,209 @@ void live_changes_t::record_sold(uint32 convoy, uint8 player_nr, sint64 amount)
 }
 
 
+void live_changes_t::record_entity(entity_kind_t kind, uint32 id, koord3d pos, uint16 what)
+{
+	karte_t *welt = world();
+	if(  !welt  ) {
+		return;
+	}
+	const uint32 sync = welt->get_sync_steps();
+	// the same entity in the same sync step is one event (unless the first one was already delivered)
+	for(  uint32 seq = next_seq;  seq > first_seq  &&  seq > read_seq  &&  next_seq - seq < MERGE_LOOKBACK;  ) {
+		change_t &c = change_log[--seq % LOG_SIZE];
+		if(  c.sync != sync  ) {
+			break;
+		}
+		if(  c.typ == CHANGE_ENTITY  &&  c.dir == kind  &&  c.id == id  &&  c.x == pos.x  &&  c.y == pos.y  &&  c.z == pos.z  ) {
+			c.value |= what;
+			return;
+		}
+	}
+	change_t c = { sync, pos.x, pos.y, pos.z, CHANGE_ENTITY, (uint8)kind, 0, id, what };
+	push_change(c);
+}
+
+
+void live_changes_t::record_saved(const char *filename)
+{
+	karte_t *welt = world();
+	if(  !welt  ) {
+		return;
+	}
+	saved_files[next_seq] = filename ? filename : "";
+	change_t c = { welt->get_sync_steps(), 0, 0, 0, CHANGE_SAVED, 0, 0, 0, (sint64)welt->get_ticks() };
+	push_change(c);
+}
+
+
+void live_changes_t::record_month()
+{
+	karte_t *welt = world();
+	if(  !welt  ) {
+		return;
+	}
+	change_t c = { welt->get_sync_steps(), 0, 0, 0, CHANGE_MONTH, 0, 0, welt->get_current_month(), (sint64)welt->get_ticks() };
+	push_change(c);
+}
+
+
+void live_changes_t::record_message(const char *text, sint32 type, koord pos, uint32 color)
+{
+	karte_t *welt = world();
+	if(  !welt  ) {
+		return;
+	}
+	if(  message_log.size() < MESSAGE_LOG_SIZE  ) {
+		message_log.resize(MESSAGE_LOG_SIZE);
+	}
+	message_entry_t &m = message_log[message_next_seq % MESSAGE_LOG_SIZE];
+	m.seq = message_next_seq;
+	m.sync = welt->get_sync_steps();
+	m.type = type;
+	m.x = pos.x;
+	m.y = pos.y;
+	// a message of a player has its colour (PLAYER_FLAG | player number)
+	m.player = (color & PLAYER_FLAG) ? (sint16)(color & ~PLAYER_FLAG) : -1;
+	m.month = welt->get_current_month();
+	m.text = text ? text : "";
+	message_next_seq++;
+	if(  message_next_seq - message_first_seq > MESSAGE_LOG_SIZE  ) {
+		message_first_seq = message_next_seq - MESSAGE_LOG_SIZE;
+	}
+}
+
+
+/// the cash of a player (1/100 credits), 0 if there is no such player
+static sint64 account_balance(karte_t *welt, uint8 nr)
+{
+	const player_t *player = welt ? welt->get_player(nr) : NULL;
+	return player ? player->get_finance()->get_account_balance() : 0;
+}
+
+
+live_changes_t::tool_op_t::tool_op_t(const player_t *player) :
+	player(player),
+	seq(next_seq),
+	active(recording)
+{
+	for(  uint8 i = 0;  i < MAX_PLAYER_COUNT;  i++  ) {
+		balance[i] = active ? account_balance(world(), i) : 0;
+	}
+}
+
+
+void live_changes_t::tool_op_t::done(const void *vm, uint16 tool_id, const char *default_param, const char *err)
+{
+	karte_t *welt = world();
+	if(  !active  ||  !recording  ||  !welt  ) {
+		return;
+	}
+	std::string out = "{\"tool\":";
+	add_int(out, tool_id);
+	out += ",\"param\":";
+	add_str(out, default_param);
+	out += ",\"sync\":";
+	add_int(out, welt->get_sync_steps());
+	out += ",\"player\":";
+	add_int(out, player ? player->get_player_nr() : -1);
+	// the change of the cash of the acting player, and of every player whose cash changed
+	out += ",\"cost\":";
+	add_double(out, player ? (account_balance(welt, player->get_player_nr()) - balance[player->get_player_nr()]) / 100.0 : 0.0, 2);
+	out += ",\"cash\":[";
+	bool first_cash = true;
+	for(  uint8 i = 0;  i < MAX_PLAYER_COUNT;  i++  ) {
+		const sint64 delta = account_balance(welt, i) - balance[i];
+		if(  delta != 0  ) {
+			if(  !first_cash  ) {
+				out += ',';
+			}
+			first_cash = false;
+			out += '[';
+			add_int(out, i);
+			out += ',';
+			add_double(out, delta / 100.0, 2);
+			out += ']';
+		}
+	}
+	out += "],\"err\":";
+	if(  err  ) {
+		add_str(out, err);
+	}
+	else {
+		out += "null";
+	}
+	// what the change log got meanwhile (lost if the log overflowed)
+	const bool lost = seq < first_seq;
+	std::string tiles, events;
+	std::vector<std::pair<sint16, sint16>> seen;
+	for(  uint32 s = lost ? first_seq : seq;  s != next_seq;  s++  ) {
+		const change_t &c = change_log[s % LOG_SIZE];
+		if(  c.typ == 0  ) {
+			const std::pair<sint16, sint16> xy(c.x, c.y);
+			if(  std::find(seen.begin(), seen.end(), xy) != seen.end()  ) {
+				continue;
+			}
+			seen.push_back(xy);
+			if(  !tiles.empty()  ) {
+				tiles += ',';
+			}
+			tiles += '[';
+			add_int(tiles, c.x);
+			tiles += ',';
+			add_int(tiles, c.y);
+			tiles += ']';
+		}
+		else if(  c.typ == CHANGE_ENTITY  ||  c.typ == CHANGE_SOLD  ) {
+			if(  !events.empty()  ) {
+				events += ',';
+			}
+			add_event(events, c, s);
+		}
+	}
+	out += ",\"tiles\":[" + tiles + "],\"events\":[" + events + "],\"lost\":";
+	out += lost ? "true" : "false";
+	out += '}';
+
+	// results nobody asks for are dropped
+	if(  tool_results.size() >= 256  ) {
+		tool_results.erase(tool_results.begin());
+	}
+	tool_results.push_back(tool_result_t{ vm, out });
+}
+
+
+live_changes_t::busy_t::busy_t(const char *reason) :
+	outer(busy_reason)
+{
+	busy_reason = reason;
+	if(  strcmp(reason, "joining") == 0  ) {
+		joining++;
+	}
+}
+
+
+live_changes_t::busy_t::~busy_t()
+{
+	if(  strcmp(busy_reason, "joining") == 0  ) {
+		joining--;
+	}
+	busy_reason = outer;
+}
+
+
+void live_changes_t::busy_poll_intern()
+{
+	// every 20 ms is enough, and costs the save almost nothing
+	static uint32 last = 0;
+	const uint32 now = dr_time();
+	if(  now - last < 20  ) {
+		return;
+	}
+	last = now;
+	mcp_server_t::step_busy(busy_reason);
+}
+
+
 void live_changes_t::set_enabled(bool yesno)
 {
 	enabled = yesno;
@@ -192,6 +448,7 @@ live_changes_t::world_reset_t::~world_reset_t()
 			const uint32 now = (uint32)time(NULL);
 			epoch = max(epoch + 1, now);
 			first_seq = next_seq;
+			message_first_seq = message_next_seq;
 			forget_world();
 		}
 	}
@@ -212,12 +469,87 @@ uint32 live_changes_t::get_epoch()
 // JSON output
 // ---------------------------------------------------------------------------
 
-using live_util::add_int;
-using live_util::add_double;
-using live_util::add_str;
-using live_util::error_json;
-using live_util::get_int_arg;
-using live_util::get_bool_arg;
+namespace {
+
+/// an event of the change log as a JSON object (get_changes "events")
+void add_event(std::string &out, const change_t &c, uint32 seq)
+{
+	switch(  c.typ  ) {
+		case CHANGE_SOLD:
+			out += "{\"type\":\"sold\",\"sync\":";
+			add_int(out, c.sync);
+			out += ",\"convoy\":";
+			add_int(out, c.id);
+			out += ",\"player\":";
+			add_int(out, c.dir);
+			out += ",\"amount\":";
+			add_double(out, c.value / 100.0, 2);
+			out += '}';
+			break;
+
+		case CHANGE_ENTITY: {
+			const live_changes_t::entity_kind_t kind = (live_changes_t::entity_kind_t)c.dir;
+			out += "{\"type\":\"";
+			out += ENTITY_TYPES[kind];
+			out += "\",\"sync\":";
+			add_int(out, c.sync);
+			if(  kind == live_changes_t::K_FACTORY  ||  kind == live_changes_t::K_CITY  ||  kind == live_changes_t::K_DEPOT  ) {
+				out += ",\"x\":";
+				add_int(out, c.x);
+				out += ",\"y\":";
+				add_int(out, c.y);
+				if(  kind != live_changes_t::K_CITY  ) {
+					out += ",\"z\":";
+					add_int(out, c.z);
+				}
+			}
+			else {
+				out += kind == live_changes_t::K_PLAYER ? ",\"nr\":" : ",\"id\":";
+				add_int(out, c.id);
+			}
+			out += ",\"what\":[";
+			bool first = true;
+			for(  int bit = 0;  bit < live_changes_t::W_MAX_BIT;  bit++  ) {
+				if(  c.value & (1 << bit)  ) {
+					if(  !first  ) {
+						out += ',';
+					}
+					first = false;
+					out += '"';
+					out += WHAT_NAMES[bit];
+					out += '"';
+				}
+			}
+			out += "]}";
+			break;
+		}
+
+		case CHANGE_SAVED: {
+			out += "{\"type\":\"saved\",\"sync\":";
+			add_int(out, c.sync);
+			out += ",\"ticks\":";
+			add_int(out, c.value);
+			out += ",\"file\":";
+			auto it = saved_files.find(seq);
+			add_str(out, it != saved_files.end() ? it->second.c_str() : "");
+			out += '}';
+			break;
+		}
+
+		case CHANGE_MONTH:
+			out += "{\"type\":\"month\",\"sync\":";
+			add_int(out, c.sync);
+			out += ",\"ticks\":";
+			add_int(out, c.value);
+			out += ",\"month\":";
+			add_int(out, c.id);
+			out += '}';
+			break;
+	}
+}
+
+}
+
 
 namespace {
 
@@ -230,40 +562,6 @@ void add_koord3d(std::string &out, const koord3d &k)
 	out += ',';
 	add_int(out, k.z);
 	out += ']';
-}
-
-/// the strings of a JSON array of strings ("[\"a\",\"b\"]")
-std::vector<std::string> parse_string_array(const std::string &raw)
-{
-	std::vector<std::string> list;
-	size_t pos = 0;
-	while(  (pos = raw.find('"', pos)) != std::string::npos  ) {
-		const size_t end = raw.find('"', pos + 1);
-		if(  end == std::string::npos  ) {
-			break;
-		}
-		list.push_back(raw.substr(pos + 1, end - pos - 1));
-		pos = end + 1;
-	}
-	return list;
-}
-
-/// the numbers of a JSON array of integers ("[1,2,3]")
-std::vector<sint64> parse_int_array(const std::string &raw)
-{
-	std::vector<sint64> list;
-	const char *p = raw.c_str();
-	while(  *p  ) {
-		if(  (*p >= '0'  &&  *p <= '9')  ||  *p == '-'  ) {
-			char *end;
-			list.push_back(strtoll(p, &end, 10));
-			p = end;
-		}
-		else {
-			p++;
-		}
-	}
-	return list;
 }
 
 /// position on the route of the tile the vehicle is on (the route index points at pos_next), -1 if unknown
@@ -489,8 +787,11 @@ struct route_lap_t
 };
 std::unordered_map<uint32, route_lap_t> route_laps;
 
+} // namespace
+
+
 /// fields of the start of every answer: the world and its time
-void add_head(std::string &out, karte_t *welt)
+void live_state::add_head(std::string &out, karte_t *welt)
 {
 	static const uint8 days_per_month[12] = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
 
@@ -526,11 +827,23 @@ void add_head(std::string &out, karte_t *welt)
 	add_int(out, pace);
 	out += ",\"time_multiplier\":";
 	add_int(out, welt->get_time_multiplier());
+
+	// in network games every sync step advances ticks by the same amount (karte_t::interactive:
+	// sync_step(fix_ratio_frame_time * time_multiplier / 16)), so ticks = ticks_per_sync * sync + ticks_base
+	// as long as the game speed does not change; null in single player games
+	out += ",\"ticks_per_sync\":";
+	if(  env_t::networkmode  ) {
+		const sint64 per_sync = pace * welt->get_time_multiplier() / 16;
+		add_int(out, per_sync);
+		out += ",\"ticks_base\":";
+		add_int(out, (sint64)welt->get_ticks() - per_sync * (sint64)welt->get_sync_steps());
+	}
+	else {
+		out += "null,\"ticks_base\":null";
+	}
 	out += ",\"snowline\":";
 	add_int(out, welt->get_snowline());
 }
-
-} // namespace
 
 
 void live_changes_t::route_restarted_intern(uint32 convoy)
@@ -594,6 +907,7 @@ std::string live_state::get_live_state(karte_t *welt, const std::string &args_js
 	}
 	const bool with_route_hash = get_bool_arg(args_json, "route_hash");
 	const bool with_tile_lens = get_bool_arg(args_json, "tile_lens");
+	const bool with_stops = get_bool_arg(args_json, "stops");
 
 	// only what changed since the caller's previous answer; the convoys are compared only when since is given
 	// (null at first, as for get_changes): hashing all records costs about as much as building them
@@ -610,6 +924,7 @@ std::string live_state::get_live_state(karte_t *welt, const std::string &args_js
 	shape += all_routes ? "|r" : "|-";
 	shape += route_ids_raw;
 	shape += with_tile_lens ? "|t" : "";
+	shape += with_stops ? "|s" : "";
 	live_util::entity_changes_t &convoy_changes = live_util::changes_of(shape);
 	if(  track  ) {
 		convoy_changes.begin(has_since, since);
@@ -624,7 +939,7 @@ std::string live_state::get_live_state(karte_t *welt, const std::string &args_js
 	std::string out;
 	out.reserve(1 << 20);
 	out += "{\"schema\":1,";
-	add_head(out, welt);
+	live_state::add_head(out, welt);
 	out += ",\"fps\":";
 	add_int(out, fps);
 	out += ",\"ahead\":";
@@ -649,9 +964,12 @@ std::string live_state::get_live_state(karte_t *welt, const std::string &args_js
 	if(  with_tile_lens  ) {
 		out += ",\"tl\"";
 	}
+	if(  with_stops  ) {
+		out += ",\"cx\"";
+	}
 	out += "],\"c\":[";
 
-	// [id, owner, state, speed (km/h), reversed, rt0, rt, vehicles, rlap (, tl)]
+	// [id, owner, state, speed (km/h), reversed, rt0, rt, vehicles, rlap (, tl) (, cx)]
 	bool first_cnv = true;
 	std::string rec;
 	std::string route_hashes;
@@ -752,6 +1070,23 @@ std::string live_state::get_live_state(karte_t *welt, const std::string &args_js
 			else {
 				rec += "null";
 			}
+		}
+		if(  with_stops  ) {
+			// [current stop, arrived time, departure time (0 none), tiles since the last stop, sum of their speed limits, route length]
+			const schedule_t *schedule = cnv->get_schedule();
+			rec += ",[";
+			add_int(rec, schedule ? schedule->get_current_stop() : -1);
+			rec += ',';
+			add_int(rec, cnv->get_arrived_time());
+			rec += ',';
+			add_int(rec, cnv->get_departure_time());
+			rec += ',';
+			add_int(rec, cnv->get_distance_since_last_stop());
+			rec += ',';
+			add_int(rec, cnv->get_sum_speed_limit());
+			rec += ',';
+			add_int(rec, route->get_count());
+			rec += ']';
 		}
 		rec += ']';
 
@@ -906,7 +1241,7 @@ std::string live_state::get_tiles(karte_t *welt, const std::string &args_json)
 	}
 
 	std::string out = "{";
-	add_head(out, welt);
+	live_state::add_head(out, welt);
 	out += ",\"version\":";
 	add_int(out, file.get_version_int());
 	out += ",\"otrp\":";
@@ -939,7 +1274,7 @@ std::string live_changes_t::get_changes_json(karte_t *welt, bool has_since, uint
 	read_seq = next_seq;
 
 	std::string out = "{";
-	add_head(out, welt);
+	live_state::add_head(out, welt);
 	out += ",\"seq\":";
 	add_int(out, next_seq);
 	out += ",\"floor\":";
@@ -951,19 +1286,11 @@ std::string live_changes_t::get_changes_json(karte_t *welt, bool has_since, uint
 	if(  has_since  &&  !overflow  ) {
 		for(  uint32 seq = since;  seq != next_seq;  seq++  ) {
 			const change_t &c = change_log[seq % LOG_SIZE];
-			if(  c.typ == CHANGE_SOLD  ) {
+			if(  c.typ >= CHANGE_MONTH  ) {
 				if(  !events.empty()  ) {
 					events += ',';
 				}
-				events += "{\"type\":\"sold\",\"sync\":";
-				add_int(events, c.sync);
-				events += ",\"convoy\":";
-				add_int(events, c.id);
-				events += ",\"player\":";
-				add_int(events, c.dir);
-				events += ",\"amount\":";
-				add_double(events, c.value / 100.0, 2);
-				events += '}';
+				add_event(events, c, seq);
 				continue;
 			}
 			std::string &list = c.typ == 0 ? tiles : sig;
@@ -1006,6 +1333,61 @@ std::string live_state::get_changes(karte_t *welt, const std::string &args_json)
 		return error_json("bad since");
 	}
 	return live_changes_t::get_changes_json(welt, has_since, (uint32)since);
+}
+
+
+// ---------------------------------------------------------------------------
+// get_messages
+// ---------------------------------------------------------------------------
+
+std::string live_state::get_messages(karte_t *welt, const std::string &args_json)
+{
+	if(  !welt  ) {
+		return error_json("world not ready");
+	}
+	sint64 since = 0;
+	const bool has_since = get_int_arg(args_json, "since", since);
+	if(  has_since  &&  (since < 0  ||  since > 0xFFFFFFFFll)  ) {
+		return error_json("bad since");
+	}
+	const bool overflow = has_since  &&  ((uint32)since < message_first_seq  ||  (uint32)since > message_next_seq);
+
+	std::string out = "{";
+	live_state::add_head(out, welt);
+	out += ",\"seq\":";
+	add_int(out, message_next_seq);
+	out += ",\"floor\":";
+	add_int(out, message_first_seq);
+	out += ",\"overflow\":";
+	out += overflow ? "true" : "false";
+	out += ",\"messages\":[";
+	// without since: everything still kept
+	const uint32 from = !has_since  ||  overflow ? message_first_seq : (uint32)since;
+	for(  uint32 seq = from;  seq != message_next_seq;  seq++  ) {
+		const message_entry_t &m = message_log[seq % MESSAGE_LOG_SIZE];
+		if(  seq != from  ) {
+			out += ',';
+		}
+		out += "{\"seq\":";
+		add_int(out, m.seq);
+		out += ",\"sync\":";
+		add_int(out, m.sync);
+		out += ",\"month\":";
+		add_int(out, m.month);
+		out += ",\"type\":";
+		add_int(out, m.type);
+		out += ",\"text\":";
+		add_str(out, m.text.c_str());
+		out += ",\"player\":";
+		add_int(out, m.player);
+		out += ",\"x\":";
+		add_int(out, m.x);
+		out += ",\"y\":";
+		add_int(out, m.y);
+		out += '}';
+	}
+	out += "]}";
+	return out;
 }
 
 
@@ -1085,7 +1467,7 @@ std::string live_state::dump_vehicles(karte_t *welt, const std::string &args_jso
 	}
 
 	std::string out = "{";
-	add_head(out, welt);
+	live_state::add_head(out, welt);
 	add_named_int(out, "diagonal_steps", vehicle_base_t::get_diagonal_vehicle_steps_per_tile());
 	out += ",\"convoys\":[";
 	bool first_cnv = true;

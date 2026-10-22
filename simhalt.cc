@@ -16,6 +16,7 @@
 #include "simdepot.h"
 #include "simfab.h"
 #include "simhalt.h"
+#include "network/live_state.h"
 #include "simintr.h"
 #include "simline.h"
 #include "simmem.h"
@@ -754,6 +755,7 @@ void haltestelle_t::recalc_basis_pos()
 halthandle_t haltestelle_t::create(koord pos, player_t *player)
 {
 	haltestelle_t * p = new haltestelle_t(pos, player);
+	live_changes_t::entity(live_changes_t::K_STATION, p->self.get_id(), live_changes_t::W_NEW);
 	return p->self;
 }
 
@@ -931,6 +933,7 @@ haltestelle_t::haltestelle_t(koord k, player_t* player)
 haltestelle_t::~haltestelle_t()
 {
 	assert(self.is_bound());
+	live_changes_t::entity(live_changes_t::K_STATION, self.get_id(), live_changes_t::W_GONE);
 
 	// first: remove halt from all lists
 	int i=0;
@@ -1052,8 +1055,11 @@ const char* haltestelle_t::get_name() const
  */
 void haltestelle_t::set_name(const char *new_name)
 {
+	live_changes_t::entity(live_changes_t::K_STATION, self.get_id(), live_changes_t::W_NAME);
 	grund_t *gr = welt->lookup(get_basis_pos3d());
 	if(gr) {
+		// the name is the text of this tile (get_tiles)
+		live_changes_t::tile(gr->get_pos().x, gr->get_pos().y);
 		if(gr->get_flag(grund_t::has_text)) {
 			halthandle_t h = all_names.remove(gr->get_text());
 			if(h!=self) {
@@ -4795,6 +4801,7 @@ bool haltestelle_t::add_grund(grund_t *gr, bool relink_factories)
 	if(  tiles.is_contained(gr)  ) {
 		return false;
 	}
+	live_changes_t::entity(live_changes_t::K_STATION, self.get_id(), live_changes_t::W_TILES);
 
 	koord pos = gr->get_pos().get_2d();
 	add_to_station_type( gr );
@@ -4897,6 +4904,7 @@ bool haltestelle_t::rem_grund(grund_t *gr)
 		dbg->error("haltestelle_t::rem_grund()","removed illegal ground from halt");
 		return false;
 	}
+	live_changes_t::entity(live_changes_t::K_STATION, self.get_id(), live_changes_t::W_TILES);
 
 	// first tile => remove name from this tile ...
 	char buf[256];

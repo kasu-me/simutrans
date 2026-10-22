@@ -52,6 +52,7 @@
 #include "../vehicle/simvehicle.h"
 
 #include "simplay.h"
+#include "../network/live_state.h"
 #include "finance.h"
 
 karte_ptr_t player_t::welt;
@@ -185,6 +186,7 @@ const char* player_t::get_name() const
 void player_t::set_name(const char *new_name)
 {
 	tstrncpy( player_name_buf, new_name, lengthof(player_name_buf) );
+	live_changes_t::entity(live_changes_t::K_PLAYER, player_nr, live_changes_t::W_NAME);
 
 	// update player window
 	if (ki_kontroll_t *frame = dynamic_cast<ki_kontroll_t *>( win_get_magic(magic_ki_kontroll_t) ) ) {
@@ -268,6 +270,7 @@ void player_t::set_player_color(uint8 col1, uint8 col2)
 	player_color_1 = col1;
 	player_color_2 = col2;
 	display_set_player_color_scheme( player_nr, col1, col2 );
+	live_changes_t::entity(live_changes_t::K_PLAYER, player_nr, live_changes_t::W_COLOUR);
 }
 
 

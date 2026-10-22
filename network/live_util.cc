@@ -11,6 +11,8 @@
 #include <charconv>
 
 #include "../descriptor/vehicle_desc.h"
+#include "../dataobj/schedule.h"
+#include "../simline.h"
 
 
 void live_util::add_int(std::string &out, sint64 v)
@@ -68,6 +70,122 @@ uint32 live_util::fnv1a(const char *data, size_t len, uint32 h)
 {
 	for(  size_t i = 0;  i < len;  i++  ) {
 		h = (h ^ (uint8)data[i]) * 16777619u;
+	}
+	return h;
+}
+
+
+std::vector<std::string> live_util::parse_string_array(const std::string &raw)
+{
+	std::vector<std::string> list;
+	size_t pos = 0;
+	while(  (pos = raw.find('"', pos)) != std::string::npos  ) {
+		const size_t end = raw.find('"', pos + 1);
+		if(  end == std::string::npos  ) {
+			break;
+		}
+		list.push_back(raw.substr(pos + 1, end - pos - 1));
+		pos = end + 1;
+	}
+	return list;
+}
+
+
+std::vector<sint64> live_util::parse_int_array(const std::string &raw)
+{
+	std::vector<sint64> list;
+	const char *p = raw.c_str();
+	while(  *p  ) {
+		if(  (*p >= '0'  &&  *p <= '9')  ||  *p == '-'  ) {
+			char *end;
+			list.push_back(strtoll(p, &end, 10));
+			p = end;
+		}
+		else {
+			p++;
+		}
+	}
+	return list;
+}
+
+
+std::vector<std::vector<sint64>> live_util::parse_int_groups(const std::string &raw)
+{
+	std::vector<std::vector<sint64>> groups;
+	int depth = 0;
+	const char *p = raw.c_str();
+	while(  *p  ) {
+		if(  *p == '['  ) {
+			depth++;
+			if(  depth == 2  ) {
+				groups.emplace_back();
+			}
+			p++;
+		}
+		else if(  *p == ']'  ) {
+			depth--;
+			p++;
+		}
+		else if(  (*p >= '0'  &&  *p <= '9')  ||  *p == '-'  ) {
+			char *end;
+			const sint64 v = strtoll(p, &end, 10);
+			if(  depth <= 1  ) {
+				groups.emplace_back(1, v);
+			}
+			else {
+				groups.back().push_back(v);
+			}
+			p = end;
+		}
+		else {
+			p++;
+		}
+	}
+	return groups;
+}
+
+
+namespace {
+
+/// FNV-1a over the little-endian bytes of v (width bytes)
+uint32 hash_le(uint32 h, uint64 v, int width)
+{
+	for(  int i = 0;  i < width;  i++  ) {
+		h = (h ^ (uint8)(v >> (8 * i))) * 16777619u;
+	}
+	return h;
+}
+
+}
+
+
+uint32 live_util::schedule_hash(const schedule_t *schedule)
+{
+	if(  !schedule  ) {
+		return 0;
+	}
+	uint32 h = 2166136261u;
+	h = hash_le(h, schedule->get_flags(), 1);
+	h = hash_le(h, schedule->get_max_speed(), 2);
+	h = hash_le(h, schedule->get_departure_slot_group_id().get_id(), 4);
+	h = hash_le(h, schedule->get_additional_base_waiting_time(), 4);
+	h = hash_le(h, (uint8)schedule->get_waytype(), 1);
+	h = hash_le(h, schedule->get_next_line().get_id(), 4);
+	h = hash_le(h, schedule->get_count(), 1);
+	for(  const schedule_entry_t &e : schedule->get_entries()  ) {
+		h = hash_le(h, (uint16)e.pos.x, 2);
+		h = hash_le(h, (uint16)e.pos.y, 2);
+		h = hash_le(h, (uint8)e.pos.z, 1);
+		h = hash_le(h, e.minimum_loading, 1);
+		h = hash_le(h, e.waiting_time_shift, 2);
+		h = hash_le(h, e.get_stop_flags(), 4);
+		h = hash_le(h, e.max_speed_kmh_of_convoi, 2);
+		h = hash_le(h, e.spacing, 2);
+		h = hash_le(h, e.spacing_shift, 2);
+		h = hash_le(h, e.delay_tolerance, 2);
+		h = hash_le(h, e.length_coupling_done, 2);
+		h = hash_le(h, e.maximum_loading, 1);
+		h = hash_le(h, e.balance_speed_kmh_of_convoi, 2);
 	}
 	return h;
 }

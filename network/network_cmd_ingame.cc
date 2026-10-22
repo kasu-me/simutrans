@@ -758,6 +758,8 @@ void nwc_sync_t::do_command(karte_t *welt)
 		}
 	}
 	// transfer game, all clients need to sync (save, reload, and pause)
+	// the main loop stops meanwhile: the MCP server answers "busy"
+	live_changes_t::busy_t busy("joining");
 	// now save and send
 	dr_chdir( env_t::user_dir );
 	if(  !env_t::server  ) {
@@ -1266,6 +1268,9 @@ void nwc_tool_t::do_command(karte_t *welt)
 
 	const char* err = NULL;
 	bool res = false;
+	// the vm of a script that called this tool; an MCP script gets its cost, tiles and events
+	HSQUIRRELVM script_vm = local  &&  callback_id != 0 ? suspended_scripts_t::get_suspended_script(callback_id) : NULL;
+	live_changes_t::tool_op_t op(player);
 	// call INIT
 	if(  init  ) {
 		// we should be here only if tool->init() returns false
@@ -1297,13 +1302,18 @@ void nwc_tool_t::do_command(karte_t *welt)
 		err = "Init was not succesfull, returned false.";
 	}
 
+	if (script_vm_t::is_mcp(script_vm)) {
+		op.done(script_vm, tool_id, default_param, err);
+	}
+
 	// callback to script here
 	if (local  &&  callback_id != 0) {
 		if (init) {
 			suspended_scripts_t::tell_return_value(callback_id, res);
 		}
 		else {
-			suspended_scripts_t::tell_return_value(callback_id, err);
+			const char *script_err = script_vm_t::with_error_word(script_vm, err);
+			suspended_scripts_t::tell_return_value(callback_id, script_err);
 		}
 	}
 }

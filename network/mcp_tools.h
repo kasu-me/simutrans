@@ -8,6 +8,8 @@
 
 #include <string>
 
+#include "../simtypes.h"
+
 class karte_t;
 class script_vm_t;
 
@@ -22,6 +24,24 @@ namespace mcp_tools {
  * "permission: ...") instead of the generic "Call function failed".
  */
 std::string script_error(const script_vm_t *vm, const char *err);
+
+/**
+ * The tools the script ran (cost, tiles changed, events) as ',"ops":[...]', taken
+ * from live_changes_t::take_tool_results.
+ */
+std::string script_ops(const script_vm_t *vm);
+
+/// dr_time() now, for the time limit of a script
+uint32 script_started_ms();
+
+/**
+ * The error ("limit: ...") if a suspended script used up its opcodes or time, else NULL.
+ * The caller then ends the script.
+ */
+const char *script_limit(const script_vm_t *vm, uint32 started_ms);
+
+/// the result of a tool call while the game is busy (saving, loading, a client joining)
+std::string busy_result(const char *reason);
 
 /** JSON array string suitable for the "tools" field in tools/list response. */
 std::string tools_list_json();

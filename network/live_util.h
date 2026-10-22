@@ -15,6 +15,7 @@
 
 class karte_t;
 class vehicle_desc_t;
+class schedule_t;
 
 
 /**
@@ -37,7 +38,29 @@ bool get_int_arg(const std::string &args_json, const char *key, sint64 &value);
 bool get_bool_arg(const std::string &args_json, const char *key);
 
 uint32 fnv1a(const char *data, size_t len, uint32 h = 2166136261u);
-inline uint32 fnv1a(const std::string &s) { return fnv1a(s.data(), s.size()); }
+inline uint32 fnv1a(const std::string &s, uint32 h = 2166136261u) { return fnv1a(s.data(), s.size(), h); }
+
+/// the strings of a JSON array of strings ("[\"a\",\"b\"]")
+std::vector<std::string> parse_string_array(const std::string &raw);
+
+/// the numbers of a JSON array of integers ("[1,2,3]"), nested arrays flattened
+std::vector<sint64> parse_int_array(const std::string &raw);
+
+/// the inner arrays of a JSON array of arrays of integers ("[[1,2],[3,4,5]]"); plain numbers are groups of one
+std::vector<std::vector<sint64>> parse_int_groups(const std::string &raw);
+
+/**
+ * Hash of a schedule (without its current stop, which changes at every stop): FNV-1a (32 bit) over
+ * these values as little-endian integers of the given byte widths, all as the savegame stores them
+ * (schedule_t::rdwr):
+ *  flags (1), max_speed (2), departure slot group line id (4, 0 none), additional_base_waiting_time (4),
+ *  waytype (1), next line id (4, 0 none), number of entries (1),
+ *  then for every entry: x (2), y (2), z (1), minimum_loading (1), waiting_time_shift (2), stop_flags (4),
+ *  max_speed (2), spacing (2), spacing_shift (2), delay_tolerance (2), length_coupling_done (2),
+ *  maximum_loading (1), balance_speed (2).
+ * 0 for no schedule.
+ */
+uint32 schedule_hash(const schedule_t *schedule);
 
 /// index of a vehicle type in the table "vnames" (append-only while the game runs)
 uint32 vehicle_name_index(const vehicle_desc_t *desc);

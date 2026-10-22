@@ -3883,6 +3883,7 @@ inline sint32 get_population(stadt_t const* const c)
 void karte_t::new_month()
 {
 	bool need_locality_update = false;
+	live_changes_t::new_month();
 
 	update_history();
 
@@ -4929,6 +4930,7 @@ DBG_MESSAGE("karte_t::save()", "saving game to '%s'", filename);
 		}
 		else {
 			dr_rename( savename.c_str(), filename );
+			live_changes_t::saved(filename);
 			if(!silent) {
 				create_win( new news_img("Spielstand wurde\ngespeichert!\n"), w_time_delete, magic_none);
 				// update the filename, if no autosave
@@ -4943,6 +4945,8 @@ DBG_MESSAGE("karte_t::save()", "saving game to '%s'", filename);
 
 void karte_t::save(loadsave_t *file,bool silent)
 {
+	// the main loop does not run while saving: the MCP server answers "busy" meanwhile
+	live_changes_t::busy_t busy("saving");
 	bool needs_redraw = false;
 
 	loadingscreen_t *ls = NULL;
@@ -5463,6 +5467,7 @@ void karte_t::plans_finish_rd( sint16 x_min, sint16 x_max, sint16 y_min, sint16 
 void karte_t::load(loadsave_t *file)
 {
 	live_changes_t::world_reset_t live_reset;
+	live_changes_t::busy_t busy("loading");
 	intr_disable();
 	dbg->message("karte_t::load()", "Prepare for loading" );
 
@@ -6052,6 +6057,7 @@ void karte_t::rdwr_gamestate(loadsave_t *file, loadingscreen_t *ls)
 			for (int x = 0; x < get_size().x; x++) {
 				plan[x+y*cached_grid_size.x].rdwr(file, koord(x,y) );
 			}
+			live_changes_t::busy_poll();
 			if(file->is_eof()) {
 				dbg->fatal("karte_t::rdwr_gamestate()","Savegame file mangled (too short)!");
 			}
@@ -6063,6 +6069,7 @@ void karte_t::rdwr_gamestate(loadsave_t *file, loadingscreen_t *ls)
 			for(int i=0; i<get_size().x; i++) {
 				plan[i+j*cached_grid_size.x].rdwr(file, koord(i,j) );
 			}
+			live_changes_t::busy_poll();
 			if(!ls) {
 				INT_CHECK("saving");
 			}
@@ -7268,6 +7275,9 @@ const char *karte_t::init_new_player(uint8 new_player_in, uint8 type)
 		default: return "Unknown AI type!";
 	}
 	settings.set_player_type(new_player_in, type);
+	if(  players[new_player_in]  ) {
+		live_changes_t::entity(live_changes_t::K_PLAYER, new_player_in, live_changes_t::W_NEW);
+	}
 	return NULL;
 }
 
@@ -7275,6 +7285,7 @@ const char *karte_t::init_new_player(uint8 new_player_in, uint8 type)
 void karte_t::remove_player(uint8 player_nr)
 {
 	if ( player_nr!=1  &&  player_nr<PLAYER_UNOWNED  &&  players[player_nr]!=NULL) {
+		live_changes_t::entity(live_changes_t::K_PLAYER, player_nr, live_changes_t::W_GONE);
 		players[player_nr]->ai_bankrupt();
 		delete players[player_nr];
 		players[player_nr] = 0;

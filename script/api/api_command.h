@@ -63,15 +63,18 @@ namespace script_api {
 		const char* error;
 		// if set, the acting player must be allowed to change objects of this owner (player_t::check_owner)
 		const player_t *required_owner;
+		// if set, scripts of the MCP server fail with "funds: ..." unless this player can afford the cost
+		const player_t *paying_player;
+		sint64 cost;
 	public:
 		call_tool_base_t(tool_t* t, player_t* pl)
-		: tool(t), tool_id(0), default_param(NULL), flags(0), player(pl), error(NULL), required_owner(NULL)  { }
+		: tool(t), tool_id(0), default_param(NULL), flags(0), player(pl), error(NULL), required_owner(NULL), paying_player(NULL), cost(0)  { }
 
 		call_tool_base_t(uint16 id, const char* dp, uint8 f, player_t* pl)
-		: tool(NULL), tool_id(id), default_param(dp), flags(f), player(pl), error(NULL), required_owner(NULL) { }
+		: tool(NULL), tool_id(id), default_param(dp), flags(f), player(pl), error(NULL), required_owner(NULL), paying_player(NULL), cost(0) { }
 
 		call_tool_base_t(const char* err)
-		: tool(NULL), tool_id(0), default_param(NULL), flags(0), player(NULL), error(err), required_owner(NULL)  { }
+		: tool(NULL), tool_id(0), default_param(NULL), flags(0), player(NULL), error(err), required_owner(NULL), paying_player(NULL), cost(0)  { }
 
 		tool_t * create_tool();
 
@@ -80,6 +83,13 @@ namespace script_api {
 		 * "permission: ..." (the tools themselves fail silently, and only in network games).
 		 */
 		void require_owner(const player_t *owner) { required_owner = owner; }
+
+		/**
+		 * The tool changes the cash of @p payer by @p amount (1/100 credits, negative: it costs).
+		 * Only scripts of the MCP server fail if the payer cannot afford it: the tools of the game
+		 * do not check it, and other scripts keep that behaviour.
+		 */
+		void require_funds(const player_t *payer, sint64 amount) { paying_player = payer; cost = amount; }
 	};
 
 	class call_tool_init : public call_tool_base_t {

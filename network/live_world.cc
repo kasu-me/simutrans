@@ -13,6 +13,7 @@
 #include "live_util.h"
 #include "mcp_server.h"
 
+#include <algorithm>
 #include <map>
 
 #include "../simworld.h"
@@ -64,9 +65,10 @@ void add_id_key(std::string &out, uint64 key)
  * @param each called with a function to hand every (key, record) to
  */
 template<class EACH, class KEY>
-void add_section(std::string &out, const char *kind, bool has_since, uint32 since, EACH each, KEY add_key)
+void add_section(std::string &out, const char *kind, bool has_since, uint32 since, EACH each, KEY add_key, const char *cache_key = NULL)
 {
-	entity_changes_t &changes = changes_of(kind);
+	// records of another shape are compared separately
+	entity_changes_t &changes = changes_of(cache_key ? cache_key : kind);
 	changes.begin(has_since, since);
 	out += ",\"";
 	out += kind;
@@ -114,41 +116,8 @@ int halt_status(const haltestelle_t *halt)
 	return 0;
 }
 
-template<class T> uint32 hash_value(uint32 h, T v)
-{
-	return fnv1a((const char *)&v, sizeof(v), h);
-}
-
-/// hash of what schedule_t::sprintf_schedule writes, without the current stop (which changes at every stop)
-uint32 schedule_hash(const schedule_t *schedule)
-{
-	if(  !schedule  ) {
-		return 0;
-	}
-	uint32 h = 2166136261u;
-	h = hash_value(h, schedule->get_flags());
-	h = hash_value(h, schedule->get_max_speed());
-	h = hash_value(h, schedule->get_departure_slot_group_id().get_id());
-	h = hash_value(h, schedule->get_additional_base_waiting_time());
-	h = hash_value(h, (int)schedule->get_type());
-	h = hash_value(h, schedule->get_next_line().get_id());
-	for(  const schedule_entry_t &e : schedule->get_entries()  ) {
-		h = hash_value(h, e.pos.x);
-		h = hash_value(h, e.pos.y);
-		h = hash_value(h, e.pos.z);
-		h = hash_value(h, e.minimum_loading);
-		h = hash_value(h, e.waiting_time_shift);
-		h = hash_value(h, e.get_stop_flags());
-		h = hash_value(h, e.max_speed_kmh_of_convoi);
-		h = hash_value(h, e.spacing);
-		h = hash_value(h, e.spacing_shift);
-		h = hash_value(h, e.delay_tolerance);
-		h = hash_value(h, e.length_coupling_done);
-		h = hash_value(h, e.maximum_loading);
-		h = hash_value(h, e.balance_speed_kmh_of_convoi);
-	}
-	return h;
-}
+/// at most this many final destinations per via halt and goods (halts_dest)
+const size_t MAX_DESTINATIONS = 16;
 
 int player_nr_of(const player_t *player)
 {
@@ -164,18 +133,26 @@ void live_util::add_world_sections(std::string &out, karte_t *welt, const std::s
 	const bool factories = get_bool_arg(args_json, "factories");
 
 	if(  halts  ) {
-		// [id, owner, waiting total, [[via halt id, goods index, amount], ...], status]
+		// [id, owner, waiting total, [[via halt id, goods index, amount (, [[destination halt id, amount], ...])], ...], status]
+		const bool dest = get_bool_arg(args_json, "halts_dest");
 		add_section(out, "halts", has_since, since, [&](auto emit) {
 			std::map<std::pair<uint32, uint8>, uint32> via;
+			std::map<std::pair<uint32, uint8>, std::map<uint32, uint32>> dests;
+			std::vector<std::pair<uint32, uint32>> sorted;
 			std::string rec;
 			for(  const halthandle_t &halt : haltestelle_t::get_alle_haltestellen()  ) {
 				if(  !halt.is_bound()  ) {
 					continue;
 				}
 				via.clear();
+				dests.clear();
 				uint32 total = 0;
 				halt->for_each_waiting_ware( [&](const ware_t &w) {
-					via[std::make_pair(w.get_zwischenziel().get_id(), w.get_index())] += w.menge;
+					const std::pair<uint32, uint8> key(w.get_zwischenziel().get_id(), w.get_index());
+					via[key] += w.menge;
+					if(  dest  ) {
+						dests[key][w.get_ziel().get_id()] += w.menge;
+					}
 					total += w.menge;
 				} );
 				rec = "[";
@@ -197,6 +174,25 @@ void live_util::add_world_sections(std::string &out, karte_t *welt, const std::s
 					add_int(rec, v.first.second);
 					rec += ',';
 					add_int(rec, v.second);
+					if(  dest  ) {
+						// the final destinations, the largest amounts first
+						sorted.assign(dests[v.first].begin(), dests[v.first].end());
+						std::sort(sorted.begin(), sorted.end(), [](const std::pair<uint32, uint32> &a, const std::pair<uint32, uint32> &b) {
+							return a.second != b.second ? a.second > b.second : a.first < b.first;
+						} );
+						rec += ",[";
+						for(  size_t i = 0;  i < sorted.size()  &&  i < MAX_DESTINATIONS;  i++  ) {
+							if(  i > 0  ) {
+								rec += ',';
+							}
+							rec += '[';
+							add_int(rec, sorted[i].first);
+							rec += ',';
+							add_int(rec, sorted[i].second);
+							rec += ']';
+						}
+						rec += ']';
+					}
 					rec += ']';
 				}
 				rec += "],";
@@ -204,7 +200,7 @@ void live_util::add_world_sections(std::string &out, karte_t *welt, const std::s
 				rec += ']';
 				emit(halt.get_id(), rec);
 			}
-		}, add_id_key);
+		}, add_id_key, dest ? "halts+dest" : NULL);
 	}
 
 	if(  halts  ||  factories  ) {
@@ -369,7 +365,7 @@ void live_util::add_world_sections(std::string &out, karte_t *welt, const std::s
 	}
 
 	if(  get_bool_arg(args_json, "lines")  ) {
-		// [id, owner, name, line type, [convoy ids], schedule hash]
+		// [id, owner, name, line type, [convoy ids], schedule hash, colour (palette index)]
 		add_section(out, "lines", has_since, since, [&](auto emit) {
 			std::string rec;
 			vector_tpl<linehandle_t> lines;
@@ -400,6 +396,8 @@ void live_util::add_world_sections(std::string &out, karte_t *welt, const std::s
 					}
 					rec += "],";
 					add_int(rec, schedule_hash(line->get_schedule()));
+					rec += ',';
+					add_int(rec, line->get_colour());
 					rec += ']';
 					emit(line.get_id(), rec);
 				}
