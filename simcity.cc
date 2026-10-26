@@ -1498,7 +1498,7 @@ void stadt_t::set_name(const char *new_name)
 	if(gr) {
 		gr->set_text( new_name );
 		// the name is the text of the town hall tile (get_tiles)
-		live_changes_t::tile(pos.x, pos.y);
+		live_changes_t::tile(pos.x, pos.y, live_changes_t::T_OTHER);
 	}
 	city_info_t *win = dynamic_cast<city_info_t*>(win_get_magic((ptrdiff_t)this));
 	if (win) {

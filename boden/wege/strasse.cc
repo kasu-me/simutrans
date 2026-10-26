@@ -161,7 +161,7 @@ void strasse_t::rdwr(loadsave_t *file)
 
 void strasse_t::update_ribi_mask_oneway(ribi_t::ribi mask, ribi_t::ribi allow)
 {
-	live_changes_t::tile(get_pos().x, get_pos().y);
+	live_changes_t::tile(get_pos().x, get_pos().y, live_changes_t::T_ROAD);
 	// assertion. @mask and @allow must be single or none.
 	if(!(ribi_t::is_single(mask)||(mask==ribi_t::none))) dbg->error( "weg_t::update_ribi_mask_oneway()", "mask is not single or none.");
 	if(!(ribi_t::is_single(allow)||(allow==ribi_t::none))) dbg->error( "weg_t::update_ribi_mask_oneway()", "allow is not single or none.");

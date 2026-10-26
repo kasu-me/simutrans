@@ -122,7 +122,7 @@ const char *weg_t::waytype_to_string(waytype_t wt)
 void weg_t::set_desc(const way_desc_t *b)
 {
 	if(  desc != b  ) {
-		live_changes_t::tile(get_pos().x, get_pos().y);
+		live_changes_t::tile(get_pos().x, get_pos().y, b ? live_changes_t::way_kind(b->get_wtyp()) : change_kind());
 	}
 	desc = b;
 
@@ -171,6 +171,7 @@ void weg_t::init()
 
 weg_t::~weg_t()
 {
+	live_changes_t::obj_destroyed(this, change_kind());
 	alle_wege.remove(this);
 	player_t *player=get_owner();
 	if(player) {

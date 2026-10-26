@@ -6445,7 +6445,7 @@ void karte_t::calc_climate(koord k, bool recalc)
 	if(  !pl  ) {
 		return;
 	}
-	live_changes_t::tile(k.x, k.y);
+	live_changes_t::tile(k.x, k.y, live_changes_t::T_TERRAIN);
 
 	if( (unsigned)k.x >= climate_map.get_width()  ||  (unsigned)k.y >= climate_map.get_height()  ) {
 		// not initialised yet (may happend during river creation)

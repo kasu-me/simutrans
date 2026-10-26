@@ -90,7 +90,7 @@ void planquadrat_t::boden_hinzufuegen(grund_t *bd)
 {
 	assert(!bd->ist_karten_boden());
 	if(  !bd->is_dummy_ground()  ) {
-		live_changes_t::tile(bd->get_pos().x, bd->get_pos().y);
+		live_changes_t::tile(bd->get_pos().x, bd->get_pos().y, live_changes_t::T_TERRAIN);
 	}
 	if(ground_size==0) {
 		// completely empty
@@ -150,7 +150,7 @@ bool planquadrat_t::boden_entfernen(grund_t *bd)
 {
 	assert(!bd->ist_karten_boden()  &&  ground_size>0);
 	if(  !bd->is_dummy_ground()  ) {
-		live_changes_t::tile(bd->get_pos().x, bd->get_pos().y);
+		live_changes_t::tile(bd->get_pos().x, bd->get_pos().y, live_changes_t::T_TERRAIN);
 	}
 	if(ground_size==1) {
 		ground_size = 0;
@@ -184,7 +184,7 @@ bool planquadrat_t::boden_entfernen(grund_t *bd)
 void planquadrat_t::kartenboden_setzen(grund_t *bd, bool startup)
 {
 	assert(bd);
-	live_changes_t::tile(bd->get_pos().x, bd->get_pos().y);
+	live_changes_t::tile(bd->get_pos().x, bd->get_pos().y, live_changes_t::T_TERRAIN);
 	grund_t *tmp = get_kartenboden();
 	if(tmp) {
 		boden_ersetzen(tmp,bd);
@@ -208,7 +208,7 @@ void planquadrat_t::kartenboden_setzen(grund_t *bd, bool startup)
 void planquadrat_t::boden_ersetzen(grund_t *alt, grund_t *neu)
 {
 	assert(alt!=NULL  &&  neu!=NULL  &&  !alt->is_halt()  );
-	live_changes_t::tile(neu->get_pos().x, neu->get_pos().y);
+	live_changes_t::tile(neu->get_pos().x, neu->get_pos().y, live_changes_t::T_TERRAIN);
 
 	if(ground_size<=1) {
 		assert(data.one==alt  ||  ground_size==0);

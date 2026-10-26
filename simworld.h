@@ -1209,7 +1209,7 @@ public:
 		planquadrat_t *plan = access(k);
 		if(  plan  ) {
 			plan->set_climate(cl);
-			live_changes_t::tile(k.x, k.y);
+			live_changes_t::tile(k.x, k.y, live_changes_t::T_TERRAIN);
 			if(  recalc  ) {
 				recalc_transitions(k);
 				for(  int i = 0;  i < 8;  i++  ) {
@@ -1631,6 +1631,8 @@ public:
 	stadt_t *find_nearest_city(koord k) const;
 
 	bool cannot_save() const { return nosave; }
+	/// saving rotates the map first (some buildings cannot be saved in this rotation)
+	bool needs_rotation_to_save() const { return nosave_warning; }
 	void set_nosave() { nosave = true; nosave_warning = true; }
 	void set_nosave_warning() { nosave_warning = true; }
 
@@ -1739,7 +1741,7 @@ public:
 	/**
 	 * Sets water height.
 	 */
-	void set_water_hgt(sint16 x, sint16 y, sint8 hgt) { water_hgts[x + y * (cached_grid_size.x)] = (hgt); live_changes_t::tile(x, y); }
+	void set_water_hgt(sint16 x, sint16 y, sint8 hgt) { water_hgts[x + y * (cached_grid_size.x)] = (hgt); live_changes_t::tile(x, y, live_changes_t::T_TERRAIN); }
 
 	inline void set_water_hgt(koord k, sint8 hgt) {  set_water_hgt(k.x, k.y, hgt); }
 

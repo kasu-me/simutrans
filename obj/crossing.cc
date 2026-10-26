@@ -27,6 +27,7 @@
 
 #ifdef MULTI_THREAD
 #include "../utils/simthread.h"
+#include "../network/live_state.h"
 static pthread_mutex_t crossing_logic_mutex;
 static recursive_mutex_maker_t crossing_lm_maker(crossing_logic_mutex);
 #endif
@@ -53,6 +54,7 @@ crossing_t::crossing_t(player_t* const player, koord3d const pos, crossing_desc_
 
 crossing_t::~crossing_t()
 {
+	live_changes_t::obj_destroyed(this, desc ? live_changes_t::way_kind(desc->get_waytype(0)) | live_changes_t::way_kind(desc->get_waytype(1)) : (uint16)live_changes_t::T_OTHER);
 	if(logic) {
 		crossing_logic_t *old_logic = logic;
 		logic = NULL;

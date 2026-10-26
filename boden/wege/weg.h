@@ -169,7 +169,7 @@ public:
 	 */
 	bool check_season(const bool calc_only_season_change) OVERRIDE;
 
-	void set_max_speed(uint16 s) { if(  max_speed != s  ) { live_changes_t::tile(get_pos().x, get_pos().y); } max_speed = s; }
+	void set_max_speed(uint16 s) { if(  max_speed != s  ) { live_changes_t::tile(get_pos().x, get_pos().y, change_kind()); } max_speed = s; }
 	uint16 get_max_speed() const { return max_speed; }
 
 	// vehicle offset value for left/right
@@ -183,6 +183,9 @@ public:
 	/// @note Replaces max speed of the way by the max speed property of the descriptor.
 	void set_desc(const way_desc_t *b);
 	const way_desc_t *get_desc() const { return desc; }
+
+	/// the kind of the changes of this way for live_changes_t (no virtual call: also from constructors)
+	uint16 change_kind() const { return desc ? live_changes_t::way_kind(desc->get_wtyp()) : (uint16)live_changes_t::T_OTHER; }
 
 	// returns a way with the matching type
 	static weg_t *alloc(waytype_t wt);
@@ -218,7 +221,7 @@ public:
 	* @note After changing of ribi the image of the way is wrong. To correct this,
 	* grund_t::calc_image needs to be called. This is not done here (Too expensive).
 	*/
-	void ribi_add(ribi_t::ribi ribi) { if(  (this->ribi | ribi) != this->ribi  ) { live_changes_t::tile(get_pos().x, get_pos().y); } this->ribi |= (uint8)ribi;}
+	void ribi_add(ribi_t::ribi ribi) { if(  (this->ribi | ribi) != this->ribi  ) { live_changes_t::tile(get_pos().x, get_pos().y, change_kind()); } this->ribi |= (uint8)ribi;}
 
 	/**
 	* Remove direction bits (ribi) for a way.
@@ -226,7 +229,7 @@ public:
 	* @note After changing of ribi the image of the way is wrong. To correct this,
 	* grund_t::calc_image needs to be called. This is not done here (Too expensive).
 	*/
-	void ribi_rem(ribi_t::ribi ribi) { if(  this->ribi & ribi  ) { live_changes_t::tile(get_pos().x, get_pos().y); } this->ribi &= (uint8)~ribi;}
+	void ribi_rem(ribi_t::ribi ribi) { if(  this->ribi & ribi  ) { live_changes_t::tile(get_pos().x, get_pos().y, change_kind()); } this->ribi &= (uint8)~ribi;}
 
 	/**
 	* Set direction bits (ribi) for the way.
@@ -234,7 +237,7 @@ public:
 	* @note After changing of ribi the image of the way is wrong. To correct this,
 	* grund_t::calc_image needs to be called. This is not done here (Too expensive).
 	*/
-	void set_ribi(ribi_t::ribi ribi) { if(  this->ribi != ribi  ) { live_changes_t::tile(get_pos().x, get_pos().y); } this->ribi = (uint8)ribi;}
+	void set_ribi(ribi_t::ribi ribi) { if(  this->ribi != ribi  ) { live_changes_t::tile(get_pos().x, get_pos().y, change_kind()); } this->ribi = (uint8)ribi;}
 
 	/**
 	* Get the unmasked direction bits (ribi) for the way (without signals or other ribi changer).
@@ -282,7 +285,7 @@ public:
 	void count_sign();
 
 	/* flag query routines */
-	void set_gehweg(const bool yesno) { live_changes_t::tile(get_pos().x, get_pos().y); flags = (yesno ? flags | HAS_SIDEWALK : flags & ~HAS_SIDEWALK); }
+	void set_gehweg(const bool yesno) { live_changes_t::tile(get_pos().x, get_pos().y, change_kind()); flags = (yesno ? flags | HAS_SIDEWALK : flags & ~HAS_SIDEWALK); }
 	inline bool hat_gehweg() const { return flags & HAS_SIDEWALK; }
 
 	void set_electrify(bool janein) {janein ? flags |= IS_ELECTRIFIED : flags &= ~IS_ELECTRIFIED;}

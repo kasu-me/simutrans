@@ -1059,7 +1059,7 @@ void haltestelle_t::set_name(const char *new_name)
 	grund_t *gr = welt->lookup(get_basis_pos3d());
 	if(gr) {
 		// the name is the text of this tile (get_tiles)
-		live_changes_t::tile(gr->get_pos().x, gr->get_pos().y);
+		live_changes_t::tile(gr->get_pos().x, gr->get_pos().y, live_changes_t::T_STATION);
 		if(gr->get_flag(grund_t::has_text)) {
 			halthandle_t h = all_names.remove(gr->get_text());
 			if(h!=self) {

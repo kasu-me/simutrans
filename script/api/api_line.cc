@@ -57,19 +57,47 @@ waytype_t line_way_type(simline_t *line)
 	return invalid_wt;
 }
 
+// implementation in api_schedule.cc
+const char *script_schedule_rejection(const schedule_t *sched);
+
+/// why change_schedule would fail, NULL if it would not
+static const char *line_schedule_error(simline_t* line, player_t *player, schedule_t *sched)
+{
+	if (sched == NULL) {
+		return "invalid: Invalid schedule provided";
+	}
+	if (player  &&  !player_t::check_owner(line->get_owner(), player)) {
+		return "permission: the object belongs to another player";
+	}
+	// all or nothing: the entries that are no stops would be left out
+	if (const char *err = script_schedule_rejection(sched)) {
+		return err;
+	}
+	// the tool would ignore it silently (schedule_t::sscanf_schedule)
+	if (line->get_schedule()  &&  line->get_schedule()->get_type() != sched->get_type()) {
+		return "invalid: the schedule is for another waytype";
+	}
+	return NULL;
+}
+
+const char *line_validate_schedule(simline_t* line, player_t *player, schedule_t *sched)
+{
+	return line_schedule_error(line, player, sched);
+}
+
 call_tool_init line_change_schedule(simline_t* line, player_t *player, schedule_t *sched)
 {
-	if (sched) {
-		// build param string (see line_management_gui_t::infowin_event)
-		cbuffer_t buf;
-		buf.printf( "g,%i,", line->get_handle().get_id() );
-		sched->sprintf_schedule( buf );
-
-		call_tool_init call(TOOL_CHANGE_LINE | SIMPLE_TOOL, buf, 0, player);
-		call.require_owner(line->get_owner());
-		return call;
+	if (const char *err = line_schedule_error(line, NULL, sched)) {
+		return err;
 	}
-	return "invalid: Invalid schedule provided";
+	// build param string (see line_management_gui_t::infowin_event)
+	cbuffer_t buf;
+	buf.printf( "g,%i,", line->get_handle().get_id() );
+	sched->sprintf_schedule( buf );
+
+	call_tool_init call(TOOL_CHANGE_LINE | SIMPLE_TOOL, buf, 0, player);
+	call.require_owner(line->get_owner());
+	return call;
 }
 
 call_tool_init line_delete(simline_t* line, player_t *player)
@@ -278,10 +306,25 @@ void export_line(HSQUIRRELVM vm)
 	register_method(vm, &line_way_type, "get_waytype", true);
 
 	/**
-	 * Change schedule of line
+	 * Change schedule of line.
+	 * Entries that cannot be stops of this line fail the whole call (nothing is changed).
+	 * The recorded journey, waiting and stopping times are kept for the entries whose
+	 * position and previous position did not change (as in the schedule window).
+	 * @param pl player to pay for the change
+	 * @param sched new schedule
+	 * @returns as all game commands: true when executed at once, false when sent to the server
+	 *          (network game); a failure raises an error (see validate_schedule)
 	 * @ingroup game_cmd
 	 */
 	register_method(vm, line_change_schedule, "change_schedule", true);
+
+	/**
+	 * Check a schedule as change_schedule does, without changing anything.
+	 * @param pl player who would change it
+	 * @param sched the schedule
+	 * @returns null if change_schedule would accept it, else the error it would raise
+	 */
+	register_method(vm, line_validate_schedule, "validate_schedule", true);
 
 	/**
 	 * Delete line
