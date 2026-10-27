@@ -1668,11 +1668,15 @@ void haltestelle_t::reconnect_factories()
 
 void haltestelle_t::set_permissions(uint16 perms)
 {
+	const uint16 old_permissions = permissions;
 	if(  !owner  ||  owner->is_public_service()  ) {
 		permissions = 0xFFFF;
 	}
 	else {
 		permissions = perms | (1 << owner->get_player_nr());
+	}
+	if(  permissions != old_permissions  ) {
+		settings_changed();
 	}
 	if(  rebuilt_schedule_registration()  ) {
 		welt->set_schedule_counter();
@@ -5466,7 +5470,16 @@ void haltestelle_t::fetch_loadable_fresh_goods(vector_tpl<loadable_fresh_goods_t
 }
 
 
+void haltestelle_t::settings_changed() const
+{
+	if(  self.is_bound()  ) {
+		live_changes_t::entity(live_changes_t::K_STATION, self.get_id(), live_changes_t::W_SETTINGS);
+	}
+}
+
+
 void haltestelle_t::toggle_other_player_connection_allowed() {
+	settings_changed();
 	if(  flags & HS_ALLOW_OTHER_PLAYER_CONNECTION  ) {
 		// Switch to per-player mode; keep all currently permitted so the user
 		// can selectively restrict from this point.

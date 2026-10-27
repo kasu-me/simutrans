@@ -45,7 +45,7 @@ public:
 		T_TRACK    = 1 << 1, ///< rail, tram, monorail, maglev, narrow gauge
 		T_WATER    = 1 << 2, ///< canal, river
 		T_AIR      = 1 << 3, ///< runway, taxiway
-		T_SIGN     = 1 << 4, ///< signal, roadsign (added, removed, turned; not its state)
+		T_SIGN     = 1 << 4, ///< signal, roadsign (added, removed, turned, settings; not its state)
 		T_BUILDING = 1 << 5, ///< a building other than T_STATION (houses, factories, monuments ...)
 		T_STATION  = 1 << 6, ///< a stop, depot or other transport building, the name of a stop
 		T_TERRAIN  = 1 << 7, ///< ground: height, slope, water, climate, bridges' and tunnels' grounds
@@ -103,7 +103,8 @@ public:
 		W_VEHICLES = 1 << 6,
 		W_COLOUR   = 1 << 7,
 		W_FIELDS   = 1 << 8,
-		W_MAX_BIT  = 9
+		W_SETTINGS = 1 << 9, ///< a setting of the windows (no load, suspension, memo, permissions, shipment size ...)
+		W_MAX_BIT  = 10
 	};
 
 	/// an entity identified by its id (station, convoy, line, player) changed

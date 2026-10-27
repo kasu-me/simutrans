@@ -23,10 +23,56 @@
 #include "../../descriptor/roadsign_desc.h"
 #include "../../descriptor/way_obj_desc.h"
 #include "../../network/live_state.h"
+#include "../../simconvoi.h"
+#include "../../simfab.h"
+#include "../../simhalt.h"
+#include "../../simline.h"
+#include "../../boden/grund.h"
+#include "../../obj/roadsign.h"
+#include "../../obj/signal.h"
+#include "../../player/finance.h"
+#include "../../player/simplay.h"
 
 #include <memory> // auto_ptr
 
 using namespace script_api;
+
+
+/**
+ * The simple tools that command_x accepts, run by exec(): the tools of the game's windows that
+ * change the game, with the commands (letters of the default_param) exec() allows, NULL: the
+ * default_param has none. The other simple tools (pause, zoom, display, quit, screenshot ...)
+ * concern the screen or the progress of the game, and stay refused.
+ */
+static const struct {
+	uint16 id;
+	const char *commands;
+} exec_tools[] = {
+	{ TOOL_CHANGE_CONVOI        | SIMPLE_TOOL, "nsdyDYretcmbiukao" },
+	{ TOOL_CHANGE_LINE          | SIMPLE_TOOL, "pmoOtuw" },
+	{ TOOL_CHANGE_HALT          | SIMPLE_TOOL, "cpmwl" },
+	{ TOOL_HALT_PERMISSION      | SIMPLE_TOOL, NULL },
+	{ TOOL_CHANGE_FACTORY       | SIMPLE_TOOL, "ds" },
+	{ TOOL_CHANGE_PLAYER        | SIMPLE_TOOL, "c$" },
+	{ TOOL_RECOLOUR_TOOL        | SIMPLE_TOOL, "12" },
+	{ TOOL_SENDING_MONEY        | SIMPLE_TOOL, NULL },
+	{ TOOL_MERGE_PLAYER         | SIMPLE_TOOL, NULL },
+	{ TOOL_UNDO                 | SIMPLE_TOOL, NULL },
+	{ TOOL_CHANGE_TRAFFIC_LIGHT | SIMPLE_TOOL, NULL },
+	// the last eight have functions of their own (set_guide_signal ...)
+	{ TOOL_CHANGE_ROADSIGN      | SIMPLE_TOOL, "rcgDnewsoatdplm" }
+};
+
+/// the entry of exec_tools, NULL if this tool cannot be run by exec()
+static const char *const *exec_tool_commands(uint16 id)
+{
+	for (size_t i = 0; i < lengthof(exec_tools); i++) {
+		if (exec_tools[i].id == id) {
+			return &exec_tools[i].commands;
+		}
+	}
+	return NULL;
+}
 
 
 SQInteger command_constructor(HSQUIRRELVM vm)
@@ -47,6 +93,14 @@ SQInteger command_constructor(HSQUIRRELVM vm)
 				attach_instance(vm, 1, mtool);
 				return 0;
 			}
+		}
+	}
+	else if (exec_tool_commands(id)) {
+		// a tool of the game's windows, see exec
+		if (tool_t *tool = create_tool(id)) {
+			my_tool_t* mtool = new my_tool_t(tool);
+			attach_instance(vm, 1, mtool);
+			return 0;
 		}
 	}
 	return sq_raise_error(vm, "Invalid tool called (%d / 0x%x)", id & 0xfff, id);
@@ -114,6 +168,10 @@ SQInteger param<call_tool_init>::push(HSQUIRRELVM vm, call_tool_init v)
 		// suspend vm for now, after wakeup it returns to the script
 		return sq_suspendvm(vm);
 	}
+	else if (script_vm_t::is_mcp(vm)) {
+		// null on success, as in network games (nwc_tool_t::do_command)
+		return 0;
+	}
 	else {
 		bool res = true;
 		return param<bool>::push(vm, res);
@@ -180,6 +238,402 @@ SQInteger command_work(HSQUIRRELVM vm)
 	else {
 		return param<call_tool_work>::push(vm, call_tool_work(tool, player, pos1, pos2));
 	}
+}
+
+
+// exec: the checks before a tool of the game's windows is called. The tools themselves fail
+// silently (and some check the owner in network games only), so the failures that can be
+// told beforehand are returned with a word: not_found, permission, invalid, funds.
+
+static const char *const ERR_OWNER = "permission: the object belongs to another player";
+
+uint8 get_flags(tool_t *tool);
+
+/// the default_param after its first n fields
+static const char *skip_fields(const char *p, int n)
+{
+	while (*p  &&  n > 0) {
+		if (*p++ == ',') {
+			n--;
+		}
+	}
+	return p;
+}
+
+/// the convoy, line or halt of an id from a default_param, unbound if there is none (set_id does not check the range)
+template<class T> static quickstone_tpl<T> handle_of(uint32 id)
+{
+	quickstone_tpl<T> h;
+	if (id < quickstone_tpl<T>::get_size()) {
+		h.set_id(id);
+	}
+	return h;
+}
+
+/// the player of this number, NULL if there is none
+static player_t *player_of(sint64 nr)
+{
+	return nr >= 0  &&  nr < MAX_PLAYER_COUNT ? welt->get_player((uint8)nr) : NULL;
+}
+
+/**
+ * See tool_change_convoi_t::init.
+ * @param cost what the acting player pays (1/100 credits, negative), 0 if nothing
+ */
+static const char *exec_check_convoy(char cmd, const char *p, player_t *player, sint64 &cost)
+{
+	uint32 id = 0;
+	if (sscanf(p, "%*c,%u", &id) != 1) {
+		return "invalid: expected <command>,<convoy id>[,<value>]";
+	}
+	convoihandle_t cnv = handle_of<convoi_t>(id);
+	if (!cnv.is_bound()) {
+		return "not_found: no convoy with this id";
+	}
+	const char *rest = skip_fields(p, 2);
+	switch (cmd) {
+		case 'o': {
+			// the player the convoy is offered to takes it over and pays for it (convoi_detail_t)
+			player_t *buyer = cnv->get_permit_trade() ? player_of(cnv->get_accept_player_nr()) : NULL;
+			if (buyer == NULL  ||  buyer == cnv->get_owner()) {
+				return "invalid: the convoy is not offered to another player";
+			}
+			if (buyer != player) {
+				return "permission: the convoy is offered to another player";
+			}
+			cost = -cnv->calc_restwert();
+			return NULL;
+		}
+		case 's':
+			// the schedule window sends this only (convoi_t::set_state accepts no others safely)
+			if (atoi(rest) != convoi_t::EDIT_SCHEDULE) {
+				return "invalid: the state can only be set to 1 (EDIT_SCHEDULE)";
+			}
+			break;
+		case 'a':
+			// offering (a cancels a running offer)
+			if (!cnv->get_permit_trade()  &&  player_of(atoi(rest)) == NULL) {
+				return "not_found: no player with this number";
+			}
+			break;
+		case 'D':
+		case 'Y': {
+			sint16 x, y, z;
+			if (sscanf(rest, "%hi,%hi,%hi", &x, &y, &z) != 3) {
+				return "invalid: expected <command>,<convoy id>,<x>,<y>,<z> of the depot";
+			}
+			break;
+		}
+		case 'u':
+			if (atoi(rest) != 0  &&  !cnv->is_suspended()  &&  !cnv->can_be_suspended()) {
+				return "invalid: the convoy cannot be suspended now";
+			}
+			break;
+	}
+	if (!player_t::check_owner(cnv->get_owner(), player)) {
+		return ERR_OWNER;
+	}
+	return NULL;
+}
+
+/// see tool_change_line_t::init
+static const char *exec_check_line(char cmd, const char *p, player_t *player)
+{
+	uint32 id = 0;
+	if (sscanf(p, "%*c,%u", &id) != 1) {
+		return "invalid: expected <command>,<line id>[,<value>]";
+	}
+	if (strchr("Otu", cmd)) {
+		// all lines (or convoys without a line) of the acting player
+		return NULL;
+	}
+	linehandle_t line = handle_of<simline_t>(id);
+	if (!line.is_bound()) {
+		return "not_found: no line with this id";
+	}
+	if (!player_t::check_owner(line->get_owner(), player)) {
+		return ERR_OWNER;
+	}
+	return NULL;
+}
+
+/// see tool_change_halt_t::init and tool_change_permission_t::init
+static const char *exec_check_halt(const char *p, bool permission, player_t *player)
+{
+	// the tool toggles what haltestelle_t::is_allow_unload_longer_convoy returns, always false then
+	if (!permission  &&  *p == 'l'  &&  !welt->get_settings().is_allow_unload_longer_convoy()) {
+		return "invalid: the settings of the game do not allow unloading longer convoys";
+	}
+	uint32 id = 0, perms = 0;
+	if (permission ? sscanf(p, "%u,%u", &id, &perms) != 2 : sscanf(p, "%*c,%u", &id) != 1) {
+		return permission ? "invalid: expected <halt id>,<permission bits>" : "invalid: expected <command>,<halt id>";
+	}
+	if (perms > 0xFFFF) {
+		return "invalid: the permission bits are 16 bits";
+	}
+	halthandle_t halt = handle_of<haltestelle_t>(id);
+	if (!halt.is_bound()) {
+		return "not_found: no halt with this id";
+	}
+	if (!player_t::check_owner(halt->get_owner(), player)) {
+		return ERR_OWNER;
+	}
+	return NULL;
+}
+
+/// see tool_change_factory_t::init
+static const char *exec_check_factory(char cmd, const char *p, player_t *player)
+{
+	koord pos;
+	if (sscanf(p, "%*c,%hi,%hi", &pos.x, &pos.y) != 2) {
+		return "invalid: expected <command>,<x>,<y>[,<value>]";
+	}
+	fabrik_t *fab = fabrik_t::get_fab(pos);
+	if (fab == NULL) {
+		return "not_found: no factory at this position";
+	}
+	if (!player_t::check_owner(fab->get_owner(), player)) {
+		return ERR_OWNER;
+	}
+	// the limits of fabrik_info_t
+	const int size = atoi(skip_fields(p, 3));
+	if (cmd == 's'  &&  (size < 1  ||  size > 200)) {
+		return "invalid: the shipment size is 1 to 200";
+	}
+	return NULL;
+}
+
+/// see tool_change_player_t::init
+static const char *exec_check_player(char cmd, const char *p, player_t *player)
+{
+	int nr = -1, a = 0, b = 0;
+	const int count = sscanf(p, "%*c,%i,%i,%i", &nr, &a, &b);
+	if (count < (cmd == 'c' ? 3 : 2)) {
+		return cmd == 'c' ? "invalid: expected c,<player>,<colour 1>,<colour 2>" : "invalid: expected $,<player>,<amount>";
+	}
+	if (player_of(nr) == NULL) {
+		return "not_found: no player with this number";
+	}
+	if (cmd == 'c'  &&  player_of(nr) != player) {
+		return "permission: only the player can change its colours";
+	}
+	if (cmd == '$'  &&  player != welt->get_public_player()) {
+		return "permission: only the public player can change bank accounts";
+	}
+	return NULL;
+}
+
+/// see tool_recolour_t::init (it does not check the owner itself)
+static const char *exec_check_recolour(const char *p, player_t *player)
+{
+	int nr = -1, colour = 0;
+	if (sscanf(p + 1, "%i,%i", &nr, &colour) != 2) {
+		return "invalid: expected <1 or 2><player>,<colour>";
+	}
+	player_t *target = player_of(nr);
+	if (target == NULL) {
+		return "not_found: no player with this number";
+	}
+	if (!player_t::check_owner(target, player)) {
+		return ERR_OWNER;
+	}
+	return NULL;
+}
+
+/// see tool_merge_player_t::init
+static const char *exec_check_merge(const char *p, player_t *player)
+{
+	int merged = -1, merger = -1;
+	if (sscanf(p, "%i,%i", &merged, &merger) != 2) {
+		return "invalid: expected <merged player>,<merging player>";
+	}
+	if (player != welt->get_public_player()) {
+		return "permission: only the public player can merge players";
+	}
+	if (player_of(merged) == NULL  ||  player_of(merger) == NULL) {
+		return "not_found: no player with this number";
+	}
+	if (merged == merger  ||  player_of(merged) == welt->get_public_player()  ||  player_of(merger) == welt->get_public_player()) {
+		return "invalid: two different players other than the public player are merged";
+	}
+	return NULL;
+}
+
+/// see tool_change_traffic_light_t::init
+static const char *exec_check_traffic_light(const char *p, player_t *player)
+{
+	sint16 x, y, z, which, ticks;
+	if (sscanf(p, "%hi,%hi,%hi,%hi,%hi", &x, &y, &z, &which, &ticks) != 5) {
+		return "invalid: expected <x>,<y>,<z>,<phase>,<ticks>";
+	}
+	const grund_t *gr = welt->lookup(koord3d(x, y, (sint8)z));
+	roadsign_t *rs = gr ? gr->find<roadsign_t>() : NULL;
+	if (rs == NULL) {
+		return "not_found: no road sign at this position";
+	}
+	if (!player_t::check_owner(rs->get_owner(), player)) {
+		return ERR_OWNER;
+	}
+	if (!rs->get_desc()->is_traffic_light()  &&  !rs->get_desc()->is_private_way()) {
+		return "invalid: the sign is no traffic light or private way sign";
+	}
+	if (which < 0  ||  which > 4) {
+		return "invalid: the phase is 0 to 4";
+	}
+	// the limits of trafficlight_info_t (the phases of a private way sign are the players allowed)
+	const sint16 min_ticks = rs->get_desc()->is_traffic_light()  &&  which <= 1 ? 1 : 0;
+	if (ticks < min_ticks  ||  ticks > 255) {
+		return min_ticks ? "invalid: the ticks are 1 to 255" : "invalid: the ticks are 0 to 255";
+	}
+	return NULL;
+}
+
+/// see tool_change_roadsign_t::init
+static const char *exec_check_roadsign(const char *p, player_t *player)
+{
+	sint16 x, y, z, value;
+	char cmd = 0;
+	if (sscanf(p, "%hi,%hi,%hi,%hi,%c", &x, &y, &z, &value, &cmd) != 5) {
+		return "invalid: expected <x>,<y>,<z>,<value>,<command>";
+	}
+	if (strchr(*exec_tool_commands(TOOL_CHANGE_ROADSIGN | SIMPLE_TOOL), cmd) == NULL) {
+		return "invalid: unknown command";
+	}
+	const grund_t *gr = welt->lookup(koord3d(x, y, (sint8)z));
+	if (gr == NULL) {
+		return "not_found: no road sign at this position";
+	}
+	// the tool looks for a signal or a road sign, depending on the command
+	roadsign_t *rs;
+	if (strchr("soamtdpw", cmd)) {
+		rs = gr->find<signal_t>();
+		if (rs == NULL) {
+			return "not_found: no signal at this position";
+		}
+	}
+	else {
+		rs = cmd == 'l'  &&  gr->find<signal_t>() ? gr->find<signal_t>() : gr->find<roadsign_t>();
+		if (rs == NULL) {
+			return "not_found: no road sign at this position";
+		}
+	}
+	if (!player_t::check_owner(rs->get_owner(), player)) {
+		return ERR_OWNER;
+	}
+	const waytype_t wt = rs->get_waytype();
+	switch (cmd) {
+		case 'r':
+			if (rs->get_intersection() == koord3d::invalid) {
+				return "invalid: the sign is not in front of an intersection";
+			}
+			break;
+		case 'c':
+		case 'g':
+		case 'm':
+			if (wt == road_wt  ||  wt == water_wt  ||  wt == air_wt) {
+				return "invalid: not for signs of this waytype";
+			}
+			break;
+		case 'D':
+			if (!rs->get_desc()->is_single_way()) {
+				return "invalid: the sign is no one-way sign";
+			}
+			break;
+		case 'n':
+		case 'e':
+			if (!rs->get_desc()->is_single_way()  ||  !rs->is_detailed_oneway()) {
+				return "invalid: the sign is no detailed one-way sign";
+			}
+			break;
+	}
+	return NULL;
+}
+
+/// the commands of TOOL_SENDING_MONEY: the money goes to the player in the z of the position (money_frame_t)
+static SQInteger exec_sending_money(HSQUIRRELVM vm, tool_t *tool, player_t *player, const char *p)
+{
+	player_t *receiver = NULL;
+	if (sq_gettop(vm) >= 4) {
+		receiver = sq_gettype(vm, 4) == OT_INTEGER ? player_of(param<sint64>::get(vm, 4)) : param<player_t*>::get(vm, 4);
+	}
+	if (receiver == NULL) {
+		return sq_raise_error(vm, "not_found: no player to receive the money");
+	}
+	char *end = NULL;
+	const sint64 amount = strtoll(p, &end, 10);
+	if (end == p  ||  *end  ||  amount <= 0) {
+		return sq_raise_error(vm, "invalid: expected a positive amount (1/100 credits)");
+	}
+	// the check of money_frame_t
+	if (player != welt->get_public_player()  &&  player->get_finance()->get_account_balance() <= amount) {
+		return sq_raise_error(vm, "funds: Insufficient funds!");
+	}
+	call_tool_work call(tool->get_id(), p, get_flags(tool), player, koord3d(0, 0, receiver->get_player_nr()));
+	return param<call_tool_work>::push(vm, call);
+}
+
+
+SQInteger command_exec(HSQUIRRELVM vm)
+{
+	tool_t *tool = param<tool_t*>::get(vm, 1);
+	player_t *pl = param<player_t*>::get(vm, 2);
+	const char *p = param<const char*>::get(vm, 3);
+	if (p == NULL) {
+		p = "";
+	}
+	const uint16 id = tool->get_id();
+	const char *const *commands = exec_tool_commands(id);
+	if (commands == NULL) {
+		return sq_raise_error(vm, "invalid: exec is for the tools of the game's windows, use work (tool 0x%x)", id);
+	}
+	// the acting player, as param<call_tool_init>::push takes it
+	player_t *player = get_my_player(vm);
+	if (player == NULL) {
+		player = pl;
+	}
+	if (player == NULL) {
+		return sq_raise_error(vm, "invalid: no player");
+	}
+	if (id == (TOOL_SENDING_MONEY | SIMPLE_TOOL)) {
+		return exec_sending_money(vm, tool, player, p);
+	}
+
+	// the command letter: the first one, the last field for road signs
+	char cmd = id == (TOOL_CHANGE_ROADSIGN | SIMPLE_TOOL) ? 0 : *p;
+	if (*commands  &&  cmd  &&  strchr(*commands, cmd) == NULL) {
+		return sq_raise_error(vm, "invalid: unknown command '%c'", cmd);
+	}
+	if (*commands  &&  cmd == 0  &&  id != (TOOL_CHANGE_ROADSIGN | SIMPLE_TOOL)) {
+		return sq_raise_error(vm, "invalid: no command");
+	}
+
+	sint64 cost = 0;
+	const char *err = NULL;
+	switch (id & 0xFFF) {
+		case TOOL_CHANGE_CONVOI:        err = exec_check_convoy(cmd, p, player, cost); break;
+		case TOOL_CHANGE_LINE:          err = exec_check_line(cmd, p, player); break;
+		case TOOL_CHANGE_HALT:          err = exec_check_halt(p, false, player); break;
+		case TOOL_HALT_PERMISSION:      err = exec_check_halt(p, true, player); break;
+		case TOOL_CHANGE_FACTORY:       err = exec_check_factory(cmd, p, player); break;
+		case TOOL_CHANGE_PLAYER:        err = exec_check_player(cmd, p, player); break;
+		case TOOL_RECOLOUR_TOOL:        err = exec_check_recolour(p, player); break;
+		case TOOL_MERGE_PLAYER:         err = exec_check_merge(p, player); break;
+		case TOOL_CHANGE_TRAFFIC_LIGHT: err = exec_check_traffic_light(p, player); break;
+		case TOOL_CHANGE_ROADSIGN:      err = exec_check_roadsign(p, player); break;
+		case TOOL_UNDO:
+			if (!player->can_undo()) {
+				err = "invalid: nothing to undo";
+			}
+			break;
+	}
+	if (err) {
+		return sq_raise_error(vm, "%s", err);
+	}
+	call_tool_init call(id, p, get_flags(tool), player);
+	if (cost) {
+		call.require_funds(player, cost);
+	}
+	return param<call_tool_init>::push(vm, call);
 }
 
 tool_t * call_tool_base_t::create_tool()
@@ -616,6 +1070,9 @@ void export_commands(HSQUIRRELVM vm)
 
 	/**
 	 * Constructor to obtain a tool.
+	 * Accepts the general tools and the simple tools of the game's windows that change the game
+	 * (tool_change_convoi ... tool_change_roadsign, see exec), but no tools of the screen or the
+	 * progress of the game.
 	 * @param id id of the tool
 	 * @typemask command_x(tool_ids)
 	 */
@@ -642,6 +1099,35 @@ void export_commands(HSQUIRRELVM vm)
 	 * @typemask string(player_x,coord3d)
 	 */
 	register_function(vm, command_work, "work", -3, "x t|x|y t|x|y");
+	/**
+	 * Calls a tool of the game's windows (the simple tools of tool_ids, see the constructor) with
+	 * the parameter string the windows send to it (its default_param). Failures that can be told
+	 * beforehand raise an error starting with a word: not_found (no such convoy, line, halt, factory,
+	 * player or sign), permission (another player's object), invalid (the parameter string or the
+	 * state does not fit), funds.
+	 *
+	 * The tools and their commands (first letter of @p param; the last field for tool_change_roadsign):
+	 * - tool_change_convoi "<command>,<convoy id>[,<value>]": n s d y D Y r e t c m b i u k a o
+	 *   ('o': the player the convoy is offered to takes it over)
+	 * - tool_change_line "<command>,<line id>[,<value>]": p m o O t u w
+	 * - tool_change_halt "<command>,<halt id>": c p m w l
+	 * - tool_halt_permission "<halt id>,<permission bits>"
+	 * - tool_change_factory "<command>,<x>,<y>[,<value>]": d s
+	 * - tool_change_player "<command>,<player>,...": c $
+	 * - tool_recolour "<1|2><player>,<colour>"
+	 * - tool_sending_money "<amount>" (1/100 credits), with the receiving player as third parameter
+	 * - tool_merge_player "<merged player>,<merging player>" (the public player only)
+	 * - tool_undo ""
+	 * - tool_change_traffic_light "<x>,<y>,<z>,<phase>,<ticks>"
+	 * - tool_change_roadsign "<x>,<y>,<z>,<value>,<command>": r c g D n e w s o a t d p l m
+	 * @note In network games script will be suspended until the command is executed.
+	 * @param pl player to call the tool as
+	 * @param param the parameter string
+	 * @param receiver (tool_sending_money only) the player receiving the money, or its number
+	 * @returns null upon success (tool_sending_money: an error string otherwise)
+	 * @typemask void(player_x,string)
+	 */
+	register_function(vm, command_exec, "exec", -3, "x t|x|y s|o .");
 
 #ifdef DOXYGEN
 	// command_work works with different numbers of parameters.

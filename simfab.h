@@ -746,13 +746,16 @@ public:
 	* no close factory
 	*/
 	const bool is_no_close_factory() {return no_close_factory;}
-	void set_no_close_factory(bool yesno) { no_close_factory = yesno;}
+	void set_no_close_factory(bool yesno) { if(  no_close_factory != yesno  ) { settings_changed(); } no_close_factory = yesno;}
 
 	/**
 	 * get and set shipment size
 	 */
 	const uint32 get_shipment_size() {return shipment_size;}
-	void set_shipment_size(uint32 s) { shipment_size = s; recalc_storage_capacities(); }
+	void set_shipment_size(uint32 s) { if(  shipment_size != s  ) { settings_changed(); } shipment_size = s; recalc_storage_capacities(); }
+
+	/// a setting of the window changed (no close, shipment size): event "settings" of get_changes
+	void settings_changed() const;
 };
 
 #endif

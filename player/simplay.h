@@ -373,6 +373,9 @@ public:
 	 */
 	sint64 undo();
 
+	/// false if there is nothing to undo (undo() may still fail when something was built there since)
+	bool can_undo() const { return !last_built.empty(); }
+
 private:
 	// headquarters stuff
 	sint32 headquarter_level;

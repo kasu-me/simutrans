@@ -1308,7 +1308,12 @@ void nwc_tool_t::do_command(karte_t *welt)
 
 	// callback to script here
 	if (local  &&  callback_id != 0) {
-		if (init) {
+		if (init  &&  script_vm_t::is_mcp(script_vm)) {
+			// the tools of the windows return nothing (null), as without network (param<call_tool_init>::push)
+			const char *none = NULL;
+			suspended_scripts_t::tell_return_value(callback_id, none);
+		}
+		else if (init) {
 			suspended_scripts_t::tell_return_value(callback_id, res);
 		}
 		else {

@@ -1558,7 +1558,8 @@ class tool_sending_money_t : public tool_t {
 public:
 	tool_sending_money_t() : tool_t(TOOL_SENDING_MONEY | SIMPLE_TOOL) {}
 	char const* work(player_t* player, koord3d k) OVERRIDE;
-	bool is_init_network_safe() const OVERRIDE { return false; }
+	// init does nothing (tool_t::init): scripts may call work (command_x::exec)
+	bool is_init_network_safe() const OVERRIDE { return true; }
 	bool is_work_network_safe() const OVERRIDE { return false; }
 };
 

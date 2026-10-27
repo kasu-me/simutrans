@@ -113,6 +113,10 @@ void grund_t::set_text(const char *text)
 		free(txt);
 		clear_flag(has_text);
 	}
+	// the text of a marker (the names of stops are reported by haltestelle_t::set_name)
+	if(  live_changes_t::recording  &&  find<label_t>()  ) {
+		live_changes_t::tile(pos.x, pos.y, live_changes_t::T_OTHER);
+	}
 	set_flag(dirty);
 	welt->set_dirty();
 }

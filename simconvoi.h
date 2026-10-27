@@ -982,7 +982,7 @@ public:
 	 * invalid convoy: invalid coupling condition
 	 */
 	bool is_invalid_convoy() const { return invalid_convoy; }
-	void set_invalid_convoy(bool y) { invalid_convoy = y; }
+	void set_invalid_convoy(bool y) { if(  invalid_convoy != y  ) { settings_changed(); } invalid_convoy = y; }
 
 	/**
 	* loading_level was minimum_loading before. Actual percentage loaded of loadable
@@ -1132,11 +1132,11 @@ public:
 
 	bool get_no_load() const { return no_load; }
 
-	void set_no_load(bool new_no_load) { no_load = new_no_load; }
+	void set_no_load(bool new_no_load) { if(  no_load != new_no_load  ) { settings_changed(); } no_load = new_no_load; }
 
 	bool get_unload_all() const { return unload_all; }
 
-	void set_unload_all(bool new_unload_all) { unload_all = new_unload_all; }
+	void set_unload_all(bool new_unload_all) { if(  unload_all != new_unload_all  ) { settings_changed(); } unload_all = new_unload_all; }
 
 	void must_recalc_data() { recalc_data = true; }
 	void must_recalc_data_front() { recalc_data_front = true; }
@@ -1235,16 +1235,16 @@ public:
 	void register_journey_time();
 	void set_time_last_arrived(uint32 t) { time_last_arrived = t; }
 
-	void toggle_delay_recovery() { in_delay_recovery = !in_delay_recovery; }
+	void toggle_delay_recovery() { settings_changed(); in_delay_recovery = !in_delay_recovery; }
 	bool is_in_delay_recovery() const { return in_delay_recovery; }
 
 	void set_owner(player_t* p) { owner = p; }
 	void trade_convoi();
 	bool permit_trade = false;
-	void set_permit_trade(bool b) { permit_trade = b; }
+	void set_permit_trade(bool b) { if(  permit_trade != b  ) { settings_changed(); } permit_trade = b; }
 	bool get_permit_trade() const { return permit_trade; }
 	uint8 accept_player_nr = 0;
-	void set_accept_player_nr(uint8 n) { accept_player_nr = n; }
+	void set_accept_player_nr(uint8 n) { if(  accept_player_nr != n  ) { settings_changed(); } accept_player_nr = n; }
 	uint8 get_accept_player_nr() const { return accept_player_nr; }
 
 	// returns the available halt length for the given convoy position.
@@ -1312,7 +1312,10 @@ public:
 	uint16 get_max_speed_kmh_of_convoi() const {return max_speed_kmh_of_convoi;}
 	void set_max_speed_kmh_of_convoi(uint16 n);
 	uint16 get_max_balance_speed_convoi() const {return max_balance_speed_convoi;}
-	void set_max_balance_speed_convoi(uint16 n) { max_balance_speed_convoi = n; }
+	void set_max_balance_speed_convoi(uint16 n) { if(  max_balance_speed_convoi != n  ) { settings_changed(); } max_balance_speed_convoi = n; }
+
+	/// a setting of the windows changed (no load, suspension, max speed ...): event "settings" of get_changes
+	void settings_changed() const;
 };
 
 #endif

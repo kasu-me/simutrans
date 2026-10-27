@@ -230,7 +230,7 @@ DBG_MESSAGE("roadsign_t::set_dir()","ribi %i",dir);
 
 void roadsign_t::set_two_ways(bool yesno)
 {
-	ticks_ns = yesno ? 1 : 0;
+	set_setting(ticks_ns, yesno ? 1 : 0);
 	if(  desc->is_signal_type()  &&  !preview  ) {
 		weg_t *weg = welt->lookup(get_pos())->get_weg(desc->get_wtyp()!=tram_wt ? desc->get_wtyp() : track_wt);
 		if(  weg  ) {

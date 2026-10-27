@@ -2087,8 +2087,8 @@ void convoi_t::start()
 		}
 
 		alte_richtung = ribi_t::none;
-		no_load = false;
-		unload_all = false;
+		set_no_load(false);
+		set_unload_all(false);
 
 		state = ROUTING_1;
 
@@ -4864,6 +4864,7 @@ void convoi_t::set_suspension( bool y )
 		if(  !can_be_suspended()  ) {
 			return;
 		}
+		settings_changed();
 		if(  state==LOADING  ) {
 			state = SUSPENSION_LOADING;
 			return;
@@ -4873,6 +4874,7 @@ void convoi_t::set_suspension( bool y )
 		return;
 	}
 	// end suspension
+	settings_changed();
 	if(  state==SUSPENSION_LOADING  ) {
 		state = LOADING;
 		return;
@@ -5464,8 +5466,8 @@ void convoi_t::set_withdraw(bool new_withdraw)
 #if 1
 			// do not touch line bound convois in depots
 			withdraw = false;
-			no_load = false;
-			unload_all = false;
+			set_no_load(false);
+			set_unload_all(false);
 #else
 			// disassemble also line bound convois in depots
 			gr->get_depot()->disassemble_convoi(self, true);
@@ -6981,8 +6983,19 @@ void convoi_t::uncouple_convoy_by_schedule_setting()
 }
 
 void convoi_t::set_max_speed_kmh_of_convoi(uint16 n) {
+	if(  max_speed_kmh_of_convoi != n  ) {
+		settings_changed();
+	}
 	max_speed_kmh_of_convoi = n;
 	must_recalc_speed_limit();
+}
+
+
+void convoi_t::settings_changed() const
+{
+	if(  self.is_bound()  ) {
+		live_changes_t::entity(live_changes_t::K_CONVOY, self.get_id(), live_changes_t::W_SETTINGS);
+	}
 }
 
 

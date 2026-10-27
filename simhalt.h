@@ -661,18 +661,27 @@ public:
 
 	// get and set treatable goods type
 	void set_no_handle_pax( bool n ) {
+		if(  n != is_no_handle_pax()  ) {
+			settings_changed();
+		}
 		n? flags|=HS_NO_HANDLE_PAX: flags&=~HS_NO_HANDLE_PAX; 
 		rebuild_connections();
 		rebuild_linked_connections();
 		rebuild_connected_components();
 	}
 	void set_no_handle_post( bool n ) {
+		if(  n != is_no_handle_post()  ) {
+			settings_changed();
+		}
 		n? flags|=HS_NO_HANDLE_POST: flags&=~HS_NO_HANDLE_POST;
 		rebuild_connections();
 		rebuild_linked_connections();
 		rebuild_connected_components();
 	}
 	void set_no_handle_ware( bool n ) {
+		if(  n != is_no_handle_ware()  ) {
+			settings_changed();
+		}
 		n? flags|=HS_NO_HANDLE_WARE: flags&=~HS_NO_HANDLE_WARE;
 		rebuild_connections();
 		rebuild_linked_connections();
@@ -1044,7 +1053,15 @@ public:
 
 	// allow unloading from longer convoy
 	bool const is_allow_unload_longer_convoy();
-	void set_allow_unload_longer_convoy(const bool y) { y? flags|=HS_ALLOW_UNLOAD_LONGER_CONVOY: flags&=~HS_ALLOW_UNLOAD_LONGER_CONVOY; }
+	void set_allow_unload_longer_convoy(const bool y) {
+		if(  y != ((flags&HS_ALLOW_UNLOAD_LONGER_CONVOY)!=0)  ) {
+			settings_changed();
+		}
+		y? flags|=HS_ALLOW_UNLOAD_LONGER_CONVOY: flags&=~HS_ALLOW_UNLOAD_LONGER_CONVOY;
+	}
+
+	/// a setting of the windows changed (goods handled, permissions ...): event "settings" of get_changes
+	void settings_changed() const;
 };
 
 ENUM_BITSET(haltestelle_t::stationtyp)

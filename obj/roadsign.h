@@ -67,6 +67,25 @@ protected:
 	const roadsign_desc_t *desc;
 
 	ribi_t::ribi calc_mask() const { return ribi_t::is_single(dir) ? dir : (ribi_t::ribi)ribi_t::none; }
+
+	/// a setting changed (phases, flags ...): its tile in get_changes (T_SIGN); no virtual call (also from constructors)
+	void settings_changed() const { if(  !preview  ) { live_changes_t::tile(get_pos().x, get_pos().y, live_changes_t::T_SIGN); } }
+
+	void set_choose_sign_flag(uint16 flag, bool tf) {
+		const uint16 f = tf ? (uint16)(choose_sign_flag | flag) : (uint16)(choose_sign_flag & ~flag);
+		if(  f != choose_sign_flag  ) {
+			settings_changed();
+		}
+		choose_sign_flag = f;
+	}
+
+	/// sets a phase, the lane affinity or the margin, reporting the change
+	void set_setting(uint8 &field, uint8 value) {
+		if(  field != value  ) {
+			settings_changed();
+		}
+		field = value;
+	}
 public:
 	enum signalstate {
 		STATE_RED    = 0,
@@ -148,7 +167,7 @@ public:
 	// change the phases of the traffic lights
 	uint8 get_ticks_ns() const { return ticks_ns; }
 	void set_ticks_ns(uint8 ns) {
-		ticks_ns = ns;
+		set_setting(ticks_ns, ns);
 		// To prevent overflow in ticks_offset when rotating
 		if (ticks_ow > 256-ticks_ns - ticks_yellow_ns - ticks_yellow_ow ) {
 			ticks_ow = (uint8)(256-ticks_ns-ticks_yellow_ns-ticks_yellow_ow);
@@ -156,7 +175,7 @@ public:
 	}
 	uint8 get_ticks_ow() const { return ticks_ow; }
 	void set_ticks_ow(uint8 ow) {
-		ticks_ow = ow;
+		set_setting(ticks_ow, ow);
 		// To prevent overflow in ticks_offset when rotating
 		if (ticks_ns > 256-ticks_ow - ticks_yellow_ns-ticks_yellow_ow ) {
 			ticks_ns = (uint8)(256-ticks_ow-ticks_yellow_ns-ticks_yellow_ow);
@@ -164,7 +183,7 @@ public:
 	}
 	uint8 get_ticks_yellow_ns() const { return ticks_yellow_ns; }
 	void set_ticks_yellow_ns(uint8 yellow) {
-		ticks_yellow_ns = yellow;
+		set_setting(ticks_yellow_ns, yellow);
 		// To prevent overflow in ticks_offset when rotating
 		if (ticks_yellow_ns > 256-ticks_ns - ticks_ow - ticks_yellow_ow) {
 		  ticks_yellow_ns = (uint8)(256-ticks_ns-ticks_ow-ticks_yellow_ow);
@@ -172,20 +191,20 @@ public:
 	}
 	uint8 get_ticks_yellow_ow() const { return ticks_yellow_ow; }
 	void set_ticks_yellow_ow(uint8 yellow) {
-		ticks_yellow_ow = yellow;
+		set_setting(ticks_yellow_ow, yellow);
 		// To prevent overflow in ticks_offset when rotating
 		if (ticks_yellow_ow > 256-ticks_ns - ticks_ow - ticks_yellow_ns) {
 		  ticks_yellow_ow = (uint8)(256-ticks_ns-ticks_ow-ticks_yellow_ns);
 		}
 	}
 	uint8 get_ticks_offset() const { return ticks_offset; }
-	void set_ticks_offset(uint8 offset) { ticks_offset = offset; }
+	void set_ticks_offset(uint8 offset) { set_setting(ticks_offset, offset); }
 
 	inline void set_image( image_id b ) { image = b; }
 	image_id get_image() const OVERRIDE { return image; }
 
 	uint8 get_lane_affinity() const { return lane_affinity; }
-	void set_lane_affinity(uint8 lf) { lane_affinity = lf; }
+	void set_lane_affinity(uint8 lf) { set_setting(lane_affinity, lf); }
 	const koord3d get_intersection() const;
 
 	/**
@@ -194,25 +213,25 @@ public:
 	image_id get_front_image() const OVERRIDE { return foreground_image; }
 	
 	bool is_guide_signal() const { return (choose_sign_flag&guide_signal)>0; }
-	void set_guide_signal(bool tf) { tf? choose_sign_flag|=guide_signal:choose_sign_flag&=~guide_signal; }	
+	void set_guide_signal(bool tf) { set_choose_sign_flag(guide_signal, tf); }
 	bool is_choose_signal() const { return (choose_sign_flag&choose_signal)>0; }
-	void set_choose_signal(bool tf) { tf? choose_sign_flag|=choose_signal:choose_sign_flag&=~choose_signal; }
+	void set_choose_signal(bool tf) { set_choose_sign_flag(choose_signal, tf); }
 	bool is_advance_to_end() const { return (choose_sign_flag&advance_to_end)>0; }
-	void set_advance_to_end(bool tf) { tf? choose_sign_flag|=advance_to_end:choose_sign_flag&=~advance_to_end; }
+	void set_advance_to_end(bool tf) { set_choose_sign_flag(advance_to_end, tf); }
 	bool is_flag_end_of_choose() const { return (choose_sign_flag&end_of_choose)>0; }
-	void set_end_of_choose(bool tf) { tf? choose_sign_flag|=end_of_choose:choose_sign_flag&=~end_of_choose; }
+	void set_end_of_choose(bool tf) { set_choose_sign_flag(end_of_choose, tf); }
 	bool is_flag_end_of_guide() const { return (choose_sign_flag&end_of_guide)>0; }
-	void set_end_of_guide(bool tf) { tf? choose_sign_flag|=end_of_guide:choose_sign_flag&=~end_of_guide; }
+	void set_end_of_guide(bool tf) { set_choose_sign_flag(end_of_guide, tf); }
 	bool is_stop_before_check() const { return (choose_sign_flag&stop_before_check)>0; }
-	void set_stop_before_check(bool tf) { tf? choose_sign_flag|=stop_before_check:choose_sign_flag&=~stop_before_check; }
+	void set_stop_before_check(bool tf) { set_choose_sign_flag(stop_before_check, tf); }
 	bool is_skip_default_route() const { return (choose_sign_flag&skip_default_route)>0; }
-	void set_skip_default_route(bool tf) { tf? choose_sign_flag|=skip_default_route:choose_sign_flag&=~skip_default_route; }
+	void set_skip_default_route(bool tf) { set_choose_sign_flag(skip_default_route, tf); }
 	bool is_start_signal() const { return (choose_sign_flag&start_signal)>0; }
-	void set_start_signal(bool tf) { tf? choose_sign_flag|=start_signal:choose_sign_flag&=~start_signal; }
+	void set_start_signal(bool tf) { set_choose_sign_flag(start_signal, tf); }
 	bool is_length_based() const { return (choose_sign_flag&length_based)>0; }
-	void set_length_based(bool tf) { tf? choose_sign_flag|=length_based:choose_sign_flag&=~length_based; }
+	void set_length_based(bool tf) { set_choose_sign_flag(length_based, tf); }
 	bool is_detailed_oneway() const;
-	void set_detailed_oneway(bool tf) { tf? choose_sign_flag|=detailed_oneway:choose_sign_flag&=~detailed_oneway; }
+	void set_detailed_oneway(bool tf) { set_choose_sign_flag(detailed_oneway, tf); }
 
 	// When detailed_oneway is set, ticks_ns/ticks_ow store 4-bit packed allowed-exit ribis per entry direction.
 	// ticks_ns bits 0-3 = allowed exits for entry ribi N, bits 4-7 = allowed exits for entry ribi S.
@@ -228,10 +247,10 @@ public:
 	}
 	void set_detailed_oneway_out_ribi(ribi_t::ribi entry_ribi, uint8 allowed_out) {
 		switch(entry_ribi) {
-			case ribi_t::north: ticks_ns = (ticks_ns & 0xF0) | (allowed_out & 0xF); break;
-			case ribi_t::south: ticks_ns = (ticks_ns & 0x0F) | ((allowed_out & 0xF) << 4); break;
-			case ribi_t::east:  ticks_ow = (ticks_ow & 0xF0) | (allowed_out & 0xF); break;
-			case ribi_t::west:  ticks_ow = (ticks_ow & 0x0F) | ((allowed_out & 0xF) << 4); break;
+			case ribi_t::north: set_setting(ticks_ns, (ticks_ns & 0xF0) | (allowed_out & 0xF)); break;
+			case ribi_t::south: set_setting(ticks_ns, (ticks_ns & 0x0F) | ((allowed_out & 0xF) << 4)); break;
+			case ribi_t::east:  set_setting(ticks_ow, (ticks_ow & 0xF0) | (allowed_out & 0xF)); break;
+			case ribi_t::west:  set_setting(ticks_ow, (ticks_ow & 0x0F) | ((allowed_out & 0xF) << 4)); break;
 			default: break;
 		}
 	}
@@ -251,7 +270,7 @@ public:
 
 	uint16 const get_choose_sign_flag() {return choose_sign_flag;}
 	uint8 const get_margin_length() {return choose_signal_margin_length;}
-	void set_margin_length(uint8 i) {choose_signal_margin_length=i;}
+	void set_margin_length(uint8 i) { set_setting(choose_signal_margin_length, i); }
 	/**
 	* draw the part overlapping the vehicles
 	* (needed to get the right offset even on hills)

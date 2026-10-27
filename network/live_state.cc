@@ -96,7 +96,7 @@ const uint8 CHANGE_MONTH = 252;
 const char *const ENTITY_TYPES[live_changes_t::K_MAX] = { "station", "convoy", "line", "factory", "city", "player", "depot" };
 
 /// the names of the bits of "what", by bit
-const char *const WHAT_NAMES[live_changes_t::W_MAX_BIT] = { "new", "gone", "name", "tiles", "line", "schedule", "vehicles", "colour", "fields" };
+const char *const WHAT_NAMES[live_changes_t::W_MAX_BIT] = { "new", "gone", "name", "tiles", "line", "schedule", "vehicles", "colour", "fields", "settings" };
 
 /**
  * One entry of the change log: a tile (typ 0, id = kind bits), the state of a signal, roadsign
