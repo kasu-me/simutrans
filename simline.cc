@@ -159,6 +159,10 @@ void simline_t::set_name(const char *new_name)
 
 void simline_t::set_memo(const char* new_memo)
 {
+	const char *old_memo = get_memo();
+	if(  strcmp(old_memo ? old_memo : "", new_memo ? new_memo : "") != 0  ) {
+		live_changes_t::entity(live_changes_t::K_LINE, self.get_id(), live_changes_t::W_SETTINGS);
+	}
 	memo = new_memo;
 }
 
@@ -568,7 +572,11 @@ void simline_t::recalc_catg_index()
 
 void simline_t::set_withdraw( bool yes_no )
 {
+	const bool old_withdraw = withdraw;
 	withdraw = yes_no && !line_managed_convoys.empty();
+	if(  withdraw != old_withdraw  ) {
+		live_changes_t::entity(live_changes_t::K_LINE, self.get_id(), live_changes_t::W_SETTINGS);
+	}
 	// convois in depots will be immediately destroyed, thus we go backwards
 	for (size_t i = line_managed_convoys.get_count(); i-- != 0;) {
 		line_managed_convoys[i]->set_no_load(yes_no); // must be first, since set withdraw might destroy convoi if in depot!

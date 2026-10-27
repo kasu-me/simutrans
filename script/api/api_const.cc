@@ -118,6 +118,20 @@ void export_global_constants(HSQUIRRELVM vm)
 	enum_slot(vm, "tool_exec_two_click_script", TOOL_EXEC_TWO_CLICK_SCRIPT | GENERAL_TOOL);
 	/// remove bridge pillars only
 	enum_slot(vm, "tool_remove_pillar", TOOL_REMOVE_PILLAR | GENERAL_TOOL);
+	/// add a message to the messages of the game (param: "<message type>,<text>")
+	enum_slot(vm, "tool_add_message", TOOL_ADD_MESSAGE | GENERAL_TOOL);
+	/// remove the goods waiting at a stop
+	enum_slot(vm, "tool_extinguish_waiting_goods", TOOL_EXTINGUISH_WAITING_GOODS | GENERAL_TOOL);
+	/// change the city a building belongs to
+	enum_slot(vm, "tool_change_city_of_building", TOOL_CHANGE_CITY_OF_BUILDING | GENERAL_TOOL);
+	/// pick the tool that built an object
+	enum_slot(vm, "tool_pipette", TOOL_PIPETTE | GENERAL_TOOL);
+	/// give a stop a new name
+	enum_slot(vm, "tool_recreate_halt_name", TOOL_RECREATE_HALT_NAME | GENERAL_TOOL);
+	/// change the settings of roads (overtaking mode, street flags) along a route
+	enum_slot(vm, "tool_change_way_settings", TOOL_CHANGE_WAY_SETTINGS | GENERAL_TOOL);
+	/// change the vehicle offset of ways along a route
+	enum_slot(vm, "tool_change_way_offset", TOOL_CHANGE_WAY_OFFSET | GENERAL_TOOL);
 
 	// simple tools
 	/// increase industry density
@@ -130,6 +144,31 @@ void export_global_constants(HSQUIRRELVM vm)
 	enum_slot(vm, "tool_fill_trees", TOOL_FILL_TREES | SIMPLE_TOOL);
 	/// set traffic level
 	enum_slot(vm, "tool_set_traffic_level", TOOL_TRAFFIC_LEVEL | SIMPLE_TOOL);
+	// the tools of the game's windows, run by command_x::exec
+	/// undo the last way construction
+	enum_slot(vm, "tool_undo", TOOL_UNDO | SIMPLE_TOOL);
+	/// change a convoy (command_x::exec)
+	enum_slot(vm, "tool_change_convoi", TOOL_CHANGE_CONVOI | SIMPLE_TOOL);
+	/// change a line (command_x::exec)
+	enum_slot(vm, "tool_change_line", TOOL_CHANGE_LINE | SIMPLE_TOOL);
+	/// change a player's colours or bank account (command_x::exec)
+	enum_slot(vm, "tool_change_player", TOOL_CHANGE_PLAYER | SIMPLE_TOOL);
+	/// change the phases of a traffic light or the players of a private way sign (command_x::exec)
+	enum_slot(vm, "tool_change_traffic_light", TOOL_CHANGE_TRAFFIC_LIGHT | SIMPLE_TOOL);
+	/// change the settings of a road sign or signal (command_x::exec)
+	enum_slot(vm, "tool_change_roadsign", TOOL_CHANGE_ROADSIGN | SIMPLE_TOOL);
+	/// send money to another player (command_x::exec)
+	enum_slot(vm, "tool_sending_money", TOOL_SENDING_MONEY | SIMPLE_TOOL);
+	/// change a player's colour (command_x::exec)
+	enum_slot(vm, "tool_recolour", TOOL_RECOLOUR_TOOL | SIMPLE_TOOL);
+	/// merge a player into another (command_x::exec)
+	enum_slot(vm, "tool_merge_player", TOOL_MERGE_PLAYER | SIMPLE_TOOL);
+	/// change the settings of a stop (command_x::exec)
+	enum_slot(vm, "tool_change_halt", TOOL_CHANGE_HALT | SIMPLE_TOOL);
+	/// change the settings of a factory (command_x::exec)
+	enum_slot(vm, "tool_change_factory", TOOL_CHANGE_FACTORY | SIMPLE_TOOL);
+	/// set the players allowed to use a stop (command_x::exec)
+	enum_slot(vm, "tool_halt_permission", TOOL_HALT_PERMISSION | SIMPLE_TOOL);
 
 	// tools to open certain windows
 	/// open factory editor window

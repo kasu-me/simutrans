@@ -1167,6 +1167,12 @@ void fabrik_t::set_name(const char *new_name)
 }
 
 
+void fabrik_t::settings_changed() const
+{
+	live_changes_t::entity_at(live_changes_t::K_FACTORY, pos, live_changes_t::W_SETTINGS);
+}
+
+
 void fabrik_t::rdwr(loadsave_t *file)
 {
 	xml_tag_t f( file, "fabrik_t" );

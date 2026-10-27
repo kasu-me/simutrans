@@ -316,6 +316,21 @@ void add_halt_area(std::string &out, karte_t *welt, halthandle_t halt)
 	out += ']';
 }
 
+/// integers (true: 1) as a JSON array
+void add_int_array(std::string &out, std::initializer_list<sint64> values)
+{
+	out += '[';
+	bool first = true;
+	for(  sint64 v : values  ) {
+		if(  !first  ) {
+			out += ',';
+		}
+		first = false;
+		add_int(out, v);
+	}
+	out += ']';
+}
+
 const char *const KINDS[] = { "halts", "convoys", "lines", "factories", "cities", "players", "depots" };
 
 void info_halts(rows_t &rows, id_filter_t &ids, karte_t *welt, info_level_t level)
@@ -334,7 +349,7 @@ void info_halts(rows_t &rows, id_filter_t &ids, karte_t *welt, info_level_t leve
 			rows.add(key_of(halt.get_id()), head, "", "");
 			continue;
 		}
-		// [id, name, owner, [[x, y, z], ...], station type bits, enabled bits (1 passengers, 2 mail, 4 goods), hash]
+		// [id, name, owner, [[x, y, z], ...], station type bits, enabled bits (1 passengers, 2 mail, 4 goods), settings, hash]
 		add_str(head, halt->get_name());
 		head += ',';
 		add_int(head, player_nr_of(halt->get_owner()));
@@ -351,6 +366,16 @@ void info_halts(rows_t &rows, id_filter_t &ids, karte_t *welt, info_level_t leve
 		add_int(head, halt->get_station_type());
 		head += ',';
 		add_int(head, (halt->get_pax_enabled() ? 1 : 0) | (halt->get_mail_enabled() ? 2 : 0) | (halt->get_ware_enabled() ? 4 : 0));
+		// the settings of the window (tool_change_halt_t, tool_change_permission_t)
+		head += ',';
+		add_int_array(head, {
+			halt->is_allow_other_player_connection(),
+			halt->is_no_handle_pax(),
+			halt->is_no_handle_post(),
+			halt->is_no_handle_ware(),
+			halt->is_allow_unload_longer_convoy(),
+			halt->get_permissions()
+		});
 		rows.add(key_of(halt.get_id()), head, "", "");
 	}
 }
@@ -362,7 +387,7 @@ void info_convoys(rows_t &rows, id_filter_t &ids, karte_t *welt, info_level_t le
 		if(  !cnv.is_bound()  ||  !ids.wants(cnv.get_id())  ) {
 			continue;
 		}
-		// [id, name, owner, line (-1 none), state, home depot [x, y, z], [vehicle types (vnames index)], schedule, vtype, hash]
+		// [id, name, owner, line (-1 none), state, home depot [x, y, z], [vehicle types (vnames index)], schedule, vtype, settings, hash]
 		head = "[";
 		add_int(head, cnv.get_id());
 		head += ',';
@@ -394,6 +419,19 @@ void info_convoys(rows_t &rows, id_filter_t &ids, karte_t *welt, info_level_t le
 		// the obj_t::typ of the front vehicle (road_vehicle, rail_vehicle, ...), -1 without vehicles
 		std::string vtype = ",";
 		add_int(vtype, cnv->get_vehicle_count() > 0 ? (sint64)cnv->front()->get_typ() : -1);
+		// the settings of the windows (tool_change_convoi_t); the player the convoy is offered to, 0 if it is not
+		vtype += ',';
+		add_int_array(vtype, {
+			cnv->get_no_load(),
+			cnv->get_unload_all(),
+			cnv->is_suspended(),
+			cnv->is_in_delay_recovery(),
+			cnv->get_max_speed_kmh_of_convoi(),
+			cnv->get_max_balance_speed_convoi(),
+			cnv->is_invalid_convoy(),
+			cnv->get_permit_trade(),
+			cnv->get_permit_trade() ? cnv->get_accept_player_nr() : 0
+		});
 		tail += vtype;
 		basic_tail += vtype;
 		rows.add(key_of(cnv.get_id()), head, current, tail, level == LEVEL_FULL ? &basic_tail : NULL);
@@ -415,7 +453,7 @@ void info_lines(rows_t &rows, id_filter_t &ids, karte_t *welt, info_level_t leve
 			if(  !ids.wants(line.get_id())  ) {
 				continue;
 			}
-			// [id, name, owner, line type, colour (palette index), schedule, [convoy ids], hash]
+			// [id, name, owner, line type, colour (palette index), schedule, [convoy ids], [memo, withdraw], hash]
 			head = "[";
 			add_int(head, line.get_id());
 			head += ',';
@@ -439,6 +477,10 @@ void info_lines(rows_t &rows, id_filter_t &ids, karte_t *welt, info_level_t leve
 				first = false;
 				add_int(convoys, cnv.get_id());
 			}
+			convoys += "],[";
+			add_str(convoys, line->get_memo());
+			convoys += ',';
+			add_int(convoys, line->get_withdraw() ? 1 : 0);
 			convoys += ']';
 			tail += convoys;
 			if(  level == LEVEL_FULL  ) {
@@ -472,7 +514,7 @@ void info_factories(rows_t &rows, id_filter_t &ids, karte_t *welt)
 		if(  !ids.wants(pos.x, pos.y, pos.z, 3)  ) {
 			continue;
 		}
-		// [x, y, z, name (pak), name given by a player ("" none), owner, base production, [[field x, y, class], ...], [input goods], [output goods], hash]
+		// [x, y, z, name (pak), name given by a player ("" none), owner, base production, [[field x, y, class], ...], [input goods], [output goods], [no close, shipment size], hash]
 		head = "[";
 		head += key_of(pos);
 		head += ',';
@@ -501,6 +543,8 @@ void info_factories(rows_t &rows, id_filter_t &ids, karte_t *welt)
 		add_goods_names(head, fab->get_input());
 		head += ',';
 		add_goods_names(head, fab->get_output());
+		head += ',';
+		add_int_array(head, { fab->is_no_close_factory(), (sint64)fab->get_shipment_size() });
 		rows.add(key_of(pos), head, "", "");
 	}
 }

@@ -174,7 +174,7 @@ public:
 
 	// vehicle offset value for left/right
 	// Must call this value by wegbauer_t (not call by gui)!
-	void set_vehicle_offset(sint8 s) { vehicle_offset = s; }
+	void set_vehicle_offset(sint8 s) { if(  vehicle_offset != s  ) { live_changes_t::tile(get_pos().x, get_pos().y, change_kind()); } vehicle_offset = s; }
 	// Return offset value only. For info().
 	sint8 get_vehicle_offset() const { return vehicle_offset>>1; }
 	// Return offset mode only. For info().

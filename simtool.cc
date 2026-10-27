@@ -9689,8 +9689,9 @@ bool tool_change_convoi_t::init( player_t *player )
 		dbg->warning("tool_change_convoi_t::init", "no convoy with id=%d found", convoi_id);
 		return false;
 	}
-	// ownership check for network games
-	if (cnv.is_bound()  &&  env_t::networkmode  &&  !player_t::check_owner(cnv->get_owner(), player)) {
+	// ownership check for network games (the player the convoy is offered to may take it over)
+	const bool buyer = tool=='o'  &&  player  &&  cnv->get_permit_trade()  &&  cnv->get_accept_player_nr()==player->get_player_nr();
+	if (cnv.is_bound()  &&  env_t::networkmode  &&  !player_t::check_owner(cnv->get_owner(), player)  &&  !buyer) {
 		return false;
 	}
 
@@ -9814,6 +9815,7 @@ bool tool_change_convoi_t::init( player_t *player )
 					if(  new_state==convoi_t::EDIT_SCHEDULE  ) {
 						cnv->get_schedule()->start_editing();
 					}
+					cnv->settings_changed();
 				}
 			}
 			break;
@@ -9892,10 +9894,10 @@ bool tool_change_convoi_t::init( player_t *player )
 				cnv->set_permit_trade(false);
 			}
 			else{
-				uint8 nr = 0;
+				int nr = 0;
 				sscanf( p, "%d", &nr );
 				cnv->set_permit_trade(true);
-				cnv->set_accept_player_nr(nr);
+				cnv->set_accept_player_nr((uint8)nr);
 			}
 		}
 		break;
@@ -10216,8 +10218,8 @@ bool tool_change_line_t::init( player_t *player )
 				array_tpl<vector_tpl<convoihandle_t> > cnvs(welt->convoys().get_count());
 				uint32 max_cnvs=0;
 				FOR(vector_tpl<convoihandle_t>, cnv, welt->convoys()) {
-					// only check lineless convoys
-					if(  !cnv->get_line().is_bound()  ) {
+					// only check lineless convoys of this player (with a schedule)
+					if(  !cnv->get_line().is_bound()  &&  cnv->get_owner()==player  &&  cnv->get_schedule()  ) {
 						bool found = false;
 						// check, if already matches existing convois schedule
 						for(  uint32 i=0;  i<max_cnvs  &&  !found;  i++  ) {
