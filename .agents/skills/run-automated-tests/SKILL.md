@@ -13,6 +13,7 @@ You run automated tests for Simutrans OTRP.
 
 - **Build**: Read `.agents/skills/build/SKILL.md`. Do this first — a stale `sim.exe` (older than the `.o` files it links) will silently run old code and produce misleading test results. Run the full `make -j32` build (not `make build/default/sim.exe` directly — targeting the exe path alone can report "Nothing to be done" without relinking).
 - **Stage the binary**: `SIM_BINARY=./sim` below refers to a copy at the repo root, not `build/default/sim.exe` directly — copy it after every rebuild: `cp build/default/sim.exe ./sim`
+  - **On Windows**, copy it as `./sim.exe` instead (`cp build/default/sim.exe ./sim.exe`) and pass `SIM_BINARY=./sim.exe` in the commands below. The runner then launches each game minimised without activating its window, so a run does not keep stealing the keyboard focus from other work. The extensionless `./sim` still runs, but every test window comes to the front.
 - **Test workdir setup** (one-time, or whenever `${SIMUTRANS_TEST_BASE}` doesn't exist): extract `tests/simutrans-test-base.zip` to a directory and export `SIMUTRANS_TEST_BASE` to point at it, e.g.:
   ```bash
   unzip -o tests/simutrans-test-base.zip -d /tmp/simutrans-test-base
