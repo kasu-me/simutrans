@@ -13,9 +13,9 @@
 | キー | 値 |
 | --- | --- |
 | 起点コミット (base) | `d01a02edf26e0faf1c3542d4d854fe6ce52cc9f8` (v58_3) |
-| 追跡済み最新コミット (head) | `11a7c338b718346d482da0780e7465838909214d` (increment OTRP_VERSION_MINOR / v62_3) |
-| 対象コミット数 | 109 |
-| 最終更新 | 2026-10-19 |
+| 追跡済み最新コミット (head) | `f491c6adf7132f399696c62ecbd695065759e907` (increment OTRP_VERSION_MINOR / v62_5) |
+| 対象コミット数 | 130 |
+| 最終更新 | 2026-10-27 |
 
 > `head` より新しい本家コミットが増えた場合は skill `update-upstream-status` で追記する。
 
@@ -76,6 +76,12 @@
 | FEAT-26 | 新機能追加 | スケジュール編集で選択した停留所を先頭にする (Make first) | 取り込み不要 |
 | FEAT-27 | 新機能追加 | 市街建築物の選択状態をプリセットとして保存/読込する | 未取り込み |
 | FEAT-28 | 新機能追加 | makeobj 60.12 形式の pak 読み込み (建物 v12・標識の追加画像リスト・近接斜め画像) | 未取り込み |
+| FEAT-29 | 新機能追加 | 建物の高さ (`height_clearance`) を使った高架・橋・建物配置の建設判定 | 未取り込み |
+| FEAT-30 | 新機能追加 | 着陸待ちの航空機が空いている別の滑走路を選ぶ (choose runway) | 未取り込み |
+| FEAT-31 | 新機能追加 | 誘導路・滑走路 (`air_wt`) で私有道路標識を有効にする | 未取り込み |
+| FEAT-32 | 新機能追加 | 表示設定ダイアログにキー設定タブを追加 (`menuconf.tab` と同期) | 未取り込み |
+| FEAT-33 | 新機能追加 | サーバー接続ダイアログのアドレス入力欄の内容をローカルに保存する | 未取り込み |
+| FEAT-34 | 新機能追加 | 信号情報ウィンドウで「信号を撤去」ボタンを区切り線の下・右寄せに配置 | 未取り込み |
 | FIX-01 | バグ修正 | choose 標識/choose 区間終端が経路上にある場合の判定 | 取り込み済み |
 | FIX-02 | バグ修正 | pak の `clip_below` 設定の読み込み順序 | 取り込み済み |
 | FIX-03 | バグ修正 | 一方通行詳細設定の waytype 判定漏れと経路喪失時の異常終了 | 取り込み済み |
@@ -95,7 +101,12 @@
 | FIX-17 | バグ修正 | シンプルツール番号のずれ (`TOOL_HALT_PERMISSION` を enum 末尾へ移動) | 取り込み済み |
 | FIX-18 | バグ修正 | ズーム時・坂の境界で地面画像が隣接タイルの道を上書きする描画不具合 | 取り込み済み |
 | FIX-19 | バグ修正 | 複数タイルの建物が道・停留所・他の建物と重なって建つ/壊れた断片が残る | 取り込み済み |
-| MISC-01 | その他 | 本家バージョン番号のインクリメント (v59〜v62_3) | 取り込み不要 |
+| FIX-20 | バグ修正 | 編成が載っているタイルを経路に補う処理 (`insert_route_convoy_on()`) が同じタイルを再探索して無限ループする | 未取り込み |
+| FIX-21 | バグ修正 | ロード時に記述子が見つからなかった建物を削除する際の異常終了 | 未取り込み |
+| FIX-22 | バグ修正 | 連結編成の発車時刻枠 (departure slot) の予約・解放の不整合 | 未取り込み |
+| FIX-23 | バグ修正 | 編成の停車駅一覧で車庫エントリに停車長を表示する/現在の停車駅番号が範囲外のとき異常終了する | 未取り込み |
+| FIX-24 | バグ修正 | 航空機が長い停留所から前進/横向きに出発しても押し戻し (pushback) 扱いになる | 未取り込み |
+| MISC-01 | その他 | 本家バージョン番号のインクリメント (v59〜v62_5) | 取り込み不要 |
 | MISC-02 | その他 | 日本語訳 `ja.OTRP.tab` の更新 (v59〜v62_2分) | 未取り込み |
 | MISC-03 | その他 | SDL3 バックエンド対応と CI のビルド構成更新 (Ubuntu 分は後に削除) | 未取り込み |
 | MISC-04 | その他 | `obj_t::finish_rd()` にセーブの OTRP バージョンを渡す基盤変更 | 未取り込み |
@@ -520,6 +531,8 @@
   - `1588dba70` BUG FIX: load failed (#745) — 後続修正 (ロード時の予約処理)
   - `280ced3e8` BUG FIX: fix crash bug of v62 (#747) — 後続修正 (片脚が1方向のままのタイルのロード失敗等。**コミットの一部のみ**。残りは FIX-10)
   - `891191546` add grund_t::has_two_same_waytype_ways() and fix vehicle_t::get_ribi() (#751) — 後続修正 (経路探索・予約・`get_ribi()` の同一 waytype 2脚対応。**コミットの一部のみ**。残りは FIX-11)
+  - `20710ff85` BUG FIX: merge two ways in same waytype (#780) — 後続修正 (2脚の統合条件・所有者/停留所/市道の扱い)
+  - `c99642b40` BUG FIX: electricity check for two-way tile update (#787) — 後続修正 (2脚タイルの架線による電化の判定)
 - **主な変更箇所**:
   - `dataobj/ribi.h` — `ribi_t::are_disjoint_bends(x, y)` を新設
     (両方が2ビットのカーブで、方向ビットを共有しない = NW と SE、NE と SW の組)
@@ -596,6 +609,26 @@
     予約・解除しない (互いに待ち合ってデッドロックするため)。`leave_tile()` で経路から脚が分からない
     場合 (車庫からの出庫等) は自編成が予約している方の脚を解放する。
     `air_vehicle_t::get_ribi(gr, from_dir)` / `get_ribi_of_way()` を新設
+  - **以下は `20710ff85` の分**:
+  - `boden/grund.{h,cc}` — `grund_t::would_merge_same_waytype_legs(wegtyp, ribi)` を新設。
+    `weg_erweitern()` の2脚統合条件を「両脚にまたがる ribi」に加えて「片脚だけに触れるが、その脚が分岐 (bend/single でなくなる) になる ribi」にも広げ、
+    統合時にタイル上の停留所を撤去する。延長する脚の選択で「既にその方向を持つ脚」を最優先にする
+  - `bauer/wegbauer.{h,cc}` — `way_builder_t::check_dual_leg_merges()` を新設し、`calc_straight_route()` / `calc_route()` の後に呼ぶ。
+    統合が起きるタイルで、どちらかの脚が他社所有、または停留所がある場合は経路を空にして建設を拒否する。
+    `build_road()` / `build_track()` では、既にその方向を持つ脚があれば `weg_erweitern()` を呼ばず延長済み扱いにする
+    (静的関数 `is_direction_already_built()`)
+  - `simcity.cc` — 静的関数 `can_city_merge_road_legs()` を新設。市の道路建設 (`stadt_t::build_road()`) で、
+    統合先の脚が市道化禁止 (`get_avoid_cityroad()` かつ分岐不可) または停留所がある場合は接続しない。
+    隣接タイルへの ribi 追加を `ribi_add()` 直接呼び出しから `weg_erweitern()` 経由に変更 (2脚のどちらに足すかを正しく選ぶため)
+  - **以下は `c99642b40` の分**:
+  - `boden/grund.{h,cc}` — 2脚の統合処理を `grund_t::merge_same_waytype_legs(removed_leg)` に切り出し
+    (`weg_erweitern()` と `weg_entfernen()` から使用)。統合後に架線の `update_electrification()` を呼ぶ。
+    `weg_erweitern()` の電化済み way への ribi 追加で、`get_wayobj()` が NULL の場合の参照を回避
+  - `obj/wayobj.{h,cc}` — `set_dir()` をインラインから実装へ移し、`update_electrification()` を新設。
+    2脚タイルでは1つの架線が両脚にまたがるので、`dir` が届いている脚だけを電化する。
+    デストラクタ・`finish_rd()` の電化/非電化処理を静的関数 `electrify_way()` / `unelectrify_way()` に整理
+  - `vehicle/simvehicle.cc` — `vehicle_t::hop()` の速度制限参照と `rail_vehicle_t::is_target()` の way 参照を
+    進入方向考慮 (`get_weg(waytype, entry_bit)`) に変更 (片方の脚だけ電化されている場合に対応)
 - **詳細**:
   - 代表的な用途は「線路の NW カーブと誘導路の SE カーブを同じタイルに置く」ような配置。
     両者はタイル中心を共有しないため、物理的にも視覚的にも交差しない。
@@ -619,6 +652,11 @@
     といった問題に対処している。
     コミット本文の履歴にある「add new OTRP mode: only_one_car and stop_only_halt」に対応する変更は
     差分に含まれていない (FEAT-23 側の変更は無い。作業ブランチ上のコミット名が残ったものと思われる)。
+  - `20710ff85` は、2脚のタイルを通過する経路 (片脚の方向から入り、空いている方向へ抜ける) を敷設したときに
+    2脚が統合されず、同じ方向へ出る way が2本できてしまう問題の修正。統合は両脚を作り直すので、
+    両脚とも自社所有で停留所が無い場合に限って許可する (市の道路建設では市道化禁止の脚も対象外)。
+  - `c99642b40` は、2脚のタイルで架線が片脚にしか架かっていない場合や、2脚の統合後に、
+    電化状態と速度制限が正しく反映されない問題の修正。コミット本文の前半は `20710ff85` のブランチ履歴。
 - **取り込み時の注意**:
   - セーブ形式への影響はないが、旧セーブに残る `crossing_t` の扱いが変わる。
   - `boden/grund.cc` / `bauer/wegbauer.cc` は基本エンジン部分なので、敷設判定全般への副作用に注意。
@@ -632,12 +670,16 @@
     `check_longblock_signal()`) と `simconvoi.cc` の `drive_to()` を広く触るため、FEAT-22 の
     `can_co_reserve_offset()` 周辺や `develop-kasumi` 独自改造と競合しやすい。
     また `route_t` にメンバ (`start_heading` 等) が増えるが、保存対象ではないのでセーブ形式への影響は無い。
+  - `c99642b40` は `wayobj_t::finish_rd(const uint8 loaded_OTRP_version)` の新シグネチャ (MISC-04) と
+    `close_diagonal` (FEAT-28) を前提にした文脈の上で書かれているため、それらが未取り込みだと素直に当たらない。
 - **develop-kasumi 側コミット**: —
 - **備考**: 状態確認用の識別子は `dataobj/ribi.h` の `are_disjoint_bends` (本体)、
   `boden/grund.h` の `get_weg(waytype_t, ribi_t::ribi)` または
   `dataobj/route.h` の `get_corner_set` (同一 waytype 拡張分)、
   `dataobj/ribi.h` の `are_disjoint_legs` (`280ced3e8` 分)、
-  `boden/grund.h` の `has_two_same_waytype_ways` (`891191546` 分)。
+  `boden/grund.h` の `has_two_same_waytype_ways` (`891191546` 分)、
+  `boden/grund.h` の `would_merge_same_waytype_legs` (`20710ff85` 分)、
+  `obj/wayobj.h` の `update_electrification` (`c99642b40` 分)。
   `280ced3e8` は FIX-10 と、`891191546` は FIX-11 と同一コミットのため、cherry-pick する場合は
   両項目をまとめて扱うか、本項目の分だけを手作業で移植すること。
   **FIX-10 / FIX-11 の分は `develop-kasumi` に手作業で移植済み** (`65ed5e40d` / `e31fd6d88`)。
@@ -701,6 +743,9 @@
   - `8076cc1f8` add shipping income and fix toll shipping (#740) — 機能拡張 (航送の通行料率と収入分配)
   - `d38064348` change start shipping timing (#750) — 後続修正 (停車時の航送処理の実行順序)
   - `4a34b7c2c` BUG FIX: fix convoy detail tab width (#752) — 後続修正 (航送一覧表示の改行漏れ)
+  - `cd625b481` BUG FIX: not shipping child convoys if they should be uncouple (#778) — 後続修正 (航送中の操作禁止・航送開始条件・キャリア表示ボタン)
+  - `30427a5e5` remove doubly written shipped convoys (#786) — 後続修正 (積載情報への航送編成一覧の二重表示を削除)
+  - `1b61233a2` BUG FIX: child convoy can ship other convoys (#785) — 後続修正 (連結子編成をキャリアにできるようにする)
 - **主な変更箇所**:
   - `bauer/goods_manager.{h,cc}` — waytype ごとの「航送用ダミー貨物」テーブル `shipping_goods[16]` と
     `get_shipping_goods(waytype_t)` / `is_shipping_goods(desc)` を追加。
@@ -732,6 +777,28 @@
     積み下ろし台数の計算より前から、自編成と連結子編成の積み下ろし・発車条件の計算・方向転換判定の後
     (連結編成の反転処理の直前) へ移動 (`d38064348`)
   - `gui/convoi_detail_t.cc` — 「航送している編成一覧」ラベルで各編成の行末に改行を追加 (`4a34b7c2c`)
+  - **以下は `cd625b481` の分**:
+  - `simconvoi.cc` — 航送中 (`SHIPPED`) の編成に対して、スケジュール変更 (`set_schedule()` / `open_schedule_window()` /
+    路線更新 `check_pending_updates()`)、車庫送り (`send_to_depot*()`)、休止 (`set_suspension()`)、譲渡 (`trade_convoi()`)、
+    反転 (`reverse_vehicles_on_user_request()` / `reverse_convoy_coupling_by_user_request()`)、次の停留所へ (`next_stop_button_pressed()`) を禁止。
+    `can_depart()` の連結・積載・発車許可の判定を静的関数 `check_departure_conditions()` に切り出し、
+    航送開始待ちの登録 (`try_start_shipping()`) を `can_start_shipping()` (発車時刻指定を除く発車条件) が満たされてからにする。
+    `handle_shipping_at_halt()` は、まだ待機登録していない編成 (`shipping_wait_since == 0`) や
+    スケジュール編集中・休止中の編成を積まない。`shipping_wait_since` は 0 を「待機していない」の意味で使うため 0 を格納しない。
+    `board_carrier()` で連結・解放・発車許可関係のフラグをリセットし、発車時・スケジュール変更時に `shipping_wait_since` をクリア
+  - `simtool.cc` — `tool_change_convoi_t::init()` で、航送中の編成への売却・スケジュール・路線・状態・車庫・解放・
+    次の停留所・反転・休止・譲渡受諾のコマンドを拒否する
+  - `gui/convoi_info_t.{h,cc}` — 航送しているキャリア/航送中の編成の情報ウィンドウを開くボタン群
+    (`container_shipping`, `shipping_buttons`, `update_shipping_buttons()`) を追加。航送中はスケジュール等のボタンを無効化
+  - `gui/convoi_detail_t.cc` — 航送中は売却・車庫へ移動・譲渡・休止ボタンを無効化
+  - `simconvoi.cc` — `get_freight_info()` 末尾の「Convoys aboard:」一覧 (編成詳細タブと重複) を削除 (`30427a5e5`)
+  - **以下は `1b61233a2` の分**:
+  - `simconvoi.cc` — `can_ship()` の「連結子編成はキャリアになれない」制限を撤廃し、代わりに
+    候補の連結列全体について「自分自身を含む」「航送中の編成を運んでいる (入れ子航送)」場合を拒否する。
+    `hat_gehalten()` で `handle_shipping_at_halt()` を連結子編成でも呼ぶ。
+    `betrete_depot()` で連結子のキャリアの積荷も強制下船させる。
+    `self_destruct()` で航送中の子編成の親との連結を手動で切る
+  - `simtool.cc` — `tool_change_line_t` の編成削減ループで航送中/航送している編成を削除しない
 - **詳細**:
   - 積載量は「編成長さ単位」で、航送用ダミー貨物を積める車両の容量合計。
     空きが少しでもあれば乗り込むため、積載量を1編成分だけ超過しうる (デッドロック回避のため意図的)。
@@ -751,6 +818,12 @@
     移動したブロックのコメント (`Run before loading ...`) は移動前のまま残っており、実際の順序とは一致しない。
     PR 本文の履歴には最大積載・最小積載・重量計算等の複数コミットが並ぶが、squash 後の差分はこの移動のみ。
   - `4a34b7c2c` は、航送中の編成が複数あると一覧が1行に連結され、編成詳細タブの幅が広がってしまう問題の修正。
+  - `cd625b481` は航送中の編成をプレイヤー操作から凍結する修正群。航送中の編成は現在のスケジュールエントリが
+    下船地なので、スケジュール・状態を書き換えると下船地を失ったり `SHIPPED` 状態から外れたりする。
+    また連結の解放が必要な子編成が航送開始待ちの登録を先に済ませてしまい、解放前に積まれる問題も、
+    発車条件を満たしてから登録する形にして解消している。PR 本文の履歴の大半は FEAT-18 本体のブランチ履歴。
+  - `1b61233a2` で、連結列の子編成 (例: 連結したフェリーの後部編成) もキャリアとして航送できるようになった。
+    入れ子の航送 (航送している編成ごと航送する) は重量・画像・救済処理が対応していないため禁止のまま。
 - **取り込み時の注意**:
   - **セーブ形式に影響する**。`convoi_t::rdwr()` が `get_OTRP_version() >= 61` で
     `carrier_convoi` / `shipped_convois` / `shipping_wait_since` を読み書きし、
@@ -761,6 +834,10 @@
     (`dataobj/schedule_io.cc` の `stop_flag_names`) に `START_SHIPPED` の追加が必要。
   - 動作には pakset 側に航送用ダミー貨物が必要 (MISC-05 参照)。
   - `simconvoi.cc` への追加が 1100 行規模。単独 cherry-pick の難度は高い。
+  - `cd625b481` で切り出された `check_departure_conditions()` は FEAT-02 の発車許可の判定を含む。
+    また FIX-22 (`f9ad42b26`) は `board_carrier()` を前提にした変更を含むため、FIX-22 を取り込む場合は本項目との順序に注意。
+  - `cd625b481` で追加された表示文字列 `Not allowed while the convoy is aboard another convoy.` は
+    `ja.OTRP.tab` に未登録 (2026-10-27 時点)。
 - **develop-kasumi 側コミット**: —
 - **備考**: 状態確認用の識別子は `simconvoi.h` の `get_shipping_capacity`、
   または `bauer/goods_manager.h` の `get_shipping_goods`。
@@ -799,8 +876,8 @@
   - `convoi_t::rdwr()` が `get_OTRP_version() >= 61` でゲートされているため **セーブ形式に影響する** (MISC-01 参照)。
   - `schedule_entry_t` にフラグが増えるため、`develop-kasumi` 独自のスケジュール入出力
     (`dataobj/schedule_io.cc` の `stop_flag_names`) に `WITHOUT_RESERVATION` の追加が必要。
-  - **本家に未修正の不具合が同梱されている** (2026-09-16 時点の `origin/OTRP-KUTAv6` でも残存):
-    - `simconvoi.cc:1521` — `get_most_parent_convoi()->state==ROUTING_1;` が代入 `=` ではなく比較 `==` になっており、
+  - **本家に未修正の不具合が同梱されている** (2026-10-27 時点の `origin/OTRP-KUTAv6` (v62_5) でも残存):
+    - `simconvoi.cc:1538` (v62_5 時点の行番号) — `get_most_parent_convoi()->state==ROUTING_1;` が代入 `=` ではなく比較 `==` になっており、
       連結反転時の状態設定が効いていない (元は `state=ROUTING_1`)
     取り込む場合はこの点を直してから入れること。
   - `simconvoi.cc:367` の `?:` 優先順位バグ
@@ -1022,7 +1099,7 @@
     交差ではなく2本の斜めとして描画する。`close_diagonal_state` は 1=北西+南東、2=北東+南西。
     近接斜め画像が pak に無い way では従来どおりで、コード中のコメントでは「1タイルに2本の way」(FEAT-16) で表現する前提。
   - 標識の追加画像リストは本コミット時点では記述子のアクセサのみで、`obj/roadsign.cc` の描画からは未使用。
-    `height_clearance` も読み込むだけで、建設判定等には未使用。
+    `height_clearance` も読み込むだけで、建設判定等には未使用 (本家では後に FEAT-29 で建設判定に使われるようになった)。
   - 標識の子ノード数・建物の `height_clearance` はチェックサムに含めていない (既存 pak のチェックサムは不変)。
 - **取り込み時の注意**:
   - セーブ形式への影響なし (`close_diagonal_state` は保存せず `calc_image()` で再計算)。
@@ -1030,7 +1107,282 @@
     本項目を取り込むまで develop-kasumi では読み込めない。
   - `weg_t::check_diagonal()` / `calc_image()` は FEAT-16 でも変更されており、FEAT-16 未取り込みのまま cherry-pick すると衝突が見込まれる。
 - **develop-kasumi 側コミット**: —
-- **備考**: 関連: FEAT-16 (1タイルに2本の way を斜めで共存させる)
+- **備考**: 関連: FEAT-16 (1タイルに2本の way を斜めで共存させる)、FEAT-29 (`height_clearance` を建設判定に使う)
+
+### FEAT-29: 建物の高さ (`height_clearance`) を使った建設判定
+
+- **分類**: 新機能追加
+- **状態**: 未取り込み
+- **概要**: 建物ごとの高さ (`height_clearance`、高さレベル単位) を、高架道・橋の下の建物チェックと、
+  高架の下への建物配置チェックに使う。pak で指定されていない建物は画像から高さを算出する。
+- **上流コミット**:
+  - `3c4aff9e9` add building height clearance (#696)
+- **主な変更箇所**:
+  - `descriptor/building_desc.{h,cc}` — `building_tile_desc_t::get_drawn_height()` (タイル画像が地面線より上に何レベル出ているか) と
+    `building_desc_t::calc_height_clearance()` (全レイアウト・全タイルの最大値を建物全体の値にする) を追加。
+    pak で `height_clearance` が指定されている (255 以外) 場合は上書きしない。
+    `calc_checksum()` に `height_clearance` を追加
+  - `descriptor/reader/building_reader.cc` — 建物ノード v11 以前は `height_clearance = 255` (未設定) にする
+  - `bauer/hausbauer.cc` — `successfully_loaded()` で全建物の `calc_height_clearance()` を呼ぶ
+  - `bauer/wegbauer.cc` — `is_allowed_step()` の「高架の下の市街建築物は高すぎると不可」の判定を、
+    「2段目の画像があるか」(`get_background(0,1,0)!=IMG_EMPTY`) から `get_height_clearance() > get_way_height_offset(to)` に変更
+  - `bauer/brueckenbauer.cc` — `is_blocked()` で、橋の下の地表の建物が橋桁までの隙間より高ければ
+    `Bridge blocked by building below.` で建設を拒否
+  - `simworld.{h,cc}` — `karte_t::square_is_free()` に `const building_desc_t *desc = NULL` 引数を追加し、
+    建物の高さの範囲 (z+1〜z+`height_clearance`) に高架・橋の地面があれば配置不可にする
+  - `simtool.cc` — 駅舎・建物・工場 (産業チェーン/単独)・本社の建設で `square_is_free()` に `desc` を渡す
+- **詳細**:
+  - 画像からの算出は、基本画像の最上段の行と地面行の画像の上端から「地面線より上に何ピクセル出ているか」を求め、
+    `tile_raster_scale_y(TILE_HEIGHT_STEP, cell)` で高さレベルに換算する (ズームによらず一定)。季節画像の最大値を採る。
+  - 高さは建物全体で1つ。1段だけのタイルでも同じ建物に高いタイルがあれば、その高さで判定する。
+- **取り込み時の注意**:
+  - **FEAT-28 が前提** (`height_clearance` メンバ・`get_height_clearance()`・建物ノード v12 の読み込み)。
+  - `calc_checksum()` に `height_clearance` が加わるため、**全建物の記述子チェックサムが変わり pakset のチェックサムが変わる**。
+    ネットワークゲームではサーバーとクライアントの両方を同時に更新する必要がある。
+  - 高架の下の市街建築物の判定基準が変わるため、既存マップで以前は建てられた/建てられなかった高架が逆になりうる。
+  - セーブ形式への影響なし。表示文字列 `Bridge blocked by building below.` は `ja.OTRP.tab` に未登録 (2026-10-27 時点)。
+- **develop-kasumi 側コミット**: —
+- **備考**: 状態確認用の識別子は `descriptor/building_desc.h` の `calc_height_clearance`。
+  コミット本文の履歴にある「BUG FIX: load clip_below settings of pakfiles」は FIX-02 のもので、本コミットの差分には含まれない。
+
+### FEAT-30: 着陸待ちの航空機が空いている別の滑走路を選ぶ (choose runway)
+
+- **分類**: 新機能追加
+- **状態**: 未取り込み
+- **概要**: 着陸予定の滑走路が塞がっていて旋回待ちになった航空機が、目的の空港につながる別の空いている滑走路を探し、
+  そちらへ着陸経路を組み直す。
+- **上流コミット**:
+  - `bff207012` choose runway (#757)
+- **主な変更箇所**:
+  - `vehicle/simvehicle.{h,cc}` — `air_vehicle_t` に `is_landing_runway_end(gr, approach)`、
+    `append_landing_route(route, end_pos, touchdown_idx, search_idx)`、`find_runway()` を追加。
+    `is_target()` の滑走路端判定と `calc_route()` の着陸経路 (直線進入・旋回・着陸滑走) 生成をそれぞれ切り出したもの
+  - `vehicle/simvehicle.cc` — `can_enter_tile()` で旋回の終わり (`route_index == touchdown - landing_distance`) に
+    滑走路の予約に失敗したとき、`find_runway()` を試し、成功すればそのまま進む (失敗すれば従来どおりもう1周旋回)
+- **詳細**:
+  - 候補は、目的の停留所から `air_wt` の way をたどって `max_choose_route_steps` 以内にある、進入方向に合う滑走路端
+    (現在の着陸予定の端を除く)。滑走路全体が他の編成に予約されておらず、その端から目的地まで地上走行の経路があるものから、
+    「現在位置からの距離 + 地上走行経路の長さ」が最小のものを選ぶ。
+  - 選んだら旧滑走路の予約を解放して新滑走路を予約し、現在位置以降の経路を差し替える。見つからなければ従来どおり旋回を続ける。
+  - 経路探索は再入不可のため、編成が待機状態 (`cnv->is_waiting()`) でなければ探索せず一旦 false を返して停止させ、
+    待機状態になって step から再び呼ばれたときに探索する。
+- **取り込み時の注意**: セーブ形式への影響なし。航空機の着陸処理を大きく書き換えるため、
+  develop-kasumi で航空機まわりを改造している場合は競合に注意 (FIX-06 / FIX-24 も同じ領域)。
+- **develop-kasumi 側コミット**: —
+- **備考**: 状態確認用の識別子は `vehicle/simvehicle.h` の `find_runway`。FEAT-31 はこのブランチから派生している。
+
+### FEAT-31: 誘導路・滑走路 (`air_wt`) で私有道路標識を有効にする
+
+- **分類**: 新機能追加
+- **状態**: 未取り込み
+- **概要**: 航空機の地上走行で私有道路標識 (`is_private_way()`) を判定し、通行を許可されていない会社の航空機を通さない。
+- **上流コミット**:
+  - `93d04522d` add private roadsign for air_wt (#788)
+- **主な変更箇所**:
+  - `vehicle/simvehicle.cc` — `air_vehicle_t::check_next_tile()` の地上走行状態 (`taxiing` / `taxiing_to_halt` / `looking_for_parking`) で、
+    way に標識があり、それが `air_wt` の私有標識で、自社のビットが `get_player_mask()` に無ければ false を返す
+- **詳細**: 他の waytype (`rail_vehicle_t` 等) の私有標識チェックと同じ形。way が無い場合は先に false を返す。
+- **取り込み時の注意**:
+  - 本家版は FEAT-16 (`891191546`) で追加された `check_next_tile(bd, ..., prev)` オーバーロード内の変更で、
+    会社マスクは FEAT-01 の64社対応 (`(uint64)1 << get_owner_nr()`)。develop-kasumi (16社・旧シグネチャ) に入れる場合は
+    `air_vehicle_t::check_next_tile(bd, need_electric)` へ手作業で移植し、シフトも既存コードの `1<<get_owner_nr()` に合わせる。
+  - セーブ形式への影響なし。
+- **develop-kasumi 側コミット**: —
+- **備考**: 状態確認用の識別子は `air_vehicle_t::check_next_tile()` 内の `is_private_way()`。
+  コミット本文の「choose runway」は FEAT-30 のブランチ履歴。
+
+### FEAT-32: 表示設定ダイアログにキー設定タブを追加
+
+- **分類**: 新機能追加
+- **状態**: 未取り込み
+- **概要**: 表示設定ダイアログに「キー設定」タブを追加し、各ツールのショートカットキーをゲーム内で変更・解除・初期化できるようにする。
+  変更は `menuconf.tab` に直接書き戻す。
+- **上流コミット**:
+  - `6b520a4a8` Add in-game keybindings settings synchronized with menuconf.tab (#766) — 本体
+  - `b39f88729` BUG FIX: crash when open display settings (#784) — 後続修正
+- **主な変更箇所**:
+  - `gui/display_settings.{h,cc}` — `shortcut_settings_t` (一覧のスクロール、各行の「キー変更」「割り当て解除」、「初期設定に戻す」) を追加し、
+    `color_gui_t` のタブに組み込む。キー入力の取得 (`capture_event()`) のため `color_gui_t::infowin_event()` を追加
+  - `simmenu.{h,cc}` — `tool_t` に `get_shortcut_count()` / `get_shortcut_tool()` / `get_shortcut_name()` /
+    `get_shortcut_key_name()` / `is_shortcut_key_allowed()` / `find_shortcut_conflict()` / `set_shortcut()` /
+    `reset_shortcuts()` / `reload_shortcuts()` を追加。`menuconf.tab` のキー欄だけを書き換えて保存する
+  - `simutrans/text/ja.tab` — 「キー設定」「キー変更」「割り当て解除」等 17 語 (`ja.OTRP.tab` ではなく基本翻訳ファイル)
+  - `tests/keyboard-settings.md`, `tests/test_keybindings_unicode.py` (新規) — 手動試験手順と、ファイル処理・キー解析の単体テスト
+  - **以下は `b39f88729` の分**:
+  - `simmenu.cc` — `shortcut_requires_parameter()` に `TOOL_REMOVE_WAYOBJ` / `TOOL_CHANGE_GAME_SPEED` / `TOOL_TRAFFIC_LEVEL` / `TOOL_MOVE_MAP` を追加
+    (パラメータ必須のツールはキー設定の一覧に出さない)
+  - `simtool.{h,cc}` — `default_param` が NULL / 記述子が見つからない場合の `get_tooltip()` の NULL 参照を回避
+    (トンネル・wayobj 撤去・車庫・ゲーム速度変更)。`tool_reset_game_speed_t` / `tool_fix_game_speed_t` の
+    `get_tooltip()` で `return` が抜けていた (戻り値が不定) のを修正
+- **詳細**:
+  - 初回にキー設定タブを開いたとき、現在の `menuconf.tab` を `menuconf.default.tab` としてバックアップし、「初期設定に戻す」はそこからキーを復元する。
+  - 書き込みは一時ファイル経由で置き換え、コメント・改行コード・アイコン等のキー以外の欄は保持する。
+    外部で `menuconf.tab` を編集した場合はタブを切り替え直すと再読込される。
+  - 他の操作に割り当て済みのキーは警告ダイアログを出して変更しない。ゲーム固定操作のキーは割り当て不可。
+  - `b39f88729` は、キー設定タブが全ツールのツールチップを `default_param` なしで取得するため、
+    従来は呼ばれなかった経路で NULL 参照・不定値の返却が起き、表示設定を開くと落ちる問題の修正。
+- **取り込み時の注意**:
+  - セーブ形式への影響なし。設定は `menuconf.tab` (pakset 側の設定ファイル) に保存される。
+  - `simmenu.cc` に約380行の追加。develop-kasumi 独自のメニュー/ツール追加がある場合は一覧の対象・除外条件を確認すること。
+  - `b39f88729` のうち `tool_reset_game_speed_t` / `tool_fix_game_speed_t` の `return` 抜けは v58_3 時点から存在し、
+    develop-kasumi にも同じコードがある。キー設定とは独立に `simtool.h` 部分だけ取り込むことも可能。
+- **develop-kasumi 側コミット**: —
+- **備考**: 状態確認用の識別子は `simmenu.h` の `get_shortcut_count`、または `gui/display_settings.h` の `shortcut_settings_t`。
+
+### FEAT-33: サーバー接続ダイアログのアドレス入力欄の内容をローカルに保存する
+
+- **分類**: 新機能追加
+- **状態**: 未取り込み
+- **概要**: サーバー一覧ダイアログで手入力した接続先アドレスを保存し、次回ダイアログを開いたときに入力欄へ復元する。
+  復元しただけでは接続確認 (問い合わせ) を行わない。
+- **上流コミット**:
+  - `4c4b865ee` Persist connection textbox locally without querying restored addresses (#758)
+- **主な変更箇所**:
+  - `gui/server_frame.{h,cc}` — 入力欄のバッファを `env_t::newserver_name` から `server_frame_t` の
+    メンバ `server_address` に分離。`load_server_address()` / `save_server_address()` とデストラクタを追加し、
+    `env_t::pak_dir + "config/servers.tab"` の `# last_server = <アドレス>` 行に保存する (一時ファイル経由で置き換え)。
+    問い合わせ・接続・pakset 比較はすべて `server_address` を使う
+  - `utils/last_server_setting.h` (新規) — `# last_server` 行の解析 (`parse()` / `read()`) と書き換え (`update()`)
+- **詳細**:
+  - コマンドライン `-ip` (`env_t::newserver_name`) が指定されていればそちらを優先し、その場合だけ従来どおり自動で問い合わせる。
+    ネットワークモード中 (`env_t::networkmode`) は自動問い合わせを行わない。
+  - 入力欄の編集後にフォーカスが外れたとき (`WIN_UNTOP` で値 0 が来る) は問い合わせず、Enter または追加ボタンでのみ問い合わせる。
+- **取り込み時の注意**:
+  - セーブ形式への影響なし。保存先は pakset の `config/servers.tab`。
+  - 普段 `-ip` 付きで起動する運用では復元は働かず、従来の自動問い合わせのままになる。
+- **develop-kasumi 側コミット**: —
+- **備考**: 状態確認用の識別子は `gui/server_frame.h` の `load_server_address`。
+
+### FEAT-34: 信号情報ウィンドウで「信号を撤去」ボタンを区切り線の下・右寄せに配置
+
+- **分類**: 新機能追加
+- **状態**: 未取り込み
+- **概要**: 信号情報ウィンドウで、信号のフラグ設定ボタン群と「信号を撤去」ボタンの間に区切り線を入れ、撤去ボタンを右端に寄せる (誤操作防止)。
+- **上流コミット**:
+  - `f2b352a3f` add divider between signal flags buttons and remove button (#783)
+- **主な変更箇所**:
+  - `gui/signal_info.cc` — `bt_two_ways` の後に `gui_divider_t` を追加し、`bt_remove_signal` を `gui_fill_t` と並べた2列テーブルに入れる
+- **詳細**: —
+- **取り込み時の注意**: セーブ形式への影響なし。FEAT-20 (`bt_ignore_length`) も同じファイルを触るが、変更箇所は離れている。
+- **develop-kasumi 側コミット**: —
+- **備考**: 状態確認用の識別子は `gui/signal_info.cc` の `gui_divider_t`。
+
+### FIX-20: 編成が載っているタイルを経路に補う処理が同じタイルを再探索して無限ループする
+
+- **分類**: バグ修正
+- **状態**: 未取り込み
+- **概要**: `convoi_t::insert_route_convoy_on()` (編成の車両が載っているタイルを経路の先頭側に補う処理) が、
+  既に経路へ追加したタイルを再び探索して同じタイルを追加し続け、終わらなくなる問題を修正する。
+- **上流コミット**:
+  - `4fc0d6958` BUG FIX: do not search same tile again (#775)
+  - `7bee9265f` BUG FIX: crash null building (#776) — 後続修正 (**コミットの一部のみ**。`simconvoi.cc` の分。残りは FIX-21)
+- **主な変更箇所**:
+  - `simconvoi.{h,cc}` — `search_next_convoy_tile()` に `const vector_tpl<koord3d>* searched_tiles = NULL` 引数を追加。
+    `insert_route_convoy_on()` は開始タイルと追加したタイルを `searched_tiles` に記録し、探索ではそれらに入らない。
+    隣接タイルの取得を再帰の前に行うよう移動 (`4fc0d6958`)
+  - `simconvoi.cc` — `search_next_convoy_tile()` / `insert_route_to_draw_diagonal()` / `find_tiles_convoy_on()` で、
+    `get_neighbour()` が失敗時に出力引数を書き換えないことを踏まえ、ポインタを NULL で初期化して戻り値で判定する (`7bee9265f`)
+- **詳細**: 従来の探索は直前のタイルへ戻る方向 (`back_dir`) だけを除外していたため、配線によっては既に追加済みのタイルに
+  再び行き着き、同じタイルを経路に追加し続けていた。
+  `7bee9265f` 分は、`get_neighbour()` 失敗時に未初期化のポインタを参照しうる箇所の修正
+  (`4fc0d6958` で追加した判定にも同じ問題があった)。
+- **取り込み時の注意**: 対象の関数群は v58_3 時点から存在し、develop-kasumi にも同じコードがある。セーブ形式への影響なし。
+- **develop-kasumi 側コミット**: —
+- **備考**: 状態確認用の識別子は `simconvoi.h` の `search_next_convoy_tile(..., const vector_tpl<koord3d>* searched_tiles)`。
+  `7bee9265f` は FIX-21 と同一コミットのため、cherry-pick する場合は両項目をまとめて扱うこと。
+
+### FIX-21: ロード時に記述子が見つからなかった建物を削除する際の異常終了
+
+- **分類**: バグ修正
+- **状態**: 未取り込み
+- **概要**: セーブのロード時に pakset に記述子が無かった建物 (`tile == NULL`) を削除するとき、
+  市からの登録解除で記述子を参照して落ちる問題を修正する。
+- **上流コミット**:
+  - `7bee9265f` BUG FIX: crash null building (#776) (**コミットの一部のみ**。`obj/gebaeude.cc` の分。残りは FIX-20)
+- **主な変更箇所**:
+  - `obj/gebaeude.cc` — `gebaeude_t::~gebaeude_t()` の `remove_gebaeude_from_stadt()` 呼び出し条件を
+    `if(get_stadt())` から `if(tile  &&  get_stadt())` に変更
+- **詳細**: そのような建物は市に登録されていないため、登録解除自体が不要。同じデストラクタ内の観光地判定には既に `tile` の NULL チェックがある。
+- **取り込み時の注意**: v58_3 時点から存在するコードで、develop-kasumi にも同じコードがある。セーブ形式への影響なし。
+- **develop-kasumi 側コミット**: —
+- **備考**: 状態確認用の識別子は `obj/gebaeude.cc` の `if(tile  &&  get_stadt())`。
+  コミット本文の前半は FIX-20 (`4fc0d6958`) のブランチ履歴。
+
+### FIX-22: 連結編成の発車時刻枠 (departure slot) の予約・解放の不整合
+
+- **分類**: バグ修正
+- **状態**: 未取り込み
+- **概要**: 発車時刻指定 (発車枠) と編成の連結が組み合わさった場合に、子編成が枠を取ってしまう、
+  親子で別々に枠を取る、発車しなかった枠が返却されない、短いホームで枠の持ち主が駅にいないと判定されて枠が消える、等の不具合を修正する。
+- **上流コミット**:
+  - `f9ad42b26` fix departure time slot (#754)
+- **主な変更箇所**:
+  - `simconvoi.{h,cc}` — `release_departure_slot(halthandle_t halt = halthandle_t())` を追加。
+    停留所は、積込中ならスケジュールの現在エントリから、そうでなければ全車両の位置から探す (先頭車両がホーム外にいる場合に対応)。
+    `step()` のスケジュール変更時、`next_stop_button_pressed()`、`board_carrier()` (FEAT-18) で枠を返却する。
+    `is_staying_at(halt)` を追加 (最上位の親編成の状態とスケジュールで「その停留所に停車中か」を判定)
+  - `simconvoi.cc` — `can_depart()` は最上位の親編成以外では判定しない。
+    `hat_gehalten()` で連結子編成は発車判定をせず (`!is_coupled()`)、親は子が既に持っている枠 (holder) があればそれに乗る。
+    親が発車時刻指定で、かつ子と枠グループが異なる場合のみ親が自分の枠を取り、取れた時点で子の枠を返却する
+  - `simhalt.{h,cc}` — `is_same_departure_slot_group(a, b)` (静的) と `is_departure_booked_by(dep_tick, cnv)` を追加。
+    `book_departure()` の「駅にいない編成の枠は無効」の判定を `is_staying_at()` に変更し、
+    同じ連結列・同じ枠グループの編成が持つ枠を自分の枠とみなす。`erase_departure()` も同様に連結列単位で消す
+- **詳細**:
+  - 連結列は常に1つの枠だけを持つようにする設計。子が親になる前 (連結前) に取った枠は、連結後も列全体の枠として維持する。
+  - 通常の発車では枠は期限まで残す (遅れた編成が同じ枠を取り直さないため)。発車せずに停留所を離れる場合のみ返却する。
+  - `next_stop_button_pressed()` では FEAT-02 の `waiting_for_departure_make_another_convoy_depart` もリセットする。
+- **取り込み時の注意**:
+  - 発車枠の機能自体は v58_3 時点から存在するが、本コミットは FEAT-02 (`waiting_for_departure_make_another_convoy_depart`) と
+    FEAT-18 (`board_carrier()`、FEAT-18 の `cd625b481` で切り出された `check_departure_conditions()` の直後の文脈) を前提にした差分を含む。
+    これらが未取り込みの develop-kasumi へは該当部分を除いて手作業で移植することになる。
+  - **develop-kasumi には同じ問題に対する独自修正がある**: `bfa2be8b7`「子編成が発車枠を取ってしまう問題の修正」は
+    `hat_gehalten()` の判定を `!is_coupled()` に限定し、`couple_convoi()` で子の枠を返却する
+    (`release_departure_slot()` を引数なしで独自に追加)。本家は逆に「子が取った枠を列の枠として残す」方式で、
+    方針が異なり、同名関数のシグネチャも異なる。取り込む場合はどちらの方式にするかを決めてから統合すること。
+    また `a750cd86a`「ticksリセット時に発車時刻指定が乱れる問題の修正」も `simhalt.cc` の発車枠処理を触っている。
+  - セーブ形式への影響なし。
+- **develop-kasumi 側コミット**: —
+- **備考**: 状態確認用の識別子は `simhalt.h` の `is_same_departure_slot_group`、または `simconvoi.h` の `is_staying_at`
+  (`release_departure_slot` は develop-kasumi の独自版と同名のため識別子には使えない)。
+
+### FIX-23: 編成の停車駅一覧で車庫エントリに停車長を表示する/現在の停車駅番号が範囲外のとき異常終了する
+
+- **分類**: バグ修正
+- **状態**: 未取り込み
+- **概要**: 編成情報の停車駅一覧 (`convoi_stops_list_t`) で、車庫のエントリにも停車長 `[x.xx]` を計算・表示していたのを止め、
+  スケジュールが空/短くなった場合に現在の停車駅番号で範囲外参照して落ちる問題を修正する。
+- **上流コミット**:
+  - `70ed2eb20` BUG FIX: do not calculate stop length when stop is depot (#777)
+- **主な変更箇所**:
+  - `gui/convoi_stops_list_t.cc` — `update_label()` で、エントリ位置に車庫があれば停車長を書かない (`lookup()` が NULL の場合も考慮)。
+    `update_schedule()` / `draw()` で `get_current_stop()` が `entries` の範囲内かを確認してから参照し、
+    範囲外 (かつスケジュールが空でない) なら一覧を作り直す
+- **詳細**: —
+- **取り込み時の注意**: 対象コードは v58_3 時点から存在する。`draw()` の直後の `update_whole_route_overlay()` は FEAT-09 の追加分なので、
+  FEAT-09 未取り込みの develop-kasumi では文脈が合わない (手作業で当てる)。セーブ形式への影響なし。
+- **develop-kasumi 側コミット**: —
+- **備考**: 状態確認用の識別子は `gui/convoi_stops_list_t.cc` の `gr->get_depot()`。
+
+### FIX-24: 航空機が長い停留所から前進/横向きに出発しても押し戻し扱いになる
+
+- **分類**: バグ修正
+- **状態**: 未取り込み
+- **概要**: 航空機は停留所を発つとき常に押し戻し (pushback = 反転) 扱いにされていたため、
+  複数タイルの直線・斜めの停留所から前進や横向きで出発できる場合にも向きがおかしくなる問題を修正する。
+  併せて、停留所の建物情報にそのタイルのホーム長を表示する。
+- **上流コミット**:
+  - `f462f5194` fix: usual straight tile or diagonal tile stop of air_vehicle (#782)
+- **主な変更箇所**:
+  - `simconvoi.cc` — `vorfahren()` で、航空機かつ進行方向が変わらない (`go_same_direction`) なら `reversed = false` にする
+    (`hat_gehalten()` が航空機の出発時に一律 `reversed = true` を立てるのを打ち消す)
+  - `obj/gebaeude.cc` — `gebaeude_t::info()` で、交通施設の建物なら同じタイルの way (水路以外、最大2本) ごとに
+    `append_platform_length_string_if_needed()` でホーム長を追記する
+  - `boden/wege/weg.h` — `append_platform_length_string_if_needed()` の宣言を公開
+- **詳細**: —
+- **取り込み時の注意**: 対象コード (`hat_gehalten()` の `reversed = true`、`append_platform_length_string_if_needed()`) は v58_3 時点から存在する。
+  `vorfahren()` の挿入位置の直後は FEAT-08 (`reversing_lane_hold`) の追加分なので文脈が合わない場合がある。セーブ形式への影響なし。
+- **develop-kasumi 側コミット**: —
+- **備考**: 状態確認用の識別子は `simconvoi.cc` の `front()->get_waytype()==air_wt  &&  go_same_direction`。
 
 ### MISC-01: 本家バージョン番号のインクリメント
 
@@ -1058,6 +1410,10 @@
   - `e495a7ba5` increment OTRP_VERSION_MINOR (v62_1)
   - `e2bdac807` increment OTRP_VERSION_MINOR (v62_2)
   - `11a7c338b` increment OTRP_VERSION_MINOR (v62_3)
+  - `002e51b32` increment OTRP_VERSION_MINOR (v62_4)
+  - `0be2ebc5e` increment OTRP_VERSION_PATCH (v62_4_1)
+  - `7f70dd2e5` increment OTRP_VERSION_PATCH (v62_4_2)
+  - `f491c6adf` increment OTRP_VERSION_MINOR (v62_5)
 - **主な変更箇所**: `simversion.h` — `OTRP_VERSION_MAJOR` / `OTRP_VERSION_MINOR` / `OTRP_VERSION_PATCH`
 - **詳細**: —
 - **取り込み時の注意**:
@@ -1068,8 +1424,9 @@
   - `OTRP_VERSION_MAJOR >= 60` を要求する項目: FEAT-07
   - `OTRP_VERSION_MAJOR >= 61` を要求する項目: FEAT-17 / FEAT-18 / FEAT-19 / MISC-04
   - `OTRP_VERSION_MAJOR >= 62` を要求する項目: FEAT-18 (`8076cc1f8` の航送収入・通行料設定の分)
-  - 上記以外の項目 (FEAT-09 拡張分、FEAT-11〜FEAT-16、FEAT-20〜FEAT-28、FIX-03〜FIX-19、
+  - 上記以外の項目 (FEAT-09 拡張分、FEAT-11〜FEAT-16、FEAT-20〜FEAT-34、FIX-03〜FIX-24、
     MISC-03 / MISC-05) は `get_OTRP_version()` によるセーブ形式の分岐を持たないため、バージョン引き上げは不要。
+    ただし FEAT-29 は pakset のチェックサムを変える (ネットワーク互換性に影響する) ので別途注意。
 - **develop-kasumi 側コミット**: — (独自運用: `cf52a5750` 等)
 - **備考**: バージョン番号自体は取り込まない方針。上記の依存関係のみ管理する。
 
