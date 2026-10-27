@@ -17,6 +17,7 @@
 
 #include "../../simconvoi.h"
 #include "../../vehicle/simvehicle.h"
+#include "../../dataobj/schedule.h"
 
 namespace script_api {
 	declare_enum_param(grund_t::flag_values, uint8, "flags");
@@ -111,6 +112,26 @@ vector_tpl<halthandle_t> const& square_get_halt_list(planquadrat_t *plan)
 		}
 	}
 	return list;
+}
+
+bool tile_is_stop_allowed(grund_t *gr, waytype_t wt)
+{
+	// schedule_t::is_stop_allowed of a schedule of this waytype (see schedule_constructor)
+	schedule_t *sched = NULL;
+	switch(wt) {
+		case road_wt:        sched = new truck_schedule_t(); break;
+		case track_wt:       sched = new train_schedule_t(); break;
+		case water_wt:       sched = new ship_schedule_t(); break;
+		case air_wt:         sched = new airplane_schedule_t(); break;
+		case monorail_wt:    sched = new monorail_schedule_t(); break;
+		case tram_wt:        sched = new tram_schedule_t(); break;
+		case maglev_wt:      sched = new maglev_schedule_t(); break;
+		case narrowgauge_wt: sched = new narrowgauge_schedule_t(); break;
+		default:             return false;
+	}
+	const bool ok = sched->is_stop_allowed(gr);
+	delete sched;
+	return ok;
 }
 
 vector_tpl<convoihandle_t> const get_convoy_list(grund_t* gr)
@@ -308,6 +329,12 @@ void export_tiles(HSQUIRRELVM vm)
 	 * @return convoy list by tile
 	 */
 	register_method(vm, &get_convoy_list, "get_convoys", true);
+	/**
+	 * Can this tile be an entry of a schedule of this waytype? (The check of schedule_x and change_schedule.)
+	 * @param wt waytype of the schedule
+	 * @returns false for invalid waytypes
+	 */
+	register_method(vm, &tile_is_stop_allowed, "is_stop_allowed", true);
 
 #ifdef SQAPI_DOC // document members
 	/**

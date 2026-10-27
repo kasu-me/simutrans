@@ -116,6 +116,7 @@ gebaeude_t::~gebaeude_t()
 		return;
 		// avoid book-keeping
 	}
+	live_changes_t::obj_destroyed(this, tile  &&  tile->get_desc()->is_transport_building() ? live_changes_t::T_STATION : live_changes_t::T_BUILDING);
 
 	if(get_stadt()) {
 		ptr.stadt->remove_gebaeude_from_stadt(this);

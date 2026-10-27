@@ -12,6 +12,9 @@
 #include "../../dataobj/schedule.h"
 #include "../../simhalt.h"
 #include "../../simworld.h"
+#include "../../script/script.h"
+
+#include <string>
 
 using namespace script_api;
 
@@ -63,8 +66,31 @@ SQInteger schedule_constructor(HSQUIRRELVM vm) // instance, wt, entries
 	return res;
 }
 
+/// the schedule last read from a script, and why its first rejected entry was left out ("" if none)
+static const schedule_t *read_schedule = NULL;
+static std::string read_schedule_rejection;
+
+/**
+ * Why an entry of the schedule could not be appended when it was read from the script
+ * (the entry is left out then), NULL if all were appended.
+ * Valid for the schedule read last only.
+ */
+const char *script_schedule_rejection(const schedule_t *sched)
+{
+	return sched  &&  sched == read_schedule  &&  !read_schedule_rejection.empty() ? read_schedule_rejection.c_str() : NULL;
+}
+
+static void reject_entry(uint32 nr, koord3d pos, const char *why)
+{
+	if (read_schedule_rejection.empty()) {
+		char buf[256];
+		snprintf(buf, sizeof(buf), "invalid: entry %u at (%s) %s", nr, pos.get_str(), why);
+		read_schedule_rejection = buf;
+	}
+}
+
 // read entry at index, append to schedule
-void append_entry(HSQUIRRELVM vm, SQInteger index, schedule_t* sched)
+void append_entry(HSQUIRRELVM vm, SQInteger index, schedule_t* sched, uint32 nr)
 {
 	koord3d pos = param<koord3d>::get(vm, index);
 
@@ -100,9 +126,23 @@ void append_entry(HSQUIRRELVM vm, SQInteger index, schedule_t* sched)
 
 	grund_t *gr = welt->lookup(pos);
 	if (gr) {
+		// schedule_t::append refuses these (with a message window)
+		if (sched->get_count() >= 254) {
+			reject_entry(nr, pos, "is beyond the maximum of 254 stops");
+		}
+		else if (!sched->is_stop_allowed(gr)) {
+			reject_entry(nr, pos, "cannot be a stop for this waytype");
+		}
+		if (!read_schedule_rejection.empty()  &&  script_vm_t::is_mcp(vm)) {
+			// no message windows for the MCP server
+			return;
+		}
 		if (sched->append(gr, minimum_loading, waiting_time_shift, stop_flags, max_speed, length_coupling_done, maximum_loading, balance_speed)) {
 			sched->at(sched->get_count() - 1).set_spacing(spacing, spacing_shift, delay_tolerance);
 		}
+	}
+	else {
+		reject_entry(nr, pos, "has no ground");
 	}
 }
 
@@ -116,6 +156,8 @@ schedule_t* script_api::param<schedule_t*>::get(HSQUIRRELVM vm, SQInteger index)
 	schedule_t* sched = get_attached_instance<schedule_t>(vm, index, param<schedule_t*>::tag());
 	if (sched) {
 		sched->remove_all();
+		read_schedule = sched;
+		read_schedule_rejection.clear();
 		// now read the entries
 		sq_pushstring(vm, "entries", -1);
 		SQInteger new_index = index > 0 ? index : index-1;
@@ -123,8 +165,9 @@ schedule_t* script_api::param<schedule_t*>::get(HSQUIRRELVM vm, SQInteger index)
 			// now entries array at the top of the stack
 			// foreach loop
 			sq_pushnull(vm);
+			uint32 nr = 0;
 			while(SQ_SUCCEEDED(sq_next(vm, -2))) {
-				append_entry(vm, -1, sched);
+				append_entry(vm, -1, sched, nr++);
 				sq_pop(vm, 2);
 			}
 			sq_pop(vm, 1);

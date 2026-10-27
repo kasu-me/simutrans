@@ -39,10 +39,46 @@ public:
 	/// true while changes are to be recorded
 	static bool recording;
 
-	static void tile(sint16 x, sint16 y) { if(  recording  ) { record_tile(x, y); } }
+	/// what changed on a tile (the kind bits of the tiles of get_changes; several when merged)
+	enum {
+		T_ROAD     = 1 << 0, ///< road
+		T_TRACK    = 1 << 1, ///< rail, tram, monorail, maglev, narrow gauge
+		T_WATER    = 1 << 2, ///< canal, river
+		T_AIR      = 1 << 3, ///< runway, taxiway
+		T_SIGN     = 1 << 4, ///< signal, roadsign (added, removed, turned; not its state)
+		T_BUILDING = 1 << 5, ///< a building other than T_STATION (houses, factories, monuments ...)
+		T_STATION  = 1 << 6, ///< a stop, depot or other transport building, the name of a stop
+		T_TERRAIN  = 1 << 7, ///< ground: height, slope, water, climate, bridges' and tunnels' grounds
+		T_OTHER    = 1 << 8  ///< everything else (trees, power lines, way objects, labels, texts ...)
+	};
+
+	/// the kind of a way of this waytype (T_ROAD ... T_AIR, else T_OTHER)
+	static uint16 way_kind(waytype_t wt);
+
+	/// a tile changed; kind: T_ROAD ... T_OTHER
+	static void tile(sint16 x, sint16 y, uint16 kind) { if(  recording  ) { record_tile(x, y, kind); } }
 
 	/// a static object was added to or removed from a tile, or changed in place
-	static void obj(const obj_t *o) { if(  recording  ) { record_obj(o); } }
+	static void obj(const obj_t *o) { if(  recording  ) { record_obj(o, true); } }
+
+	/// as obj(), but the object is not asked for its type (it may be under construction): T_OTHER unless known otherwise
+	static void obj_untyped(const obj_t *o) { if(  recording  ) { record_obj(o, false); } }
+
+	/**
+	 * A static object is being destroyed (from the destructor of its class: obj_t::~obj_t
+	 * removes it from its tile later, when it cannot tell its type any more).
+	 */
+	static void obj_destroyed(const obj_t *o, uint16 kind);
+
+	/// marks the object whose obj_t::~obj_t runs: it must not be asked for its type
+	class destroying_t
+	{
+	public:
+		explicit destroying_t(const obj_t *o) : outer(destroying) { destroying = o; }
+		~destroying_t() { destroying = outer; }
+	private:
+		const obj_t *outer;
+	};
 
 	/// a signal or roadsign (typ, ribi dir) or a crossing (typ, dir 0) changed its state
 	static void sign(const obj_t *o, uint8 typ, uint8 dir, uint8 state) { if(  recording  ) { record_sign(o, typ, dir, state); } }
@@ -165,6 +201,9 @@ public:
 
 	static uint32 get_epoch();
 
+	/// the sequence number the next entry of the change log gets (the "seq" of get_changes)
+	static uint32 get_next_seq();
+
 	/**
 	 * Builds the JSON object of get_changes.
 	 * @param has_since false for the first call (only the current seq is returned)
@@ -172,8 +211,9 @@ public:
 	static std::string get_changes_json(karte_t *welt, bool has_since, uint32 since);
 
 private:
-	static void record_tile(sint16 x, sint16 y);
-	static void record_obj(const obj_t *o);
+	/// kind 0: what changed is not known (T_OTHER, unless the tile gets a kind in the same step)
+	static void record_tile(sint16 x, sint16 y, uint16 kind);
+	static void record_obj(const obj_t *o, bool typed);
 	static void record_sign(const obj_t *o, uint8 typ, uint8 dir, uint8 state);
 	static void record_sold(uint32 convoy, uint8 player_nr, sint64 amount);
 	static void record_entity(entity_kind_t kind, uint32 id, koord3d pos, uint16 what);
@@ -192,6 +232,7 @@ private:
 	};
 	static std::vector<tool_result_t> tool_results;
 
+	static const obj_t *destroying;
 	static bool enabled;
 	static uint32 world_resets;
 	static bool keep_epoch;

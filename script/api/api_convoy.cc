@@ -19,6 +19,8 @@
 #include "../../vehicle/simvehicle.h"
 #include "../../dataobj/schedule.h"
 #include "../../network/live_util.h"
+#include "../../dataobj/environment.h"
+#include "../../player/simplay.h"
 
 // for convoy tools
 #include "../../simmenu.h"
@@ -180,25 +182,81 @@ call_tool_init convoy_generic_tool(convoi_t *cnv, player_t *player, uint8 cnvtoo
 	return call;
 }
 
+call_tool_init convoy_reverse(convoi_t *cnv, player_t *player)
+{
+	// the reverse button of convoi_info_t is shown for these only
+	if (cnv->get_vehicle_count() == 0  ||  !env_t::reversible_waytype(cnv->front()->get_waytype())) {
+		return "invalid: convoys of this waytype cannot reverse";
+	}
+	// the depot has its own toggle (depot_x::reverse_convoy), and convoi_t::reverse_vehicles_on_user_request
+	// would set a convoy in a depot driving
+	if (cnv->in_depot()  ||  cnv->get_state() == convoi_t::INITIAL) {
+		return "invalid: the convoy is in a depot (see depot_x::reverse_convoy)";
+	}
+	const schedule_t *schedule = cnv->get_schedule();
+	if (schedule == NULL  ||  schedule->empty()) {
+		return "invalid: the convoy has no schedule";
+	}
+	// convoi_t::reverse_vehicles_on_user_request ignores it then
+	if (!cnv->is_loading()  &&  schedule->get_current_entry().is_wait_for_coupling()) {
+		return "invalid: the convoy waits for coupling here";
+	}
+	// see convoi_info_t::action_triggered (reversed_button): tool = 'v'
+	cbuffer_t buf;
+	buf.printf("%c,%u", 'v', cnv->self.get_id());
+
+	call_tool_init call(TOOL_CHANGE_CONVOI | SIMPLE_TOOL, buf, 0, player);
+	call.require_owner(cnv->get_owner());
+	return call;
+}
+
+sint64 convoy_get_sale_value(convoi_t *cnv)
+{
+	return cnv->calc_restwert();
+}
+
+// implementation in api_schedule.cc
+const char *script_schedule_rejection(const schedule_t *sched);
+
+/// why change_schedule would fail, NULL if it would not
+static const char *convoy_schedule_error(convoi_t *cnv, player_t *player, schedule_t *sched)
+{
+	if (sched == NULL) {
+		return "invalid: Invalid schedule provided";
+	}
+	if (player  &&  !player_t::check_owner(cnv->get_owner(), player)) {
+		return "permission: the object belongs to another player";
+	}
+	// all or nothing: the entries that are no stops would be left out
+	if (const char *err = script_schedule_rejection(sched)) {
+		return err;
+	}
+	if (sched->get_count() < 2) {
+		return "invalid: Invalid schedule provided: less than two entries remained after removing doubles";
+	}
+	// the tool would ignore it silently (schedule_t::sscanf_schedule)
+	if (sched->get_waytype() != get_convoy_wt(cnv)  &&  !(cnv->get_schedule()  &&  cnv->get_schedule()->get_type() == sched->get_type())) {
+		return "invalid: the schedule is for another waytype";
+	}
+	return NULL;
+}
+
+const char *convoy_validate_schedule(convoi_t *cnv, player_t *player, schedule_t *sched)
+{
+	return convoy_schedule_error(cnv, player, sched);
+}
+
 call_tool_init convoy_change_schedule(convoi_t *cnv, player_t *player, schedule_t *sched)
 {
-	if (sched) {
-		cbuffer_t buf;
-		schedule_t *copy = sched->copy();
-		if (copy->get_count() >= 2) {
-			buf.printf("g,%u,", cnv->self.get_id());
-			copy->sprintf_schedule(buf);
-		}
-		else {
-			delete copy;
-			return "invalid: Invalid schedule provided: less than two entries remained after removing doubles";
-		}
-		delete copy;
-		call_tool_init call(TOOL_CHANGE_CONVOI | SIMPLE_TOOL, buf, 0, player);
-		call.require_owner(cnv->get_owner());
-		return call;
+	if (const char *err = convoy_schedule_error(cnv, NULL, sched)) {
+		return err;
 	}
-	return "invalid: Invalid schedule provided";
+	cbuffer_t buf;
+	buf.printf("g,%u,", cnv->self.get_id());
+	sched->sprintf_schedule(buf);
+	call_tool_init call(TOOL_CHANGE_CONVOI | SIMPLE_TOOL, buf, 0, player);
+	call.require_owner(cnv->get_owner());
+	return call;
 }
 
 bool convoy_is_schedule_editor_open(convoi_t *cnv)
@@ -423,12 +481,43 @@ void export_convoy(HSQUIRRELVM vm)
 	 */
 	register_method_fv(vm, convoy_generic_tool, "destroy", freevariable<uint8>('x'), true);
 	/**
+	 * Reverse a driving convoy (the reverse button of the convoy window): it turns at once,
+	 * or at its departure if it is loading. Not for road vehicles and aircraft, nor in a depot.
+	 * @param pl player owns the convoy
+	 * @ingroup game_cmd
+	 */
+	register_method(vm, convoy_reverse, "reverse", true);
+	/**
+	 * @returns whether the vehicles of the convoy are in reversed order (driving backwards)
+	 */
+	register_method(vm, &convoi_t::is_reversed, "is_reversed");
+	/**
+	 * @returns whether the convoy will reverse at its departure (in a depot: the reverse button of the depot window)
+	 */
+	register_method(vm, &convoi_t::is_reversing_needed, "is_reversing_needed");
+	/**
+	 * @returns what selling the convoy gives now (1/100 credits), as the convoy window shows it
+	 */
+	register_method(vm, convoy_get_sale_value, "get_sale_value", true);
+	/**
 	 * Change the schedule of the convoy.
+	 * Entries that cannot be stops of this convoy fail the whole call (nothing is changed).
+	 * The recorded journey, waiting and stopping times are kept for the entries whose
+	 * position and previous position did not change (as in the schedule window).
 	 * @param pl player to pay for the change
 	 * @param sched new schedule
+	 * @returns as all game commands: true when executed at once, false when sent to the server
+	 *          (network game); a failure raises an error (see validate_schedule)
 	 * @ingroup game_cmd
 	 */
 	register_method(vm, convoy_change_schedule, "change_schedule", true);
+	/**
+	 * Check a schedule as change_schedule does, without changing anything.
+	 * @param pl player who would change it
+	 * @param sched the schedule
+	 * @returns null if change_schedule would accept it, else the error it would raise
+	 */
+	register_method(vm, convoy_validate_schedule, "validate_schedule", true);
 	/**
 	 * @returns returns true if the schedule of the convoy is currently being edited.
 	 */

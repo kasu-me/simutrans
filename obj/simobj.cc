@@ -74,6 +74,8 @@ obj_t::~obj_t()
 	if(flags&not_on_map  ||  !welt->is_within_limits(pos.get_2d())) {
 		return;
 	}
+	// the change log must not ask this object for its type any more
+	live_changes_t::destroying_t destroying(this);
 
 	// find object on the map and remove it
 	grund_t *gr = welt->lookup(pos);
@@ -119,7 +121,8 @@ void obj_t::set_owner(player_t *player)
 	int i = welt->sp2num(player);
 	assert(i>=0);
 	if(  owner_n != (uint8)i  ) {
-		live_changes_t::obj(this);
+		// often called from constructors: the object cannot tell its type yet
+		live_changes_t::obj_untyped(this);
 	}
 	owner_n = (uint8)i;
 }

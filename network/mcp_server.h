@@ -71,7 +71,7 @@ private:
 	/// A run_squirrel call that suspended mid-execution (network mode command_x).
 	struct mcp_pending_t {
 		script_vm_t      *vm;
-		mcp_connection_t *conn;
+		mcp_connection_t *conn;   ///< NULL when it was closed
 		std::string       id_json;
 		uint32            sync_start; ///< sync step when the script was called
 		uint32            started_ms; ///< dr_time() when the script was called (for its time limit)
@@ -81,6 +81,14 @@ private:
 	static SOCKET listen_sock6; ///< ::1
 	static std::vector<mcp_connection_t *> connections;
 	static std::vector<mcp_pending_t *>    pending_scripts;
+
+	/// A save_world call: done after the requests of a step (see step_saves).
+	struct mcp_pending_save_t {
+		mcp_connection_t *conn;   ///< NULL when it was closed
+		std::string       id_json;
+		std::string       args_json;
+	};
+	static std::vector<mcp_pending_save_t> pending_saves;
 	static karte_t *world; ///< current world, set each step()
 	static std::string token; ///< required in initialize if not empty
 	static const char *busy; ///< reason while step_busy() handles the requests
@@ -94,6 +102,7 @@ private:
 	static void io_connection(mcp_connection_t *c);
 	static void handle_line(mcp_connection_t *c, const std::string &line);
 	static void step_pending();
+	static void step_saves();
 
 	/** Build a JSON-RPC success response. result_json is the raw JSON value. */
 	static std::string make_response(const std::string &id_json, const std::string &result_json);

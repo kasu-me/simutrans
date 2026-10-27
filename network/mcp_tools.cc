@@ -25,6 +25,9 @@
 #include <stdio.h>
 #include <string.h>
 #include <string>
+#include <map>
+#include <time.h>
+#include <sys/stat.h>
 
 #include "../script/script.h"
 #include "../script/script_loader.h"
@@ -40,6 +43,8 @@
 #include "../sys/simsys.h"
 #include "../dataobj/koord3d.h"
 #include "../boden/grund.h"
+#include "../dataobj/loadsave.h"
+#include "../simversion.h"
 
 
 // ---------------------------------------------------------------------------
@@ -257,6 +262,118 @@ static std::string tool_capture_view(karte_t *welt, const std::string &args_json
 		+ "}]}";
 }
 
+/// the answer of a save_world, kept for the calls within max_age
+struct saved_world_t
+{
+	uint32 ms;          ///< dr_time() of the save
+	uint32 epoch;
+	std::string json;   ///< the fields after the head of the answer
+};
+static std::map<std::string, saved_world_t> saved_worlds;
+
+/// a file name of letters, digits and _-. (not starting with a dot), at most 64 bytes, ending with .sve
+static bool valid_save_name(const std::string &name)
+{
+	if(  name.size() < 5  ||  name.size() > 64  ||  name[0] == '.'  ||  name.compare(name.size() - 4, 4, ".sve") != 0  ) {
+		return false;
+	}
+	for(  char c : name  ) {
+		if(  !((c >= 'a'  &&  c <= 'z')  ||  (c >= 'A'  &&  c <= 'Z')  ||  (c >= '0'  &&  c <= '9')  ||  c == '_'  ||  c == '-'  ||  c == '.')  ) {
+			return false;
+		}
+	}
+	return name.find("..") == std::string::npos;
+}
+
+std::string mcp_tools::save_world(karte_t *welt, const std::string &args_json)
+{
+	if(  !welt  ) {
+		return text_content("{\"error\":\"world not ready\"}");
+	}
+	const std::string name = mcp_server_t::json_get_string(args_json, "name");
+	if(  !valid_save_name(name)  ) {
+		return text_content("{\"error\":\"invalid: name must be a file name of letters, digits and _-. ending with .sve (at most 64 bytes)\"}");
+	}
+	const std::string max_age_raw = mcp_server_t::json_get_raw(args_json, "max_age");
+	const sint64 max_age = max_age_raw.empty()  ||  max_age_raw == "null" ? 30 : atoll(max_age_raw.c_str());
+	const std::string format = mcp_server_t::json_get_string(args_json, "format");
+	loadsave_t::mode_t mode = loadsave_t::autosave_mode;
+	if(  format == "bzip2"  ) {
+		mode = loadsave_t::bzip2;
+	}
+	else if(  format == "zipped"  ) {
+		mode = loadsave_t::zipped;
+	}
+#if USE_ZSTD
+	else if(  format == "zstd"  ) {
+		mode = loadsave_t::zstd;
+	}
+#endif
+	else if(  !format.empty()  &&  format != "null"  ) {
+		return text_content("{\"error\":\"invalid: format must be bzip2, zipped or zstd (if built with it)\"}");
+	}
+	// relative to the user directory, as the other savegames
+	const std::string file = "save/webview/" + name;
+
+	std::string out = "{";
+	live_state::add_head(out, welt);
+
+	// a save of the same world within max_age seconds is given again
+	struct stat st;
+	auto cached = saved_worlds.find(name);
+	if(  cached != saved_worlds.end()  &&  cached->second.epoch == live_changes_t::get_epoch()  &&  max_age > 0
+		&&  (sint64)(dr_time() - cached->second.ms) < max_age * 1000  &&  dr_stat((env_t::user_dir + file).c_str(), &st) == 0  ) {
+		out += cached->second.json;
+		out += ",\"cached\":true,\"age_ms\":";
+		out += std::to_string(dr_time() - cached->second.ms);
+		out += '}';
+		return text_content(out);
+	}
+
+	// in a network game the server saves on its own: saving must not change the game
+	if(  env_t::networkmode  &&  welt->needs_rotation_to_save()  ) {
+		return text_content("{\"error\":\"invalid: this map can only be saved after rotating it, which would change the game of the server only\"}");
+	}
+
+	dr_chdir(env_t::user_dir);
+	dr_mkdir("save");
+	dr_mkdir("save/webview");
+	const uint32 sync = welt->get_sync_steps();
+	const loadsave_t::mode_t old_mode = loadsave_t::autosave_mode;
+	loadsave_t::set_autosavemode(mode);
+	const time_t started = time(NULL);
+	const uint32 start_ms = dr_time();
+	// karte_t::save writes a temporary file (the last letter '_') and renames it, records the event "saved"
+	welt->save(file.c_str(), true, SAVEGAME_VER_NR, true);
+	const uint32 ms = dr_time() - start_ms;
+	loadsave_t::set_autosavemode(old_mode);
+
+	if(  dr_stat(file.c_str(), &st) != 0  ||  st.st_mtime + 1 < started  ) {
+		return text_content("{\"error\":\"invalid: the game could not be saved (see the log of the game)\"}");
+	}
+	std::string fields = ",\"ok\":true,\"path\":";
+	fields += jstr("webview/" + name);
+	fields += ",\"file\":";
+	fields += jstr(file);
+	fields += ",\"saved_sync\":";
+	fields += std::to_string(sync);
+	fields += ",\"seq\":";
+	fields += std::to_string(live_changes_t::get_next_seq());
+	fields += ",\"bytes\":";
+	fields += std::to_string((long long)st.st_size);
+	fields += ",\"ms\":";
+	fields += std::to_string(ms);
+	saved_world_t &entry = saved_worlds[name];
+	entry.ms = dr_time();
+	entry.epoch = live_changes_t::get_epoch();
+	entry.json = fields;
+
+	out += fields;
+	out += ",\"cached\":false}";
+	return text_content(out);
+}
+
+
 static std::string tool_capture_screen()
 {
 	std::string png_data;
@@ -415,8 +532,10 @@ static const tool_def_t TOOL_DEFS[] = {
 	{
 		"get_changes",
 		"Return the changes of the static world since a sequence number: "
-		"{epoch, sync, seq, floor, overflow, tiles:[[sync,x,y],...], sig:[[sync,x,y,z,typ,dir,state],...], "
+		"{epoch, sync, seq, floor, overflow, tiles:[[sync,x,y,kind],...], sig:[[sync,x,y,z,typ,dir,state],...], "
 		"events:[{type:sold, sync, convoy, player, amount}, ...]}. "
+		"kind: bits of what changed on the tile: 1 road, 2 track, 4 water way, 8 air way, 16 signal or sign, "
+		"32 building, 64 station, depot or stop name, 128 terrain, 256 other. "
 		"Pass the seq of the previous answer as since (null at first: then only seq is returned). "
 		"overflow is true when entries since then are lost (reload the whole world). "
 		"Changes are recorded only while the MCP server runs.",
@@ -443,17 +562,18 @@ static const tool_def_t TOOL_DEFS[] = {
 		"(the last value of a row is its hash, FNV-1a of the row without the current stop of a schedule): "
 		"{epoch, sync, ..., kind, level, hash_only, rows, gone (ids asked for that do not exist), vnames (convoys)}. "
 		"halts: [id, name, owner, [[x,y,z],...], station type bits, enabled bits (1 passengers 2 mail 4 goods), hash]; "
-		"convoys: [id, name, owner, line (-1), state, home depot [x,y,z], [vehicle types (vnames index)], schedule, hash]; "
+		"convoys: [id, name, owner, line (-1), state, home depot [x,y,z], [vehicle types (vnames index)], schedule, vtype (obj_t::typ of the front vehicle, -1), hash]; "
 		"lines: [id, name, owner, line type, colour, schedule, [convoy ids], hash]; "
 		"factories: [x, y, z, name, custom name, owner, base production, [[field x, y, class],...], [input goods], [output goods], hash]; "
 		"cities: [x, y, name, population, [lo x, lo y, ur x, ur y], bev, arb, won, hash]; "
 		"players: [nr, name, colour 1, colour 2, ai type, locked, hash]; depots: [x, y, z, owner, waytype, name, hash]. "
 		"schedule: [current, flags, max speed, base waiting time, next line (-1), [[x,y,z,stop flags,min load,waiting time shift],...]]; "
 		"level full adds the departure slot group line and the waytype before the entries, and every other entry field. "
-		"level area (halts): [id, [[y, x0, x1], ...], hash], the tiles the halt serves.",
+		"level area (halts): [id, [[y, x0, x1], ...], hash], the tiles the halt serves. "
+		"kind settings: {..., kind, settings: {name: value}} with the settings the checks of the tools depend on.",
 		"{\"type\":\"object\","
 		 "\"properties\":{"
-		   "\"kind\":{\"type\":\"string\",\"enum\":[\"halts\",\"convoys\",\"lines\",\"factories\",\"cities\",\"players\",\"depots\"]},"
+		   "\"kind\":{\"type\":\"string\",\"enum\":[\"halts\",\"convoys\",\"lines\",\"factories\",\"cities\",\"players\",\"depots\",\"settings\"]},"
 		   "\"ids\":{\"type\":\"array\",\"description\":\"ids, or [x,y] / [x,y,z] for factories, cities, depots; default all\"},"
 		   "\"level\":{\"type\":\"string\",\"enum\":[\"basic\",\"full\",\"area\"]},"
 		   "\"hash_only\":{\"type\":\"boolean\",\"description\":\"rows are [key..., hash] only\"}"
@@ -503,6 +623,25 @@ static const tool_def_t TOOL_DEFS[] = {
 		   "\"h\":{\"type\":\"integer\"}"
 		 "},"
 		 "\"required\":[\"x\",\"y\"],"
+		 "\"additionalProperties\":false}"
+	},
+	{
+		"save_world",
+		"Write the world as it is now as a savegame (as an autosave, silently) into the folder save/webview/ "
+		"of the user directory of the game, and answer when it is written: "
+		"{epoch, sync, ..., ok, path (webview/<name>), file (save/webview/<name>), saved_sync, "
+		"seq (get_changes since this seq gives what changed after the save), bytes, ms (time taken), cached, age_ms}. "
+		"The game stops while it saves (other requests are answered busy). "
+		"A save of the same name within max_age seconds is not written again: its answer is given again (cached true). "
+		"In a network game only this game saves; the clients are not synchronised.",
+		"{\"type\":\"object\","
+		 "\"properties\":{"
+		   "\"name\":{\"type\":\"string\",\"description\":\"file name: letters, digits and _-., ending with .sve, at most 64 bytes\"},"
+		   "\"max_age\":{\"type\":\"integer\",\"description\":\"seconds (default 30, 0: always write)\"},"
+		   "\"format\":{\"type\":\"string\",\"enum\":[\"bzip2\",\"zipped\",\"zstd\"],"
+		              "\"description\":\"default: the autosave format of the game (simuconf.tab autosaveformat)\"}"
+		 "},"
+		 "\"required\":[\"name\"],"
 		 "\"additionalProperties\":false}"
 	}
 };
@@ -589,6 +728,11 @@ std::string mcp_tools::tools_call(const std::string &name,
 
 	if (name == "capture_view") {
 		return tool_capture_view(welt, args_json);
+	}
+
+	if (name == "save_world") {
+		// mcp_server_t calls it after the requests of a step
+		return save_world(welt, args_json);
 	}
 
 	return text_content("{\"error\":\"unknown tool: " + jesc(name) + "\"}");

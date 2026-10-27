@@ -42,6 +42,7 @@ SOCKET mcp_server_t::listen_sock = INVALID_SOCKET;
 SOCKET mcp_server_t::listen_sock6 = INVALID_SOCKET;
 std::vector<mcp_server_t::mcp_connection_t *> mcp_server_t::connections;
 std::vector<mcp_server_t::mcp_pending_t *>    mcp_server_t::pending_scripts;
+std::vector<mcp_server_t::mcp_pending_save_t> mcp_server_t::pending_saves;
 karte_t *mcp_server_t::world = NULL;
 std::string mcp_server_t::token;
 const char *mcp_server_t::busy = NULL;
@@ -164,6 +165,7 @@ void mcp_server_t::shutdown()
 		delete p;
 	}
 	pending_scripts.clear();
+	pending_saves.clear();
 
 	for (mcp_connection_t *c : connections) {
 		close_socket(c->sock);
@@ -189,6 +191,25 @@ void mcp_server_t::step(karte_t *welt)
 	io_connections();
 	step_pending();
 	stepping = false;
+	// saving answers the other requests "busy" (step_busy), which it cannot within a request
+	step_saves();
+}
+
+
+void mcp_server_t::step_saves()
+{
+	while (!pending_saves.empty()) {
+		mcp_pending_save_t p = pending_saves.front();
+		pending_saves.erase(pending_saves.begin());
+		if (p.conn == NULL) {
+			continue;
+		}
+		const std::string result = mcp_tools::save_world(world, p.args_json);
+		// the connection may have been closed meanwhile
+		if (p.conn  &&  std::find(connections.begin(), connections.end(), p.conn) != connections.end()  &&  p.conn->sock != INVALID_SOCKET) {
+			p.conn->send_buf += make_response(p.id_json, result) + '\n';
+		}
+	}
 }
 
 
@@ -238,6 +259,16 @@ void mcp_server_t::io_connections()
 		}
 	}
 	for (mcp_connection_t *c : dead) {
+		for (mcp_pending_t *p : pending_scripts) {
+			if (p->conn == c) {
+				p->conn = NULL;
+			}
+		}
+		for (mcp_pending_save_t &p : pending_saves) {
+			if (p.conn == c) {
+				p.conn = NULL;
+			}
+		}
 		connections.erase(std::find(connections.begin(), connections.end(), c));
 		delete c;
 	}
@@ -255,7 +286,7 @@ void mcp_server_t::step_pending()
 	std::vector<mcp_pending_t *> still_pending;
 	for (mcp_pending_t *p : pending_scripts) {
 		// If the connection was closed, cancel the script silently
-		if (p->conn->sock == INVALID_SOCKET) {
+		if (p->conn == NULL  ||  p->conn->sock == INVALID_SOCKET) {
 			delete p->vm;
 			delete p;
 			continue;
@@ -480,6 +511,12 @@ std::string mcp_server_t::dispatch(mcp_connection_t   *c,
 		if (busy) {
 			// the game is not in a state to be read or changed: answer at once instead of after the save
 			return make_response(id_json, mcp_tools::busy_result(busy));
+		}
+
+		if (tool_name == "save_world") {
+			// answered after the requests of this step
+			pending_saves.push_back(mcp_pending_save_t{c, id_json, args_json});
+			return "";
 		}
 
 		script_vm_t *pending_vm = nullptr;

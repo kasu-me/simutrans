@@ -41,6 +41,10 @@
 #include "../simversion.h"
 #include "../boden/grund.h"
 #include "../obj/simobj.h"
+#include "../obj/gebaeude.h"
+#include "../obj/crossing.h"
+#include "../descriptor/building_desc.h"
+#include "../descriptor/crossing_desc.h"
 #include "../vehicle/simvehicle.h"
 #include "../player/simplay.h"
 #include "../dataobj/loadsave.h"
@@ -71,6 +75,7 @@ using live_util::parse_int_array;
 // ---------------------------------------------------------------------------
 
 bool live_changes_t::recording = false;
+const obj_t *live_changes_t::destroying = NULL;
 bool live_changes_t::enabled = false;
 uint32 live_changes_t::world_resets = 0;
 bool live_changes_t::keep_epoch = false;
@@ -94,7 +99,7 @@ const char *const ENTITY_TYPES[live_changes_t::K_MAX] = { "station", "convoy", "
 const char *const WHAT_NAMES[live_changes_t::W_MAX_BIT] = { "new", "gone", "name", "tiles", "line", "schedule", "vehicles", "colour", "fields" };
 
 /**
- * One entry of the change log: a tile (typ 0), the state of a signal, roadsign
+ * One entry of the change log: a tile (typ 0, id = kind bits), the state of a signal, roadsign
  * or crossing (typ = its obj_t::typ), or an event:
  * CHANGE_SOLD (id = convoy, dir = player, value = amount),
  * CHANGE_ENTITY (dir = entity_kind_t, id or x, y, z, value = what bits),
@@ -159,7 +164,7 @@ void add_event(std::string &out, const change_t &c, uint32 seq);
 }
 
 
-void live_changes_t::record_tile(sint16 x, sint16 y)
+void live_changes_t::record_tile(sint16 x, sint16 y, uint16 kind)
 {
 	karte_t *welt = world();
 	if(  !welt  ||  !welt->is_within_limits(x, y)  ) {
@@ -168,26 +173,97 @@ void live_changes_t::record_tile(sint16 x, sint16 y)
 	const uint32 sync = welt->get_sync_steps();
 	// the same tile in the same sync step is recorded once (unless the first one was already delivered)
 	for(  uint32 seq = next_seq;  seq > first_seq  &&  seq > read_seq  &&  next_seq - seq < MERGE_LOOKBACK;  ) {
-		const change_t &c = change_log[--seq % LOG_SIZE];
+		change_t &c = change_log[--seq % LOG_SIZE];
 		if(  c.sync != sync  ) {
 			break;
 		}
 		if(  c.typ == 0  &&  c.x == x  &&  c.y == y  ) {
+			c.id |= kind;
 			return;
 		}
 	}
-	change_t c = { sync, x, y, 0, 0, 0, 0, 0, 0 };
+	change_t c = { sync, x, y, 0, 0, 0, 0, kind, 0 };
 	push_change(c);
 }
 
 
-void live_changes_t::record_obj(const obj_t *o)
+uint16 live_changes_t::way_kind(waytype_t wt)
 {
-	// no virtual calls here: objects also come here from obj_t::~obj_t
+	switch(  wt  ) {
+		case road_wt:        return T_ROAD;
+		case track_wt:
+		case tram_wt:
+		case monorail_wt:
+		case maglev_wt:
+		case narrowgauge_wt: return T_TRACK;
+		case water_wt:       return T_WATER;
+		case air_wt:         return T_AIR;
+		default:             return T_OTHER;
+	}
+}
+
+
+namespace {
+
+/// the kind of a building: a transport building (stop, depot ...) or another one, 0 while it gets its first tile
+uint16 building_kind(const gebaeude_t *gb)
+{
+	const building_tile_desc_t *tile = gb->get_tile();
+	if(  tile == NULL  ) {
+		return 0;
+	}
+	return tile->get_desc()->is_transport_building() ? live_changes_t::T_STATION : live_changes_t::T_BUILDING;
+}
+
+/// the kind of a change of an object that is not being destroyed
+uint16 obj_kind(const obj_t *o)
+{
+	switch(  o->get_typ()  ) {
+		case obj_t::way:
+		case obj_t::bruecke:
+		case obj_t::tunnel:
+			return live_changes_t::way_kind(o->get_waytype());
+		case obj_t::signal:
+		case obj_t::roadsign:
+			return live_changes_t::T_SIGN;
+		case obj_t::crossing: {
+			const crossing_desc_t *desc = static_cast<const crossing_t *>(o)->get_desc();
+			return desc ? live_changes_t::way_kind(desc->get_waytype(0)) | live_changes_t::way_kind(desc->get_waytype(1)) : live_changes_t::T_OTHER;
+		}
+		case obj_t::gebaeude:
+			return building_kind(static_cast<const gebaeude_t *>(o));
+		case obj_t::bahndepot:
+		case obj_t::strassendepot:
+		case obj_t::schiffdepot:
+		case obj_t::airdepot:
+		case obj_t::monoraildepot:
+		case obj_t::tramdepot:
+		case obj_t::maglevdepot:
+		case obj_t::narrowgaugedepot:
+			return live_changes_t::T_STATION;
+		default:
+			return live_changes_t::T_OTHER;
+	}
+}
+
+}
+
+
+void live_changes_t::record_obj(const obj_t *o, bool typed)
+{
 	if(  o->is_moving()  ||  o->get_flag(obj_t::no_change_log)  ) {
 		return;
 	}
-	record_tile(o->get_pos().x, o->get_pos().y);
+	// no virtual calls on an object in obj_t::~obj_t (its class reported it with obj_destroyed, if at all)
+	record_tile(o->get_pos().x, o->get_pos().y, typed  &&  o != destroying ? obj_kind(o) : 0);
+}
+
+
+void live_changes_t::obj_destroyed(const obj_t *o, uint16 kind)
+{
+	if(  recording  &&  !o->get_flag(obj_t::not_on_map)  &&  !o->get_flag(obj_t::no_change_log)  ) {
+		record_tile(o->get_pos().x, o->get_pos().y, kind);
+	}
 }
 
 
@@ -456,6 +532,12 @@ live_changes_t::world_reset_t::~world_reset_t()
 }
 
 
+uint32 live_changes_t::get_next_seq()
+{
+	return next_seq;
+}
+
+
 uint32 live_changes_t::get_epoch()
 {
 	if(  epoch == 0  ) {
@@ -628,6 +710,59 @@ void add_air(std::string &out, const vehicle_t *v)
 }
 
 
+void add_air_indices(std::string &out, vehicle_t *v)
+{
+	if(  v->get_waytype() != air_wt  ) {
+		out += "null";
+		return;
+	}
+	air_vehicle_t::flight_state state;
+	uint32 takeoff, search, touchdown;
+	static_cast<air_vehicle_t *>(v)->get_event_index(state, takeoff, search, touchdown);
+	out += '[';
+	add_int(out, takeoff);
+	out += ',';
+	add_int(out, search);
+	out += ',';
+	add_int(out, touchdown);
+	out += ']';
+}
+
+/**
+ * The direction of the image the vehicle shows: the one of the images of its type that is
+ * the image now (vehicle_t::calc_image takes vehicle_t::get_image_direction, a road vehicle
+ * leaving a stop sideways the side of the direction, road_vehicle_t::set_sideways_image).
+ */
+ribi_t::ribi image_direction(const vehicle_t *v)
+{
+	// while loading, the convoy is (convoi_t *)1
+	const convoi_t *cnv = v->get_convoi() == (convoi_t *)1 ? NULL : v->get_convoi();
+	const bool reversed = cnv ? cnv->is_reversed() : false;
+	// vehicle_t::get_image_direction
+	const ribi_t::ribi dir = reversed ? ribi_t::backward(v->get_direction()) : v->get_direction();
+	const vehicle_desc_t *desc = v->get_desc();
+	const image_id image = v->get_image();
+	if(  desc == NULL  ||  image == IMG_EMPTY  ) {
+		return dir;
+	}
+	const bool no_electric = cnv ? !cnv->get_use_electric() : false;
+	const goods_desc_t *goods = v->get_cargo().empty() ? NULL : v->get_cargo().front().get_desc();
+	if(  desc->get_image_id(ribi_t::get_dir(dir), goods, reversed, no_electric) == image  ) {
+		return dir;
+	}
+	static const ribi_t::ribi dirs[8] = {
+		ribi_t::south, ribi_t::west, ribi_t::southwest, ribi_t::southeast,
+		ribi_t::north, ribi_t::east, ribi_t::northeast, ribi_t::northwest
+	};
+	for(  int i = 0;  i < 8;  i++  ) {
+		if(  desc->get_image_id(ribi_t::get_dir(dirs[i]), goods, reversed, no_electric) == image  ) {
+			return dirs[i];
+		}
+	}
+	return dir;
+}
+
+
 // ---------------------------------------------------------------------------
 // get_live_state
 // ---------------------------------------------------------------------------
@@ -637,7 +772,7 @@ enum vehicle_field_t {
 	VF_NX, VF_NY, VF_NZ, VF_PREV_DIR, VF_DX, VF_DY, VF_HOFF, VF_ZOFF_START, VF_ZOFF_END,
 	VF_LANE, VF_NEXT_LANE, VF_SPEED_LIMIT, VF_ROUTE_INDEX, VF_PX, VF_PY, VF_PZ,
 	VF_LEADING, VF_LAST, VF_CARGO, VF_CAPACITY, VF_OVERTAKING, VF_WITHDRAW, VF_IN_DEPOT,
-	VF_DIST, VF_VID, VF_VSN
+	VF_DIST, VF_VID, VF_VSN, VF_IDIR, VF_AIR_IX
 };
 
 struct vehicle_field_name_t {
@@ -674,7 +809,10 @@ const vehicle_field_name_t VEHICLE_FIELDS[] = {
 	// position and identity
 	{ "dist", VF_DIST },                // steps from the start of the route (route_tile_lengths), -1 unknown
 	{ "vid", VF_VID },                  // vehicle type: index in "vnames"
-	{ "vsn", VF_VSN }                   // place in the convoy as assembled (does not change when the convoy reverses)
+	{ "vsn", VF_VSN },                  // place in the convoy as assembled (does not change when the convoy reverses)
+	// the picture
+	{ "idir", VF_IDIR },                // direction (ribi) of the image shown
+	{ "air_ix", VF_AIR_IX }             // aircraft: [takeoff, search for stop, touchdown] (route indices as saved), null if no aircraft
 };
 const int NUM_VEHICLE_FIELDS = sizeof(VEHICLE_FIELDS) / sizeof(VEHICLE_FIELDS[0]);
 const int NUM_DEFAULT_FIELDS = VF_AIR + 1;
@@ -774,6 +912,8 @@ void add_vehicle_field(std::string &out, vehicle_field_t f, const convoy_context
 		}
 		case VF_VID:          add_int(out, live_util::vehicle_name_index(v->get_desc())); break;
 		case VF_VSN:          add_int(out, ctx.reversed ? ctx.count - 1 - index : index); break;
+		case VF_IDIR:         add_int(out, image_direction(v)); break;
+		case VF_AIR_IX:       add_air_indices(out, v); break;
 	}
 }
 
@@ -1303,7 +1443,12 @@ std::string live_changes_t::get_changes_json(karte_t *welt, bool has_since, uint
 			add_int(list, c.x);
 			list += ',';
 			add_int(list, c.y);
-			if(  c.typ != 0  ) {
+			if(  c.typ == 0  ) {
+				// [sync, x, y, kind bits]
+				list += ',';
+				add_int(list, c.id ? c.id : (uint32)T_OTHER);
+			}
+			else {
 				// [sync, x, y, z, typ, dir, state]
 				list += ',';
 				add_int(list, c.z);

@@ -124,6 +124,7 @@ roadsign_t::roadsign_t(player_t *player, koord3d pos, ribi_t::ribi dir, const ro
 
 roadsign_t::~roadsign_t()
 {
+	live_changes_t::obj_destroyed(this, live_changes_t::T_SIGN);
 	if(  desc  ) {
 		const grund_t *gr = welt->lookup(get_pos());
 		waytype_t finance_waytype = desc->get_waytype();

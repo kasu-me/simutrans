@@ -362,7 +362,7 @@ void info_convoys(rows_t &rows, id_filter_t &ids, karte_t *welt, info_level_t le
 		if(  !cnv.is_bound()  ||  !ids.wants(cnv.get_id())  ) {
 			continue;
 		}
-		// [id, name, owner, line (-1 none), state, home depot [x, y, z], [vehicle types (vnames index)], schedule, hash]
+		// [id, name, owner, line (-1 none), state, home depot [x, y, z], [vehicle types (vnames index)], schedule, vtype, hash]
 		head = "[";
 		add_int(head, cnv.get_id());
 		head += ',';
@@ -391,6 +391,11 @@ void info_convoys(rows_t &rows, id_filter_t &ids, karte_t *welt, info_level_t le
 			basic_tail.clear();
 			add_schedule(basic_current, basic_tail, cnv->get_schedule(), LEVEL_BASIC);
 		}
+		// the obj_t::typ of the front vehicle (road_vehicle, rail_vehicle, ...), -1 without vehicles
+		std::string vtype = ",";
+		add_int(vtype, cnv->get_vehicle_count() > 0 ? (sint64)cnv->front()->get_typ() : -1);
+		tail += vtype;
+		basic_tail += vtype;
 		rows.add(key_of(cnv.get_id()), head, current, tail, level == LEVEL_FULL ? &basic_tail : NULL);
 	}
 }
@@ -589,6 +594,38 @@ int kind_index(const std::string &kind)
 	return -1;
 }
 
+void add_named(std::string &out, const char *name, sint64 value)
+{
+	if(  out.size() > 1  ) {
+		out += ',';
+	}
+	add_str(out, name);
+	out += ':';
+	add_int(out, value);
+}
+
+/// the settings that the checks of the game's tools depend on, named as in settings_t (the savegame)
+std::string info_settings(karte_t *welt)
+{
+	const settings_t &s = welt->get_settings();
+	std::string obj = "{";
+	add_named(obj, "use_timeline", welt->use_timeline());
+	add_named(obj, "timeline_year_month", welt->get_timeline_year_month());   // 0 without timeline: everything is available
+	add_named(obj, "current_month", welt->get_current_month());
+	add_named(obj, "starting_year", s.get_starting_year());
+	add_named(obj, "bits_per_month", s.get_bits_per_month());
+	add_named(obj, "allow_buying_obsolete_vehicles", s.get_allow_buying_obsolete_vehicles());
+	add_named(obj, "allow_overloading", s.is_allow_overloading());
+	add_named(obj, "spacing_shift_divisor", s.get_spacing_shift_divisor());
+	add_named(obj, "max_rail_convoi_length", s.get_max_rail_convoi_length());
+	add_named(obj, "max_road_convoi_length", s.get_max_road_convoi_length());
+	add_named(obj, "max_ship_convoi_length", s.get_max_ship_convoi_length());
+	add_named(obj, "max_air_convoi_length", s.get_max_air_convoi_length());
+	add_named(obj, "drive_on_left", s.is_drive_left());
+	obj += '}';
+	return obj;
+}
+
 std::string kinds_error(const char *extra)
 {
 	std::string msg = "kind must be one of halts, convoys, lines, factories, cities, players, depots";
@@ -605,9 +642,17 @@ std::string live_state::get_info(karte_t *welt, const std::string &args_json)
 		return error_json("world not ready");
 	}
 	const std::string kind = mcp_server_t::json_get_string(args_json, "kind");
+	if(  kind == "settings"  ) {
+		std::string out = "{";
+		live_state::add_head(out, welt);
+		out += ",\"kind\":\"settings\",\"settings\":";
+		out += info_settings(welt);
+		out += '}';
+		return out;
+	}
 	const int k = kind_index(kind);
 	if(  k < 0  ) {
-		return kinds_error("");
+		return kinds_error(", settings");
 	}
 	const std::string level_name = mcp_server_t::json_get_string(args_json, "level");
 	info_level_t level = LEVEL_BASIC;

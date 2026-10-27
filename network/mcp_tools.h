@@ -43,6 +43,13 @@ const char *script_limit(const script_vm_t *vm, uint32 started_ms);
 /// the result of a tool call while the game is busy (saving, loading, a client joining)
 std::string busy_result(const char *reason);
 
+/**
+ * The tool save_world: writes the world as a savegame into the folder save/webview/ of the
+ * user directory and returns the MCP CallToolResult. Called by mcp_server_t outside of the
+ * handling of the requests, so that the other requests are answered "busy" while it saves.
+ */
+std::string save_world(karte_t *welt, const std::string &args_json);
+
 /** JSON array string suitable for the "tools" field in tools/list response. */
 std::string tools_list_json();
 

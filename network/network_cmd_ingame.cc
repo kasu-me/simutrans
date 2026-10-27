@@ -1287,7 +1287,7 @@ void nwc_tool_t::do_command(karte_t *welt)
 		err = tool->work( player, pos );
 		if(  err == NULL  ) {
 			// a hint for the live view: tools may change things in place (no object added or removed)
-			live_changes_t::tile( pos.x, pos.y );
+			live_changes_t::tile( pos.x, pos.y, 0 );   // 0: adds nothing to what the tool recorded itself
 		}
 		// only local players get the callback
 		if (local  &&  callback_id == 0  &&  player) {

@@ -430,11 +430,11 @@ public:
 	*/
 	inline const koord3d& get_pos() const { return pos; }
 
-	inline void set_pos(koord3d newpos) { live_changes_t::tile(pos.x, pos.y); pos = newpos; live_changes_t::tile(pos.x, pos.y); }
+	inline void set_pos(koord3d newpos) { live_changes_t::tile(pos.x, pos.y, live_changes_t::T_TERRAIN); pos = newpos; live_changes_t::tile(pos.x, pos.y, live_changes_t::T_TERRAIN); }
 
 	// slope are now maintained locally
 	slope_t::type get_grund_hang() const { return slope; }
-	void set_grund_hang(slope_t::type sl) { slope = sl; live_changes_t::tile(pos.x, pos.y); }
+	void set_grund_hang(slope_t::type sl) { slope = sl; live_changes_t::tile(pos.x, pos.y, live_changes_t::T_TERRAIN); }
 
 	/**
 	 * some ground tiles may be part of halts.
@@ -474,7 +474,7 @@ public:
 		}
 	}
 
-	void set_hoehe(sint8 h) { pos.z = h; live_changes_t::tile(pos.x, pos.y); }
+	void set_hoehe(sint8 h) { pos.z = h; live_changes_t::tile(pos.x, pos.y, live_changes_t::T_TERRAIN); }
 
 	// Helper functions for underground modes
 	//
