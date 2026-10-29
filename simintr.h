@@ -32,6 +32,8 @@ void intr_set_last_time(uint32 time);
 
 void intr_enable();
 void intr_disable();
+/// interrupt_check() may run sync steps (intr_enable)
+bool intr_is_enabled();
 
 
 void interrupt_check(const char* caller_info = "0");

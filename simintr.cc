@@ -144,6 +144,12 @@ void intr_enable()
 }
 
 
+bool intr_is_enabled()
+{
+	return enabled;
+}
+
+
 char const *tick_to_string( uint32 ticks )
 {
 	static sint32 tage_per_month[12]={31,28,31,30,31,30,31,31,30,31,30,31};

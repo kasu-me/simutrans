@@ -42,6 +42,7 @@ include("tests/test_way_road")
 include("tests/test_way_runway")
 include("tests/test_way_tram")
 include("tests/test_way_tunnel")
+include("tests/test_way_preview")
 include("tests/test_wayobj")
 include("tests/test_schedule")
 include("tests/test_road_api")
@@ -226,6 +227,9 @@ all_tests <- [
 	test_way_tram_build_on_road,
 	test_way_tram_build_across_crossing,
 	test_way_tunnel_make_public,
+	test_way_preview_calc_way_matches_build,
+	test_way_preview_calc_route_on_ways,
+	test_way_preview_wayobj_on_route,
 	test_wayobj_build_straight,
 	test_wayobj_build_disconnected,
 	test_wayobj_upgrade_downgrade,

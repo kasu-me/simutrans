@@ -153,6 +153,13 @@ private:
 
 	uint32 maximum;    // hoechste Suchtiefe
 
+	/// a route search takes at most this many steps (route_t::MAX_STEP if larger or 0)
+	uint32 max_steps;
+	/// a route search since the last calc_route ran out of steps
+	bool search_aborted;
+	/// no messages to the player (a preview, see command_x.calc_way)
+	bool quiet;
+
 	koord3d_vector_t route;
 	// index in route with terraformed tiles
 	vector_tpl<uint32> terraform_index;
@@ -210,6 +217,9 @@ private:
 
 	uint32 calc_distance( const koord3d &pos, const koord3d &mini, const koord3d &maxi );
 
+	/// the steps a route search may take
+	uint32 get_max_steps() const;
+
 	void update_ribi_mask_oneway(strasse_t* str, uint32 i);
 
 public:
@@ -246,6 +256,12 @@ public:
 	void init_builder(bautyp_t wt, const way_desc_t * desc, const tunnel_desc_t *tunnel_desc=NULL, const bridge_desc_t *bridge_desc=NULL);
 
 	void set_maximum(uint32 n) { maximum = n; }
+	uint32 get_maximum() const { return maximum; }
+
+	void set_max_steps(uint32 n) { max_steps = n; }
+	/// the last calc_route or calc_straight_route ran out of steps (in one of its searches)
+	bool is_search_aborted() const { return search_aborted; }
+	void set_quiet(bool yesno) { quiet = yesno; }
 
 	void set_overtaking_mode(overtaking_mode_t o) { overtaking_mode = o; }
 	void set_vehicle_offset(sint8 a) { vehicle_offset = a; }
@@ -261,6 +277,52 @@ public:
 	/* returns the amount needed to built this way
 	*/
 	sint64 calc_costs();
+
+	/// the costs of build() by their cause, positive: costs (as calc_costs)
+	struct cost_breakdown_t {
+		sint64 fresh;     ///< ways on tiles without one
+		sint64 replace;   ///< ways replacing an existing one
+		sint64 trees;
+		sint64 groundobj;
+		sint64 bridge;
+		sint64 tunnel;
+		cost_breakdown_t() : fresh(0), replace(0), trees(0), groundobj(0), bridge(0), tunnel(0) {}
+		sint64 total() const { return fresh + replace + trees + groundobj + bridge + tunnel; }
+	};
+
+	/// what build() does on a tile of the route, see calc_preview
+	enum preview_flag_t {
+		preview_new       = 1 << 0, ///< a new way
+		preview_replace   = 1 << 1, ///< the existing way gets this desc
+		preview_keep      = 1 << 2, ///< the existing way stays as it is
+		preview_crossing  = 1 << 3, ///< the new way makes a crossing
+		preview_clear     = 1 << 5, ///< trees and ground objects are removed
+		preview_bridge    = 1 << 6,
+		preview_tunnel    = 1 << 7,
+		preview_city_road = 1 << 8, ///< a city road kept (set_keep_city_roads)
+		preview_owner     = 1 << 9  ///< the replaced way changes its owner
+	};
+
+	struct preview_tile_t {
+		koord3d pos;         ///< of the way (the elevated tile for elevated ways)
+		ribi_t::ribi ribi;   ///< the directions after building: existing | route
+		uint16 flags;        ///< preview_flag_t
+	};
+
+	/// a bridge or tunnel build() adds between two tiles of the route
+	struct preview_structure_t {
+		koord3d start, end;
+		const char *name;
+		bool tunnel;
+	};
+
+	/**
+	 * What build() would do with the current route, without changing anything
+	 * (for a preview, see command_x.calc_way). The tiles are in the order of the route.
+	 * @param costs what build() books (calc_costs() is an estimate: it charges some tiles that
+	 *        build() keeps, and the reverse)
+	 */
+	void calc_preview(vector_tpl<preview_tile_t> &tiles, vector_tpl<preview_structure_t> &structures, cost_breakdown_t &costs) const;
 
 	bool check_crossing(const koord zv, const grund_t *bd, const way_desc_t *desc, const player_t *player) const;
 	bool check_powerline(const koord zv, const grund_t *bd) const;

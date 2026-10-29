@@ -89,6 +89,7 @@ enum {
 	TOOL_CHANGE_WAY_OFFSET,
 	TOOL_REMOVE_HOUSE,
 	TOOL_REMOVE_PILLAR,
+	TOOL_BUILD_WAYOBJ_ROUTE,
 	GENERAL_TOOL_COUNT,
 	GENERAL_TOOL = 0x1000
 };
@@ -339,6 +340,12 @@ public:
 	 * Returning true will select tool and will make it possible to call work.
 	 */
 	virtual bool init( player_t * ) { return true; }
+
+	/**
+	 * Why the last init() did not do its work, for scripts (the tools of the windows that do
+	 * their work in init), NULL if it did. An untranslated text, as the errors of work().
+	 */
+	virtual const char *get_init_error() const { return NULL; }
 
 	/// initializes cursor (icon, marked area)
 	void init_cursor( zeiger_t * ) const;

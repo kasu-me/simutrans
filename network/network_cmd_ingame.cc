@@ -1276,6 +1276,7 @@ void nwc_tool_t::do_command(karte_t *welt)
 		// we should be here only if tool->init() returns false
 		// no need to change active tool of world
 		res = tool->init(player);
+		err = tool->get_init_error();
 	}
 	// call WORK
 	else if (init_successfull) {
@@ -1309,9 +1310,9 @@ void nwc_tool_t::do_command(karte_t *welt)
 	// callback to script here
 	if (local  &&  callback_id != 0) {
 		if (init  &&  script_vm_t::is_mcp(script_vm)) {
-			// the tools of the windows return nothing (null), as without network (param<call_tool_init>::push)
-			const char *none = NULL;
-			suspended_scripts_t::tell_return_value(callback_id, none);
+			// the tools of the windows return nothing (null) or why they failed, as without network (param<call_tool_init>::push)
+			const char *script_err = script_vm_t::with_error_word(script_vm, err);
+			suspended_scripts_t::tell_return_value(callback_id, script_err);
 		}
 		else if (init) {
 			suspended_scripts_t::tell_return_value(callback_id, res);

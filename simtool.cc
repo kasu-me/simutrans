@@ -3329,10 +3329,9 @@ bool tool_build_way_t::calc_route( way_builder_t &bauigel, const koord3d &start,
 	return route_reversed;
 }
 
-const char *tool_build_way_t::do_work( player_t *player, const koord3d &start, const koord3d &end )
+const char *tool_build_way_t::prepare_build( way_builder_t &bauigel, const koord3d &start, const koord3d &end, bool &route_reversed, bool &single_tile_way )
 {
-	way_builder_t bauigel(player);
-	calc_route( bauigel, start, end );
+	route_reversed = calc_route( bauigel, start, end );
 	overtaking_mode_t mode = overtaking_mode;
 	uint8 flag = street_flag;
 	tool_build_way_t* toolbar_tool;
@@ -3345,8 +3344,44 @@ const char *tool_build_way_t::do_work( player_t *player, const koord3d &start, c
 	bauigel.set_street_flag(flag);
 	bauigel.set_vehicle_offset(vehicle_offset);
 	// allow building an isolated one-tile way: ctrl held and start/end coincide
-	bool const single_tile_way = start == end  &&  is_ctrl_pressed()  &&  bauigel.get_route().get_count() == 1;
+	single_tile_way = start == end  &&  is_ctrl_pressed()  &&  bauigel.get_route().get_count() == 1;
 	if(  bauigel.get_route().get_count()>1  ||  single_tile_way  ) {
+		// way_builder_t::build() refuses longer routes
+		return bauigel.get_count() > bauigel.get_maximum() ? "" : NULL;
+	}
+	return "";
+}
+
+
+const char *tool_build_way_t::calc_preview_route( player_t *player, koord3d start, const koord3d &end, way_builder_t &bauigel, bool &route_reversed )
+{
+	route_reversed = false;
+	// the checks of the two clicks (two_click_tool_t::work)
+	const char *error = NULL;
+	if(  is_valid_pos( player, start, error, koord3d::invalid ) == 0  ) {
+		return error ? error : "";
+	}
+	// the start of start_at()
+	if(  is_shift_pressed()  &&  (desc->get_styp() == type_elevated  &&  desc->get_wtyp() != air_wt)  ) {
+		if(  welt->lookup(start)->get_weg( desc->get_waytype() )  ) {
+			start.z -= welt->get_settings().get_way_height_clearance();
+		}
+	}
+	error = NULL;
+	if(  is_valid_pos( player, end, error, start ) == 0  ) {
+		return error ? error : "";
+	}
+	bool single_tile_way;
+	return prepare_build( bauigel, start, end, route_reversed, single_tile_way );
+}
+
+
+const char *tool_build_way_t::do_work( player_t *player, const koord3d &start, const koord3d &end )
+{
+	way_builder_t bauigel(player);
+	bool route_reversed, single_tile_way;
+	const char *error = prepare_build( bauigel, start, end, route_reversed, single_tile_way );
+	if(  error == NULL  ) {
 		welt->mute_sound(true);
 		bauigel.build(single_tile_way);
 		welt->mute_sound(false);
@@ -3360,10 +3395,8 @@ const char *tool_build_way_t::do_work( player_t *player, const koord3d &start, c
 				defaults[desc->get_wtyp()&63] = desc;
 			}
 		}
-
-		return NULL;
 	}
-	return "";
+	return error;
 }
 
 
@@ -4183,6 +4216,17 @@ public:
 	bool is_target(const grund_t*, const grund_t*) const OVERRIDE { return false; }
 };
 
+bool calc_route_on_ways( route_t &route, const koord3d &start, const koord3d &end, waytype_t wt, bool unmasked )
+{
+	if(  start == end  ) {
+		route.clear();
+		route.append( start );
+		return true;
+	}
+	way_checker_t test_driver(wt, unmasked);
+	return route.calc_route(world(), start, end, &test_driver, 0, 0);
+}
+
 class scenario_checker_t : public test_driver_t {
 public:
 	test_driver_t *other;
@@ -4590,21 +4634,7 @@ bool tool_build_wayobj_t::calc_route( route_t &verbindung, player_t *player, con
 	if(  waytype == any_wt  ) {
 		waytype = welt->lookup(start)->get_weg(wt)->get_waytype();
 	}
-	
-	// get a default vehikel
-	test_driver_t *test_driver = new way_checker_t(waytype);
-
-	bool can_built;
-	if( start != to ) {
-		can_built = verbindung.calc_route(welt, start, to, test_driver, 0, 0);
-	}
-	else {
-		verbindung.clear();
-		verbindung.append( start );
-		can_built = true;
-	}
-	delete test_driver;
-	return can_built;
+	return calc_route_on_ways( verbindung, start, to, waytype );
 }
 
 uint8 tool_build_wayobj_t::is_valid_pos( player_t* player, const koord3d& pos, const char *&error, const koord3d & )
@@ -4751,6 +4781,77 @@ const char *tool_build_wayobj_t::do_work( player_t* player, const koord3d &start
 	}
 
 	return err;
+}
+
+
+// the steps of tool_build_wayobj_route_t: 4 directions (ribi_t::nesw) x 9 height differences (-4..4)
+static const char wayobj_route_steps[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJ";
+
+bool tool_build_wayobj_route_t::encode_route( cbuffer_t &buf, const vector_tpl<koord3d> &tiles )
+{
+	for(  uint32 i=1;  i<tiles.get_count();  i++  ) {
+		const koord d = tiles[i].get_2d() - tiles[i-1].get_2d();
+		const sint8 dz = tiles[i].z - tiles[i-1].z;
+		if(  abs(d.x) + abs(d.y) != 1  ||  dz < -4  ||  dz > 4  ) {
+			return false;
+		}
+		for(  int n=0;  n<4;  n++  ) {
+			if(  ribi_t::nesw[n] == ribi_type(d)  ) {
+				buf.printf( "%c", wayobj_route_steps[n*9 + dz+4] );
+			}
+		}
+	}
+	return true;
+}
+
+
+bool tool_build_wayobj_route_t::is_valid_tile( player_t *player, const koord3d &pos, const way_obj_desc_t *desc )
+{
+	return tool_intern_koord_to_weg_grund( player, welt, pos, desc->get_wtyp(), true ) != NULL;
+}
+
+
+const char *tool_build_wayobj_route_t::work( player_t *player, koord3d pos )
+{
+	// "<flags>,<steps>,<way object>"
+	const char *steps = default_param ? strchr( default_param, ',' ) : NULL;
+	const char *name = steps ? strchr( steps+1, ',' ) : NULL;
+	if(  name == NULL  ) {
+		return "";
+	}
+	const way_obj_desc_t *desc = wayobj_t::find_desc( name+1 );
+	if(  desc == NULL  ) {
+		return "";
+	}
+	const bool keep_existing_faster_ways = (atoi(default_param) & 1) == 0;
+
+	koord3d_vector_t tiles;
+	tiles.append( pos );
+	for(  const char *c = steps+1;  c < name;  c++  ) {
+		const char *step = strchr( wayobj_route_steps, *c );
+		if(  step == NULL  ) {
+			return "";
+		}
+		const int n = step - wayobj_route_steps;
+		tiles.append( tiles.back() + koord3d( koord(ribi_t::nesw[n/9]), n%9 - 4 ) );
+	}
+	FOR( koord3d_vector_t, const& k, tiles ) {
+		if(  !is_valid_tile( player, k, desc )  ) {
+			return "";
+		}
+	}
+
+	// as tool_build_wayobj_t::do_work
+	for(  uint32 i=0;  i<tiles.get_count();  i++  ) {
+		wayobj_t::extend_wayobj( tiles[i], player, tiles.get_ribi(i), desc, keep_existing_faster_ways );
+	}
+	if(  depot_t *dep = welt->lookup(tiles[0])->get_depot()  ) {
+		dep->update_win();
+	}
+	if(  depot_t *dep = welt->lookup(tiles.back())->get_depot()  ) {
+		dep->update_win();
+	}
+	return NULL;
 }
 
 
@@ -6464,29 +6565,26 @@ uint8 tool_build_roadsign_t::is_valid_pos( player_t *player, const koord3d &pos,
 
 bool tool_build_roadsign_t::calc_route( route_t &verbindung, player_t *player, const koord3d& start, const koord3d& to )
 {
-	// get a default vehikel
 	waytype_t waytype = desc->get_waytype()==tram_wt? track_wt: desc->get_waytype();
-	test_driver_t *test_driver = new way_checker_t(waytype);
+	bool can_built = calc_route_on_ways( verbindung, start, to, waytype );
+	// prevent building of many signals if start and to are adjacent
+	// but the step start->to is now allowed
+	if(  can_built  &&  start != to  &&  is_detour_of_neighbour( verbindung, start, to, desc->get_wtyp() )  ) {
+		can_built = false;
+	}
+	return can_built;
+}
 
-	bool can_built;
-	if( start != to ) {
-		can_built = verbindung.calc_route(welt, start, to, test_driver, 0, 0);
-		// prevent building of many signals if start and to are adjacent
-		// but the step start->to is now allowed
-		if (can_built  &&  koord_distance(start, to)==1  &&  verbindung.get_count()>2) {
-			grund_t *gr, *grto = welt->lookup(to);
-			if(  welt->lookup(start)->get_neighbour(gr, desc->get_wtyp(), ribi_type(to-start) )  &&  gr==grto) {
-				can_built = false;
-			}
+
+bool tool_build_roadsign_t::is_detour_of_neighbour( const route_t &route, const koord3d &start, const koord3d &to, waytype_t wt )
+{
+	if(  koord_distance(start, to)==1  &&  route.get_count()>2  ) {
+		grund_t *gr, *grto = welt->lookup(to);
+		if(  welt->lookup(start)->get_neighbour(gr, wt, ribi_type(to-start) )  &&  gr==grto  ) {
+			return true;
 		}
 	}
-	else {
-		verbindung.clear();
-		verbindung.append( start );
-		can_built = true;
-	}
-	delete test_driver;
-	return can_built;
+	return false;
 }
 
 void tool_build_roadsign_t::mark_tiles( player_t *player, const koord3d &start, const koord3d &ziel )
@@ -9564,7 +9662,8 @@ bool tool_export_minimap_t::init( player_t * )
 
 bool tool_undo_t::init( player_t *player )
 {
-	if(!player->undo()  &&  can_use_gui()) {
+	failed = !player->undo();
+	if(  failed  &&  can_use_gui()  ) {
 		create_win( new news_img("UNDO failed!"), w_time_delete, magic_none);
 	}
 	return false;

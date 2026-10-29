@@ -337,6 +337,8 @@ protected:
 	virtual way_desc_t const* get_desc(uint16 timeline_year_month) const;
 	bool calc_route( way_builder_t &bauigel, const koord3d &, const koord3d & );
 	void start_at( koord3d &new_start ) OVERRIDE;
+	/// the route and settings of do_work in @p bauigel, @returns NULL if it can be built, the error of do_work otherwise
+	const char *prepare_build( way_builder_t &bauigel, const koord3d &start, const koord3d &end, bool &route_reversed, bool &single_tile_way );
 
 public:
 	tool_build_way_t(uint16 const id = TOOL_BUILD_WAY | GENERAL_TOOL) : two_click_tool_t(id), desc() {
@@ -373,6 +375,14 @@ public:
 	static void set_mode_str(char* str, overtaking_mode_t overtaking_mode);
 	void set_look_toolbar() { look_toolbar = true; }
 	static uint8 get_flag_color(uint8 flag);
+
+	/**
+	 * What work() at @p start and then at @p end would build, without changing anything (for a
+	 * preview, see command_x.calc_way): the checks of both clicks and the route of do_work, into
+	 * @p bauigel. Call init() first.
+	 * @returns NULL if do_work would build the route, the error of the tool otherwise
+	 */
+	const char *calc_preview_route( player_t *player, koord3d start, const koord3d &end, way_builder_t &bauigel, bool &route_reversed );
 };
 
 class tool_build_cityroad : public tool_build_way_t {
@@ -510,6 +520,29 @@ public:
 	waytype_t get_waytype() const OVERRIDE;
 };
 
+/**
+ * The route search over existing ways of the way object and road sign tools: route_t::calc_route
+ * with steps of cost 1 (way_checker_t). @p unmasked: leave tiles in the directions closed by signs
+ * too (get_weg_ribi_unmasked); route_t still does not enter a tile against its one-way sign.
+ */
+bool calc_route_on_ways( route_t &route, const koord3d &start, const koord3d &end, waytype_t wt, bool unmasked = false );
+
+/**
+ * Builds a way object on given tiles (command_x.build_wayobj_on_route), unlike tool_build_wayobj_t,
+ * which searches the route between two tiles itself. Called at the first tile, default_param
+ * "<flags>,<steps>,<way object>": flags 1 also replaces faster way objects (ctrl), steps from encode_route.
+ */
+class tool_build_wayobj_route_t : public tool_t {
+public:
+	tool_build_wayobj_route_t() : tool_t(TOOL_BUILD_WAYOBJ_ROUTE | GENERAL_TOOL) {}
+	bool is_init_network_safe() const OVERRIDE { return true; }
+	char const* work(player_t*, koord3d) OVERRIDE;
+	/// appends the steps from each tile to the next, @returns false if two tiles are no neighbours
+	static bool encode_route( cbuffer_t &buf, const vector_tpl<koord3d> &tiles );
+	/// the check of tool_build_wayobj_t::is_valid_pos: a way for @p desc that @p player may use
+	static bool is_valid_tile( player_t *player, const koord3d &pos, const way_obj_desc_t *desc );
+};
+
 class tool_remove_wayobj_t : public tool_build_wayobj_t {
 public:
 	tool_remove_wayobj_t() : tool_build_wayobj_t(TOOL_REMOVE_WAYOBJ | GENERAL_TOOL, false) {}
@@ -599,6 +632,9 @@ public:
 	void draw_after(scr_coord, bool dirty) const OVERRIDE;
 	void rdwr_custom_data(memory_rw_t*) OVERRIDE;
 	waytype_t get_waytype() const OVERRIDE;
+
+	/// @p start and @p to are neighbours on ways of @p wt, but @p route (between them) goes around: no signs then
+	static bool is_detour_of_neighbour( const route_t &route, const koord3d &start, const koord3d &to, waytype_t wt );
 };
 
 class tool_build_depot_t : public tool_t {
@@ -976,6 +1012,10 @@ public:
 	tool_undo_t() : tool_t(TOOL_UNDO | SIMPLE_TOOL) {}
 	char const* get_tooltip(player_t const*) const OVERRIDE { return translator::translate("Undo last ways construction"); }
 	bool init(player_t *player ) OVERRIDE;
+	const char *get_init_error() const OVERRIDE { return failed ? "cannot undo" : NULL; }
+private:
+	/// the last init() could not undo (player_t::undo failed)
+	bool failed = false;
 };
 
 /* switch to next player
