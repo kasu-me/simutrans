@@ -30,6 +30,8 @@
 #include "../obj/bruecke.h"
 #include "../obj/leitung2.h"
 #include "../obj/pillar.h"
+#include "../obj/groundobj.h"
+#include "../descriptor/groundobj_desc.h"
 #include "../obj/signal.h"
 #include "../dataobj/crossing_logic.h"
 
@@ -669,7 +671,23 @@ bool bridge_builder_t::can_place_ramp(player_t *player, const grund_t *gr, wayty
 }
 
 
-const char *bridge_builder_t::build( player_t *player, const koord3d pos, const bridge_desc_t *desc, overtaking_mode_t overtaking_mode, uint8 street_flag, sint8 vehicle_offset)
+const char *bridge_builder_t::build( player_t *player, const koord3d pos, const bridge_desc_t *desc, overtaking_mode_t overtaking_mode, uint8 street_flag, sint8 vehicle_offset, bool high_bridge)
+{
+	koord3d end;
+	koord zv;
+	sint8 bridge_height;
+	const way_desc_t *way_desc;
+	if(  const char *msg = plan( player, pos, desc, high_bridge, end, zv, bridge_height, way_desc )  ) {
+		return msg;
+	}
+	// Start and end have been checked, we can start to build eventually
+	build_bridge(player, pos, end, zv, bridge_height, desc, way_desc, overtaking_mode, street_flag, vehicle_offset);
+
+	return NULL;
+}
+
+
+const char *bridge_builder_t::plan( player_t *player, const koord3d pos, const bridge_desc_t *desc, bool high_bridge, koord3d &end, koord &zv, sint8 &bridge_height, const way_desc_t *&way_desc )
 {
 	const grund_t *gr = welt->lookup(pos);
 	if(  !(gr  &&  desc)  ) {
@@ -678,7 +696,6 @@ const char *bridge_builder_t::build( player_t *player, const koord3d pos, const 
 
 	DBG_MESSAGE("bridge_builder_t::build()", "called on %d,%d for bridge type '%s'", pos.x, pos.y, desc->get_name());
 
-	koord zv;
 	ribi_t::ribi ribi = ribi_t::none;
 	const weg_t *weg = gr->get_weg(desc->get_waytype());
 	leitung_t *lt = gr->find<leitung_t>();
@@ -732,8 +749,7 @@ const char *bridge_builder_t::build( player_t *player, const koord3d pos, const 
 	zv = koord(ribi_t::backward(ribi));
 	// search for suitable bridge end tile
 	const char *msg;
-	sint8 bridge_height;
-	koord3d end = find_end_pos(player, gr->get_pos(), zv, desc, msg, bridge_height );
+	end = find_end_pos(player, gr->get_pos(), zv, desc, msg, bridge_height, false, 0, high_bridge );
 
 	// found something?
 	if(  koord3d::invalid == end  ) {
@@ -757,7 +773,6 @@ DBG_MESSAGE("bridge_builder_t::build()", "end not ok");
 	}
 
 	// associated way
-	const way_desc_t* way_desc;
 	if (weg) {
 		way_desc = weg->get_desc();
 	}
@@ -767,11 +782,105 @@ DBG_MESSAGE("bridge_builder_t::build()", "end not ok");
 	else {
 		way_desc = way_builder_t::weg_search(desc->get_waytype(), desc->get_topspeed(), welt->get_timeline_year_month(), type_flat);
 	}
-
-	// Start and end have been checked, we can start to build eventually
-	build_bridge(player, gr->get_pos(), end, zv, bridge_height, desc, way_desc, overtaking_mode, street_flag, vehicle_offset);
-
 	return NULL;
+}
+
+
+/// what grund_t::remove_trees() books for the trees and ground objects on @p gr
+static sint64 tree_costs(const grund_t *gr)
+{
+	sint64 costs = 0;
+	for(  uint8 i=0;  i<gr->get_top();  i++  ) {
+		obj_t *obj = gr->obj_bei(i);
+		if(  obj->get_typ() == obj_t::baum  ) {
+			costs -= world()->get_settings().cst_remove_tree;
+		}
+		else if(  obj->get_typ() == obj_t::groundobj  ) {
+			costs += ((groundobj_t *)obj)->get_desc()->get_price();
+		}
+	}
+	return costs;
+}
+
+
+sint64 bridge_builder_t::calc_costs( player_t *player, const koord3d start, const koord3d end, koord zv, sint8 bridge_height, const bridge_desc_t *desc, const way_desc_t *way_desc )
+{
+	// as build_bridge()
+	const waytype_t wt = desc->get_waytype();
+	const grund_t *start_gr = welt->lookup( start );
+	const grund_t *end_gr = welt->lookup( end );
+	const slope_t::type slope = start_gr->get_weg_hang();
+	sint64 costs = 0;
+	uint8 add_height = 0;
+	if(  slope  ||  bridge_height != 0  ) {
+		// a ramp (build_ramp(): a new way pays for the trees only)
+		add_height = slope ? slope_t::max_diff(slope) : bridge_height;
+		costs += desc->get_price();
+		if(  wt != powerline_wt  &&  !start_gr->hat_weg(wt)  ) {
+			costs += tree_costs(start_gr);
+		}
+	}
+	else if(  wt != powerline_wt  &&  !start_gr->hat_weg(wt)  ) {
+		// start at cliff: a new way
+		costs += tree_costs(start_gr) + way_desc->get_price();
+	}
+	// the tiles between
+	costs += desc->get_price() * (koord_distance(start, end) - 1);
+	// the end
+	const slope_t::type end_slope = end_gr->get_weg_hang();
+	sint8 end_slope_height = end.z;
+	if(  end_slope != slope_type(zv) && end_slope != slope_type(zv)*2  ) {
+		end_slope_height += slope_t::max_diff(end_slope);
+	}
+	bool need_auffahrt = start.z + add_height != end_slope_height;
+	if(  need_auffahrt  ) {
+		if(  weg_t const* const w = end_gr->get_weg( way_desc->get_wtyp() )  ) {
+			need_auffahrt &= w->get_desc()->get_styp() != type_elevated;
+		}
+	}
+	if(  need_auffahrt  ) {
+		costs += desc->get_price();
+		if(  wt != powerline_wt  &&  !end_gr->hat_weg(wt)  ) {
+			costs += tree_costs(end_gr);
+		}
+	}
+	else if(  wt != powerline_wt  ) {
+		if(  !end_gr->hat_weg(wt)  ) {
+			costs += tree_costs(end_gr) + way_desc->get_price();
+		}
+	}
+	else if(  end_gr->get_leitung() == NULL  ) {
+		costs += way_desc->get_price();
+	}
+	// the way on the next tile that build_bridge() adds at an end with a single way (the end of the bridge only then)
+	if(  wt != powerline_wt  &&  player  ) {
+		const koord3d ends[2] = { start, end };
+		for(  int i=0;  i<2;  i++  ) {
+			const grund_t *gr = welt->lookup( ends[i] );
+			const ribi_t::ribi ribi = gr->get_weg_ribi_unmasked(wt) | (i == 0 ? ribi_type(zv) : ribi_type(-zv));
+			grund_t *to = NULL;
+			if(  ribi_t::is_single(ribi)  &&  gr->get_neighbour(to, invalid_wt, ribi_t::backward(ribi))  &&  !to->hat_weg(wt)  ) {
+				if(  wt == water_wt  &&  to->is_water()  ) {
+					continue;
+				}
+				way_builder_t bauigel(player);
+				bauigel.set_keep_existing_ways(true);
+				bauigel.set_keep_city_roads(true);
+				bauigel.set_maximum(20);
+				bauigel.init_builder( (way_builder_t::bautyp_t)wt, way_desc, NULL, NULL );
+				if(  i==0  ) {
+					bauigel.calc_route( to->get_pos(), ends[i] );
+				}
+				else {
+					bauigel.calc_route( ends[i], to->get_pos() );
+				}
+				if(  bauigel.get_count() == 2  ) {
+					costs += way_desc->get_price() + tree_costs(to);
+				}
+			}
+		}
+	}
+	return costs;
 }
 
 

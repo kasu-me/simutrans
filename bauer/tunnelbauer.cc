@@ -155,6 +155,9 @@ const vector_tpl<const tunnel_desc_t *>& tunnel_builder_t::get_available_tunnels
 /* now construction stuff */
 
 
+/// a failure of find_end_pos with its reason
+#define TUNNEL_FAIL(text) { if (msg) { *msg = (text); } return koord3d::invalid; }
+
 koord3d tunnel_builder_t::find_end_pos(player_t *player, koord3d pos, koord zv, const tunnel_desc_t *desc, bool full_tunnel, const char** msg)
 {
 	const grund_t *gr;
@@ -168,7 +171,7 @@ koord3d tunnel_builder_t::find_end_pos(player_t *player, koord3d pos, koord zv, 
 	while(true) {
 		pos = pos + zv;
 		if(!welt->is_within_limits(pos.get_2d())) {
-			return koord3d::invalid;
+			TUNNEL_FAIL("The tunnel would leave the map.");
 		}
 
 		// check if ground is below tunnel level
@@ -184,20 +187,20 @@ koord3d tunnel_builder_t::find_end_pos(player_t *player, koord3d pos, koord zv, 
 			karte_t::terraformer_t raise(welt);
 			raise.add_raise_node(pos.x, pos.y, hsw, hse, hne, hnw);
 			raise.iterate(true);
-			if (raise.can_raise_all(player)) {
+			if (const char *err = raise.can_raise_all(player)) {
 				// returned true therefore error reported
-				return koord3d::invalid;
+				TUNNEL_FAIL(*err ? err : "The tunnel cannot end here.");
 			}
 			// if we can adjust height here we can build an entrance so don't need checks below
 			return pos;
 		}
 		if(  gr->get_hoehe() < pos.z  ){
-			return koord3d::invalid;
+			TUNNEL_FAIL("The ground is too low for a tunnel.");
 		}
 
 		// check water level
 		if (gr->is_water()  &&  welt->lookup_hgt(pos.get_2d()) <= pos.z) {
-			return koord3d::invalid;
+			TUNNEL_FAIL("A tunnel cannot end in water.");
 		}
 
 		if (const char* err = welt->get_scenario()->is_work_allowed_here(player, TOOL_BUILD_TUNNEL|GENERAL_TOOL, wegtyp, pos)) {
@@ -231,7 +234,7 @@ koord3d tunnel_builder_t::find_end_pos(player_t *player, koord3d pos, koord zv, 
 			if(  gr->ist_tunnel() ) {
 				if(  gr->get_vmove(ribi_type(-zv))!=pos.z) {
 					// wrong slope
-					return koord3d::invalid;
+					TUNNEL_FAIL("Cannot connect to this tunnel.");
 				}
 				// fake tunnel tile
 				tunnelboden_t from(pos - zv, slope_t::flat);
@@ -239,7 +242,7 @@ koord3d tunnel_builder_t::find_end_pos(player_t *player, koord3d pos, koord zv, 
 					return gr->get_pos();
 				}
 				else {
-					return koord3d::invalid;
+					TUNNEL_FAIL("Cannot connect to this tunnel.");
 				}
 			}
 			const uint8 slope = gr->get_grund_hang();
@@ -257,9 +260,13 @@ koord3d tunnel_builder_t::find_end_pos(player_t *player, koord3d pos, koord zv, 
 				raise.iterate(false);
 				lower.add_lower_node(pos.x, pos.y, hsw, hse, hne, hnw);
 				lower.iterate(false);
-				if (raise.can_lower_all(player) || lower.can_lower_all(player)) {
+				const char *err = raise.can_lower_all(player);
+				if (err == NULL) {
+					err = lower.can_lower_all(player);
+				}
+				if (err) {
 					// returned true therefore error reported
-					return koord3d::invalid;
+					TUNNEL_FAIL(*err ? err : "The tunnel cannot end here.");
 				}
 				// if we can adjust height here we can build an entrance so don't need checks below
 				return pos;
@@ -269,11 +276,11 @@ koord3d tunnel_builder_t::find_end_pos(player_t *player, koord3d pos, koord zv, 
 			if(  gr->get_typ() != grund_t::boden  ||  slope != new_slope  ||  gr->is_halt()  ||  ((wegtyp != powerline_wt) ? gr->get_leitung() != NULL : gr->hat_wege())  ) {
 				// must end on boden_t and correct slope and not on halts
 				// ways cannot end on powerlines, powerlines cannot end on ways
-				return koord3d::invalid;
+				TUNNEL_FAIL("The tunnel cannot end here.");
 			}
 			if(  gr->has_two_ways()  &&  wegtyp != road_wt  ) {
 				// Only road tunnels allowed here.
-				return koord3d::invalid;
+				TUNNEL_FAIL("The tunnel cannot end here.");
 			}
 
 			ribi_t::ribi ribi = 0;
@@ -305,7 +312,7 @@ koord3d tunnel_builder_t::find_end_pos(player_t *player, koord3d pos, koord zv, 
 					}
 				}
 			}
-			return koord3d::invalid;  // Was im Weg (slope hillside or so)
+			TUNNEL_FAIL("The tunnel cannot end here.");  // Was im Weg (slope hillside or so)
 		}
 
 		// stop if we only want to check tile behind tunnel mouth
@@ -315,18 +322,64 @@ koord3d tunnel_builder_t::find_end_pos(player_t *player, koord3d pos, koord zv, 
 		// All free - keep looking
 	}
 }
+#undef TUNNEL_FAIL
 
 
 const char *tunnel_builder_t::build( player_t *player, koord pos, const tunnel_desc_t *desc, bool full_tunnel, overtaking_mode_t overtaking_mode, uint8 street_flag, sint8 vehicle_offset )
 {
+	koord3d end;
+	koord zv;
+	bool terraform;
+	if(  const char *err = plan( player, pos, desc, full_tunnel, end, zv, terraform )  ) {
+		return err;
+	}
+	const grund_t *gr = welt->lookup_kartenboden(pos);
+
+	// Begin and end found, we can build
+
+	if(  terraform  ) {
+		// end slope not at correct height - we have already checked in find_end_pos and plan that we can change this
+		slope_t::type end_slope = slope_type(-zv) * env_t::pak_height_conversion_factor;
+		sint8 hsw = end.z + corner_sw(end_slope);
+		sint8 hse = end.z + corner_se(end_slope);
+		sint8 hne = end.z + corner_ne(end_slope);
+		sint8 hnw = end.z + corner_nw(end_slope);
+
+		int n = 0;
+
+		karte_t::terraformer_t raise(welt),lower(welt);
+		raise.add_raise_node(end.x, end.y, hsw, hse, hne, hnw);
+		lower.add_lower_node(end.x, end.y, hsw, hse, hne, hnw);
+		raise.iterate(true);
+		lower.iterate(false);
+
+// TODO: this is rather hackish as 4 seems to come from nowhere but works most of the time
+// feel free to change if you have a better idea!
+		n = (raise.raise_all()+lower.lower_all())/4;
+		player_t::book_construction_costs(player, welt->get_settings().cst_alter_land * n, end.get_2d(), desc->get_waytype());
+	}
+
+	if(!build_tunnel(player, gr->get_pos(), end, zv, desc, overtaking_mode, street_flag, vehicle_offset)) {
+		return "Ways not connected";
+	}
+	return NULL;
+}
+
+
+const char *tunnel_builder_t::plan( player_t *player, koord pos, const tunnel_desc_t *desc, bool full_tunnel, koord3d &end, koord &zv, bool &terraform, sint64 *terraform_cost )
+{
 	assert( desc );
+	terraform = false;
+	if(  terraform_cost  ) {
+		*terraform_cost = 0;
+	}
+	end = koord3d::invalid;
 
 	const grund_t *gr = welt->lookup_kartenboden(pos);
 	if(gr==NULL) {
 		return "Tunnel must start on single way!";
 	}
 
-	koord zv;
 	const waytype_t wegtyp = desc->get_waytype();
 	const slope_t::type slope = gr->get_grund_hang();
 
@@ -368,7 +421,6 @@ const char *tunnel_builder_t::build( player_t *player, koord pos, const tunnel_d
 
 	// Search tunnel end and check intermediate tiles
 	const char *err = NULL;
-	koord3d end = koord3d::invalid;
 
 	if (!full_tunnel) {
 		// if there is no tunnel behind set end to start position
@@ -381,6 +433,9 @@ const char *tunnel_builder_t::build( player_t *player, koord pos, const tunnel_d
 		end = find_end_pos(player, gr->get_pos(), zv, desc, full_tunnel, &err);
 		if (err) {
 			return err;
+		}
+		if (end == koord3d::invalid) {
+			return "The tunnel cannot end here.";
 		}
 	}
 
@@ -402,8 +457,6 @@ const char *tunnel_builder_t::build( player_t *player, koord pos, const tunnel_d
 		}
 	}
 
-	// Begin and end found, we can build
-
 	slope_t::type end_slope = slope_type(-zv) * env_t::pak_height_conversion_factor;
 	if(  full_tunnel  &&  (!end_gr  ||  end_gr->get_grund_hang()!=end_slope)  ) {
 		// end slope not at correct height - we have already checked in find_end_pos that we can change this
@@ -412,8 +465,6 @@ const char *tunnel_builder_t::build( player_t *player, koord pos, const tunnel_d
 		sint8 hne = end.z + corner_ne(end_slope);
 		sint8 hnw = end.z + corner_nw(end_slope);
 
-		int n = 0;
-
 		karte_t::terraformer_t raise(welt),lower(welt);
 		raise.add_raise_node(end.x, end.y, hsw, hse, hne, hnw);
 		lower.add_lower_node(end.x, end.y, hsw, hse, hne, hnw);
@@ -421,18 +472,29 @@ const char *tunnel_builder_t::build( player_t *player, koord pos, const tunnel_d
 		lower.iterate(false);
 		err = raise.can_raise_all(player);
 		if (!err) err = lower.can_lower_all(player);
-		if (err) return 0;
-
-// TODO: this is rather hackish as 4 seems to come from nowhere but works most of the time
-// feel free to change if you have a better idea!
-		n = (raise.raise_all()+lower.lower_all())/4;
-		player_t::book_construction_costs(player, welt->get_settings().cst_alter_land * n, end.get_2d(), desc->get_waytype());
-	}
-
-	if(!build_tunnel(player, gr->get_pos(), end, zv, desc, overtaking_mode, street_flag, vehicle_offset)) {
-		return "Ways not connected";
+		if (err) {
+			// (returned NULL before: the scripts took it for a built tunnel)
+			return *err ? err : "The tunnel cannot end here.";
+		}
+		terraform = true;
+		if(  terraform_cost  ) {
+			// as build()
+			*terraform_cost = -welt->get_settings().cst_alter_land * ((raise.count_changes(true) + lower.count_changes(false)) / 4);
+		}
 	}
 	return NULL;
+}
+
+
+sint64 tunnel_builder_t::calc_costs( koord3d start, koord3d end, const tunnel_desc_t *desc )
+{
+	// as build_tunnel(): the portal, the tiles between and the end (a portal or a tunnel tile, nothing if it is a tunnel)
+	if(  end == start  ) {
+		return desc->get_price();
+	}
+	const grund_t *gr_end = welt->lookup(end);
+	const sint64 tiles = koord_distance(start, end) + (gr_end  &&  gr_end->ist_tunnel() ? 0 : 1);
+	return desc->get_price() * tiles;
 }
 
 

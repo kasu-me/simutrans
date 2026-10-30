@@ -215,7 +215,7 @@ void live_util::add_world_sections(std::string &out, karte_t *welt, const std::s
 	}
 
 	if(  factories  ) {
-		// [x, y, z, name, owner, status, production, production factor, [[goods index, stock, max, in transit], ...inputs], [[goods index, stock, max], ...outputs]]
+		// [x, y, z, name, owner, status, production, production factor, [[goods index, stock, max, in transit], ...inputs], [[goods index, stock, max], ...outputs], rotation]
 		add_section(out, "factories", has_since, since, [&](auto emit) {
 			std::string rec;
 			for(  fabrik_t *fab : welt->get_fab_list()  ) {
@@ -268,7 +268,9 @@ void live_util::add_world_sections(std::string &out, karte_t *welt, const std::s
 					add_int(rec, w.max >> fabrik_t::precision_bits);
 					rec += ']';
 				}
-				rec += "]]";
+				rec += "],";
+				add_int(rec, fab->get_rotate());
+				rec += ']';
 				emit(pos_key(pos), rec);
 			}
 		}, add_pos_key);

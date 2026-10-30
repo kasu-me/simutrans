@@ -1576,6 +1576,8 @@ public:
 		int raise_all();
 		/// Do the lower operations
 		int lower_all();
+		/// What raise_all (@p raise) or lower_all would return, without changing anything (the corners of land tiles)
+		int count_changes(bool raise) const;
 	};
 
 private:

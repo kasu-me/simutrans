@@ -53,6 +53,17 @@ public:
 
 	static const char *build( player_t *player, koord pos, const tunnel_desc_t *desc, bool full_tunnel, overtaking_mode_t overtaking_mode, uint8 street_flag, sint8 vehicle_offset );
 
+	/**
+	 * The checks of build(): the end of the tunnel from the portal at @p pos (the portal itself if it is not a full tunnel),
+	 * @p terraform if the ground at the end has to be raised or lowered for the other portal, which costs
+	 * @p terraform_cost (1/100 credits, positive).
+	 * @return NULL if it can be built, the error of build() otherwise
+	 */
+	static const char *plan( player_t *player, koord pos, const tunnel_desc_t *desc, bool full_tunnel, koord3d &end, koord &zv, bool &terraform, sint64 *terraform_cost = NULL );
+
+	/// what build_tunnel() books for the tunnel from start to end (1/100 credits, positive), without the change of the ground
+	static sint64 calc_costs( koord3d start, koord3d end, const tunnel_desc_t *desc );
+
 	static const char *remove(player_t *player, koord3d pos, waytype_t wegtyp, bool all);
 };
 

@@ -2411,6 +2411,24 @@ int karte_t::terraformer_t::raise_all()
 	return n;
 }
 
+int karte_t::terraformer_t::count_changes(bool raise) const
+{
+	// as raise_to / lower_to: the heights each corner of the tile is raised or lowered by
+	int n=0;
+	FOR(vector_tpl<node_t>, const& i, list) {
+		const grund_t *gr = welt->lookup_kartenboden_nocheck(i.x, i.y);
+		const sint8 h0 = gr->get_hoehe();
+		const slope_t::type sl = gr->get_grund_hang();
+		const sint8 h[4] = { (sint8)(h0 + corner_sw(sl)), (sint8)(h0 + corner_se(sl)), (sint8)(h0 + corner_ne(sl)), (sint8)(h0 + corner_nw(sl)) };
+		for(  int c=0;  c<4;  c++  ) {
+			const int d = raise ? i.h[c] - h[c] : h[c] - i.h[c];
+			n += max(d, 0);
+		}
+	}
+	return n;
+}
+
+
 int karte_t::terraformer_t::lower_all()
 {
 	int n=0;

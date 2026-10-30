@@ -43,6 +43,7 @@ include("tests/test_way_runway")
 include("tests/test_way_tram")
 include("tests/test_way_tunnel")
 include("tests/test_way_preview")
+include("tests/test_web_build")
 include("tests/test_wayobj")
 include("tests/test_schedule")
 include("tests/test_road_api")
@@ -234,6 +235,15 @@ all_tests <- [
 	test_wayobj_build_disconnected,
 	test_wayobj_upgrade_downgrade,
 	test_wayobj_electrify_depot,
+	test_web_build_bridge_high_and_preview,
+	test_web_build_bridge_oneway,
+	test_web_build_tunnel,
+	test_web_build_way_settings,
+	test_web_build_signals_on_route,
+	test_web_build_wayobj_spacing,
+	test_web_build_calc_remove,
+	test_web_build_calc_remove_signals,
+	test_web_build_exec_players,
 	test_transport_generate_pax_invalid_pos,
 	test_transport_generate_pax_walked,
 	test_transport_generate_pax_no_route,

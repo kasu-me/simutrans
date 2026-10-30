@@ -145,7 +145,7 @@ call_tool_init convoy_set_name(convoi_t *cnv, const char* name)
 	return call;
 }
 
-call_tool_init convoy_set_line(convoi_t *cnv, player_t *player, linehandle_t line)
+call_tool_init convoy_set_line(convoi_t *cnv, player_t *player, linehandle_t line, sint32 current_stop)
 {
 	if (!line.is_bound()) {
 		return "not_found: Invalid line handle provided";
@@ -161,10 +161,32 @@ call_tool_init convoy_set_line(convoi_t *cnv, player_t *player, linehandle_t lin
 	// see depot_frame_t::apply_line() and convoi_t::call_convoi_tool()
 	cbuffer_t buf;
 	buf.printf("%c,%u,%i", 'l', cnv->self.get_id(), line->get_handle().get_id());
+	if (current_stop >= 0) {
+		// the stop to go to first (tool_change_convoi_t::init 'l'), else the one of the line's schedule
+		if (line->get_schedule() == NULL  ||  current_stop >= line->get_schedule()->get_count()) {
+			return "invalid: no such stop in the schedule of the line";
+		}
+		buf.printf(",%i", (int)current_stop);
+	}
 
 	call_tool_init call(TOOL_CHANGE_CONVOI | SIMPLE_TOOL, buf, 0, player);
 	call.require_owner(cnv->get_owner());
 	return call;
+}
+
+static SQInteger convoy_set_line_sq(HSQUIRRELVM vm)
+{
+	convoi_t *cnv = param<convoi_t*>::get(vm, 1);
+	player_t *player = param<player_t*>::get(vm, 2);
+	linehandle_t line = param<linehandle_t>::get(vm, 3);
+	const sint32 current_stop = sq_gettop(vm) >= 4  &&  sq_gettype(vm, 4) != OT_NULL ? param<sint32>::get(vm, 4) : -1;
+	if (cnv == NULL) {
+		return sq_raise_error(vm, "not_found: Invalid convoy");
+	}
+	if (current_stop < -1) {
+		return sq_raise_error(vm, "invalid: no such stop in the schedule of the line");
+	}
+	return param<call_tool_init>::push(vm, convoy_set_line(cnv, player, line, current_stop));
 }
 
 call_tool_init convoy_generic_tool(convoi_t *cnv, player_t *player, uint8 cnvtool)
@@ -425,9 +447,12 @@ void export_convoy(HSQUIRRELVM vm)
 	 * Assigns the convoy to the given line.
 	 * @param player
 	 * @param line
+	 * @param current_stop (optional) index of the stop in the line's schedule to go to first, default the
+	 *        current stop of the line's schedule
 	 * @ingroup game_cmd
+	 * @typemask void(player_x,line_x,int)
 	 */
-	register_method(vm, convoy_set_line, "set_line", true);
+	register_function(vm, convoy_set_line_sq, "set_line", -3, "x..");
 	/**
 	 * @returns returns an array containing the vehicle_desc_x 's of the vehicles of this convoy
 	 */
