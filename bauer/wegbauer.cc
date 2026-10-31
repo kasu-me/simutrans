@@ -1202,6 +1202,9 @@ way_builder_t::way_builder_t(player_t* player) : next_gr(32)
 	street_flag = 0;
 	height_offset = 0;
 	route_reversed = false;
+	max_steps = 0;
+	search_aborted = false;
+	quiet = false;
 
 	keep_existing_ways = false;
 	keep_existing_city_roads = false;
@@ -1290,6 +1293,12 @@ void get_mini_maxi( const vector_tpl<koord3d> &ziel, koord3d &mini, koord3d &max
 }
 
 
+uint32 way_builder_t::get_max_steps() const
+{
+	return max_steps  &&  max_steps < route_t::MAX_STEP ? max_steps : route_t::MAX_STEP;
+}
+
+
 /* this routine uses A* to calculate the best route
  * beware: change the cost and you will mess up the system!
  * (but you can try, look at simuconf.tab)
@@ -1318,6 +1327,7 @@ sint32 way_builder_t::intern_calc_route(const vector_tpl<koord3d> &start, const 
 		route_t::MAX_STEP = welt->get_settings().get_max_route_steps(); // may need very much memory => configurable
 		route_t::nodes = new route_t::ANode[route_t::MAX_STEP+4+1];
 	}
+	const uint32 max_step = get_max_steps();
 
 	static binary_heap_tpl <route_t::ANode *> queue;
 
@@ -1549,7 +1559,7 @@ DBG_DEBUG("insert to open","(%i,%i,%i)  f=%i",to->get_pos().x,to->get_pos().y,to
 #endif
 		}
 
-	} while (!queue.empty() && step < route_t::MAX_STEP);
+	} while (!queue.empty() && step < max_step);
 
 #ifdef DEBUG_ROUTES
 DBG_DEBUG("way_builder_t::intern_calc_route()","steps=%i  (max %i) in route, open %i, cost %u",step,route_t::MAX_STEP,queue.get_count(),tmp->g);
@@ -1559,9 +1569,10 @@ DBG_DEBUG("way_builder_t::intern_calc_route()","steps=%i  (max %i) in route, ope
 	route_t::RELEASE_NODE();
 
 	// target reached?
-	if(  !ziel.is_contained(gr->get_pos())  ||  step>=route_t::MAX_STEP  ||  tmp->parent==NULL  ||  tmp->g > maximum  ) {
-		if (step>=route_t::MAX_STEP) {
-			dbg->warning("way_builder_t::intern_calc_route()","Too many steps (%i>=max %i) in route (too long/complex)",step,route_t::MAX_STEP);
+	if(  !ziel.is_contained(gr->get_pos())  ||  step>=max_step  ||  tmp->parent==NULL  ||  tmp->g > maximum  ) {
+		if (step>=max_step) {
+			dbg->warning("way_builder_t::intern_calc_route()","Too many steps (%i>=max %i) in route (too long/complex)",step,max_step);
+			search_aborted = true;
 		}
 		return -1;
 	}
@@ -1793,6 +1804,7 @@ sint32 way_builder_t::intern_calc_route_elevated(const koord3d start, const koor
 		route_t::MAX_STEP = welt->get_settings().get_max_route_steps(); // may need very much memory => configurable
 		route_t::nodes = new route_t::ANode[route_t::MAX_STEP+4+1];
 	}
+	const uint32 max_step = get_max_steps();
 
 	static binary_heap_tpl <route_t::ANode *> queue;
 
@@ -2066,7 +2078,7 @@ DBG_DEBUG("insert to open","(%i,%i,%i)  f=%i",to->get_pos().x,to->get_pos().y,to
 #endif
 		}
 
-	} while (!queue.empty() && step < route_t::MAX_STEP);
+	} while (!queue.empty() && step < max_step);
 
 #ifdef DEBUG_ROUTES
 DBG_DEBUG("way_builder_t::intern_calc_route()","steps=%i  (max %i) in route, open %i, cost %u",step,route_t::MAX_STEP,queue.get_count(),tmp->g);
@@ -2076,9 +2088,10 @@ DBG_DEBUG("way_builder_t::intern_calc_route()","steps=%i  (max %i) in route, ope
 	route_t::RELEASE_NODE();
 
 	// target reached?
-	if(  !(ziel == gr_pos)  ||  step>=route_t::MAX_STEP  ||  tmp->parent==NULL  ||  tmp->g > maximum  ) {
-		if (step>=route_t::MAX_STEP) {
-			dbg->warning("way_builder_t::intern_calc_route()","Too many steps (%i>=max %i) in route (too long/complex)",step,route_t::MAX_STEP);
+	if(  !(ziel == gr_pos)  ||  step>=max_step  ||  tmp->parent==NULL  ||  tmp->g > maximum  ) {
+		if (step>=max_step) {
+			dbg->warning("way_builder_t::intern_calc_route()","Too many steps (%i>=max %i) in route (too long/complex)",step,max_step);
+			search_aborted = true;
 		}
 		return -1;
 	}
@@ -2122,7 +2135,9 @@ bool way_builder_t::intern_calc_route_runways(koord3d start3d, const koord3d zie
 	if(	 !(welt->is_within_limits(start-koord(border,border))  &&  welt->is_within_limits(start+koord(border,border)))  ||
 		 !(welt->is_within_limits(ziel-koord(border,border))  &&  welt->is_within_limits(ziel+koord(border,border)))  ) {
 		if(player_builder==welt->get_active_player()) {
-			create_win( new news_img("Zu nah am Kartenrand"), w_time_delete, magic_none);
+			if(  !quiet  ) {
+				create_win( new news_img("Zu nah am Kartenrand"), w_time_delete, magic_none);
+			}
 			return false;
 		}
 	}
@@ -2185,6 +2200,7 @@ void way_builder_t::calc_straight_route(koord3d start, const koord3d ziel)
 {
 	DBG_MESSAGE("way_builder_t::calc_straight_route()","from %d,%d,%d to %d,%d,%d",start.x,start.y,start.z, ziel.x,ziel.y,ziel.z );
 	route_reversed = false;
+	search_aborted = false;
 	if(bautyp==luft  &&  desc->get_styp()==type_runway) {
 		// these are straight anyway ...
 		intern_calc_route_runways(start, ziel);
@@ -2216,6 +2232,7 @@ bool way_builder_t::calc_route(const vector_tpl<koord3d> &start, const vector_tp
 uint32 ms = dr_time();
 #endif
 	INT_CHECK("simbau 740");
+	search_aborted = false;
 
 	if(bautyp==luft  &&  desc->get_styp()==type_runway) {
 		assert( start.get_count() == 1  &&  ziel.get_count() == 1 );
@@ -2512,6 +2529,185 @@ sint64 way_builder_t::calc_costs()
 	}
 	DBG_MESSAGE("way_builder_t::calc_costs()","construction estimate: %f",costs/100.0);
 	return costs;
+}
+
+
+/*
+ * What build() would do with the current route, without changing anything: follows
+ * build_powerline(), build_road(), build_track() and build_tunnel_and_bridges().
+ */
+void way_builder_t::calc_preview(vector_tpl<preview_tile_t> &tiles, vector_tpl<preview_structure_t> &structures, cost_breakdown_t &costs) const
+{
+	tiles.clear();
+	structures.clear();
+	costs = cost_breakdown_t();
+	const waytype_t wt = desc->get_wtyp();
+	const bool is_elevated = (bautyp & elevated_flag) != 0;
+	// city roads of the public player get no owner (build_road)
+	const bool add_sidewalk = build_sidewalk  &&  (player_builder==NULL  ||  player_builder->is_public_service());
+	const player_t *owner = add_sidewalk ? NULL : player_builder;
+
+	for(  uint32 i=0;  i<get_count();  i++  ) {
+		koord3d pos = route[i];
+		if(  is_elevated  ) {
+			pos.z += get_way_height_offset( welt->lookup(route[i]) );
+		}
+		grund_t *gr = welt->lookup(pos);
+
+		preview_tile_t t;
+		t.pos = pos;
+		t.ribi = route.get_ribi(i);
+		t.flags = 0;
+		if(  gr == NULL  ) {
+			// elevated ground, added by build_elevated()
+			t.flags = preview_new;
+			costs.fresh += desc->get_price();
+			tiles.append(t);
+			continue;
+		}
+		t.ribi |= gr->get_weg_ribi_unmasked(wt);
+		if(  gr->get_typ() == grund_t::brueckenboden  ) {
+			t.flags |= preview_bridge;
+		}
+		else if(  gr->get_typ() == grund_t::tunnelboden  ) {
+			t.flags |= preview_tunnel;
+		}
+		// trees and ground objects go with the first way on a tile (grund_t::remove_trees)
+		bool has_trees = false;
+		for(  uint8 n=0;  n<gr->get_top();  n++  ) {
+			const obj_t::typ typ = gr->obj_bei(n)->get_typ();
+			has_trees |= typ == obj_t::baum  ||  typ == obj_t::groundobj;
+		}
+
+		if(  (bautyp&bautyp_mask) == leitung  ) {
+			leitung_t *lt = gr->get_leitung();
+			if(  lt == NULL  ) {
+				t.flags |= preview_new | (gr->ist_natur()  &&  has_trees ? preview_clear : 0);
+			}
+			else if(  lt->get_typ() == obj_t::leitung  &&  (!keep_existing_faster_ways  ||  lt->get_desc()->get_topspeed() < desc->get_topspeed())  ) {
+				t.flags |= preview_replace;
+			}
+			else {
+				t.flags |= preview_keep;
+			}
+		}
+		else if(  (bautyp&bautyp_mask) == strasse  &&  gr->get_weg(road_wt)  ) {
+			strasse_t *str = (strasse_t *)gr->get_weg(road_wt);
+			if(  gr->get_typ()==grund_t::brueckenboden  ||  gr->get_typ()==grund_t::tunnelboden  ||  (gr->get_typ()==grund_t::monorailboden  &&  (bautyp&elevated_flag)==0)  ) {
+				t.flags |= preview_keep;
+			}
+			else if(  (str->get_desc()==desc  &&  str->get_overtaking_mode()==overtaking_mode  &&  str->get_street_flag()==street_flag)
+				||  keep_existing_ways
+				||  (keep_existing_faster_ways  &&  str->get_desc()->get_topspeed()>desc->get_topspeed())
+				||  (player_builder!=NULL  &&  str->is_deletable(player_builder)!=NULL)
+				||  (gr->has_two_ways()  &&  gr->get_weg_nr(1)->is_deletable(player_builder)!=NULL)  ) {
+				t.flags |= preview_keep;
+			}
+			else if(  keep_existing_city_roads  &&  str->hat_gehweg()  ) {
+				t.flags |= preview_keep | preview_city_road;
+			}
+			else {
+				t.flags |= preview_replace | (str->get_owner() != owner ? preview_owner : 0);
+			}
+		}
+		else if(  (bautyp&bautyp_mask) != strasse  &&  gr->get_typ() == grund_t::wasser  ) {
+			// build_track() does not build on the sea
+			t.flags |= preview_keep;
+		}
+		else if(  (bautyp&bautyp_mask) != strasse  &&  gr->get_weg(wt)  ) {
+			weg_t *weg = gr->get_weg(wt);
+			bool change_desc = true;
+			if(  (gr->get_typ()==grund_t::brueckenboden  ||  gr->get_typ()==grund_t::tunnelboden)  &&  gr->get_weg_nr(0)->get_waytype()==wt  ) {
+				// bridges/tunnels have their own track type and must not upgrade
+				change_desc = false;
+			}
+			else {
+				if(  weg->get_desc() == desc
+					||  (desc->get_styp() == type_flat  &&  weg->get_desc()->get_styp() == type_tram  &&  gr->has_two_ways())
+					||  keep_existing_ways
+					||  (keep_existing_faster_ways  &&  weg->get_desc()->get_topspeed() > desc->get_topspeed())
+					||  (gr->get_typ() == grund_t::monorailboden  &&  !(bautyp & elevated_flag)  &&  gr->get_weg_nr(0)->get_waytype()==wt)  ) {
+					change_desc = false;
+				}
+				// tram track over a crossing removes the crossing
+				if(  gr->has_two_ways()  &&  (desc->get_styp() == type_tram  ||  weg->get_desc()->get_styp() == type_tram)  &&  gr->get_crossing()  ) {
+					change_desc = true;
+				}
+			}
+			if(  change_desc  ) {
+				t.flags |= preview_replace | (weg->get_owner() != player_builder ? preview_owner : 0);
+			}
+			else {
+				t.flags |= preview_keep;
+			}
+		}
+		else {
+			// a new way (grund_t::neuen_weg_bauen)
+			t.flags |= preview_new;
+			if(  !gr->hat_wege()  ) {
+				t.flags |= has_trees ? preview_clear : 0;
+			}
+			else if(  gr->get_weg_nr(0)->needs_crossing(desc)  ) {
+				t.flags |= preview_crossing;
+			}
+		}
+
+		// what build() books for this tile
+		if(  t.flags & preview_new  ) {
+			costs.fresh += desc->get_price();
+		}
+		else if(  t.flags & preview_replace  ) {
+			const weg_t *weg = (bautyp&bautyp_mask) == leitung ? NULL : gr->get_weg(wt);
+			costs.replace += weg ? max( weg->get_desc()->get_price(), desc->get_price() ) : desc->get_price();
+		}
+		if(  t.flags & preview_clear  ) {
+			for(  uint8 n=0;  n<gr->get_top();  n++  ) {
+				const obj_t *obj = gr->obj_bei(n);
+				if(  obj->get_typ() == obj_t::baum  ) {
+					costs.trees -= welt->get_settings().cst_remove_tree;
+				}
+				else if(  obj->get_typ() == obj_t::groundobj  ) {
+					costs.groundobj += ((const groundobj_t *)obj)->get_desc()->get_price();
+				}
+			}
+		}
+		tiles.append(t);
+	}
+
+	// new bridges and tunnels at the gaps of the route (build_tunnel_and_bridges)
+	if(  (bautyp&bautyp_mask) == river  ||  (bridge_desc==NULL  &&  tunnel_desc==NULL)  ) {
+		return;
+	}
+	for(  uint32 i=1;  i+2<get_count();  i++  ) {
+		koord d = (route[i + 1] - route[i]).get_2d();
+		if(  (d.x > 1 || d.y > 1 || d.x < -1 || d.y < -1)  &&  d.x*d.y==0  ) {
+			const koord zv(ribi_type(d));
+			const grund_t* start = welt->lookup(route[i]);
+			const grund_t* end   = welt->lookup(route[i + 1]);
+			if(  start->get_weg_hang()!=start->get_grund_hang()  ||  end->get_weg_hang()!=end->get_grund_hang()  ) {
+				// already a bridge/tunnel there ...
+				continue;
+			}
+			preview_structure_t st;
+			st.start = route[i];
+			st.end = route[i + 1];
+			st.tunnel = !(start->get_grund_hang()==slope_t::flat  ||  start->get_grund_hang()==slope_type(zv*(-1))  ||  start->get_grund_hang()==2*slope_type(zv*(-1)));
+			if(  st.tunnel ? tunnel_desc==NULL : bridge_desc==NULL  ) {
+				continue;
+			}
+			st.name = st.tunnel ? tunnel_desc->get_name() : bridge_desc->get_name();
+			structures.append(st);
+			// as calc_costs
+			if(  st.tunnel  ) {
+				costs.tunnel += tunnel_desc->get_price()*(sint64)(koord_distance(st.start, st.end)+1);
+			}
+			else {
+				costs.bridge += bridge_desc->get_price()*(sint64)(koord_distance(st.start, st.end)+1);
+			}
+			tiles[i].flags |= st.tunnel ? preview_tunnel : preview_bridge;
+			tiles[i + 1].flags |= st.tunnel ? preview_tunnel : preview_bridge;
+		}
+	}
 }
 
 

@@ -676,6 +676,13 @@ namespace script_api {
 	stadt_t* param<stadt_t*>::get(HSQUIRRELVM vm, SQInteger index)
 	{
 		koord pos = param<koord>::get(vm, index);
+		// city_x is the position of the town hall (push): the city there, even if the range of another
+		// city with a nearer centre covers it (find_nearest_city would take that one)
+		for(stadt_t *city : welt->get_cities()) {
+			if (city->get_pos() == pos) {
+				return city;
+			}
+		}
 		return welt->find_nearest_city(pos);
 	}
 

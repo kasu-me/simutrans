@@ -337,6 +337,8 @@ protected:
 	virtual way_desc_t const* get_desc(uint16 timeline_year_month) const;
 	bool calc_route( way_builder_t &bauigel, const koord3d &, const koord3d & );
 	void start_at( koord3d &new_start ) OVERRIDE;
+	/// the route and settings of do_work in @p bauigel, @returns NULL if it can be built, the error of do_work otherwise
+	const char *prepare_build( way_builder_t &bauigel, const koord3d &start, const koord3d &end, bool &route_reversed, bool &single_tile_way );
 
 public:
 	tool_build_way_t(uint16 const id = TOOL_BUILD_WAY | GENERAL_TOOL) : two_click_tool_t(id), desc() {
@@ -373,6 +375,14 @@ public:
 	static void set_mode_str(char* str, overtaking_mode_t overtaking_mode);
 	void set_look_toolbar() { look_toolbar = true; }
 	static uint8 get_flag_color(uint8 flag);
+
+	/**
+	 * What work() at @p start and then at @p end would build, without changing anything (for a
+	 * preview, see command_x.calc_way): the checks of both clicks and the route of do_work, into
+	 * @p bauigel. Call init() first.
+	 * @returns NULL if do_work would build the route, the error of the tool otherwise
+	 */
+	const char *calc_preview_route( player_t *player, koord3d start, const koord3d &end, way_builder_t &bauigel, bool &route_reversed );
 };
 
 class tool_build_cityroad : public tool_build_way_t {
@@ -393,6 +403,8 @@ private:
 	overtaking_mode_t overtaking_mode;
 	uint8 street_flag;
 	sint8 vehicle_offset;
+	// the height of the bridge: -1 the highest with ctrl, else the lowest (the windows); 0 the lowest, 1 the highest (scripts)
+	sint8 high_mode;
 
 	char const* do_work(player_t*, koord3d const&, koord3d const&) OVERRIDE;
 	void mark_tiles(player_t*, koord3d const&, koord3d const&) OVERRIDE;
@@ -403,7 +415,13 @@ public:
 		overtaking_mode = twoway_mode;
 		street_flag = 0;
 		vehicle_offset = 0;
+		high_mode = -1;
 	}
+	bool is_high_bridge() const { return high_mode < 0 ? is_ctrl_pressed() : high_mode > 0; }
+	/// for scripts: the settings of the window (overtaking_mode_frame_t), the vehicle offset packed as in tool_build_way_t, high -1/0/1 as high_mode
+	void set_script_values(overtaking_mode_t ov, uint8 flag, sint8 packed_offset, sint8 high) { overtaking_mode = ov; street_flag = flag; vehicle_offset = packed_offset; high_mode = high; }
+	/// the end, the height above the start and the cost (negative) of the bridge from start to end as do_work builds it, error if it cannot be built
+	const char *calc_preview(player_t *player, const koord3d &start, koord3d &end, sint8 &bridge_height, sint64 &cost);
 	image_id get_icon(player_t*) const OVERRIDE { return grund_t::underground_mode==grund_t::ugm_all ? IMG_EMPTY : icon; }
 	char const* get_tooltip(player_t const*) const OVERRIDE;
 	bool is_init_network_safe() const OVERRIDE { return true; }
@@ -441,6 +459,10 @@ public:
 		street_flag = 0;
 		vehicle_offset = 0;
 	}
+	/// for scripts: see tool_build_bridge_t::set_script_values
+	void set_script_values(overtaking_mode_t ov, uint8 flag, sint8 packed_offset) { overtaking_mode = ov; street_flag = flag; vehicle_offset = packed_offset; }
+	/// the end and the cost (positive) of the tunnel that one click at start builds (do_work), error if it cannot be built
+	const char *calc_preview(player_t *player, const koord3d &start, koord3d &end, sint64 &cost, bool &terraform);
 	char const* get_tooltip(player_t const*) const OVERRIDE;
 	char const* check_pos(player_t*, koord3d) OVERRIDE;
 	bool is_init_network_safe() const OVERRIDE { return true; }
@@ -471,6 +493,10 @@ private:
 	const char *calc_route_error;
 public:
 	tool_wayremover_t() : two_click_tool_t(TOOL_WAYREMOVER | GENERAL_TOOL) {}
+	/// the route of calc_route, without the checks of its tiles; false if there is none
+	bool find_route( route_t &, player_t *, const koord3d& start, const koord3d &to );
+	/// the check of calc_route on one tile: NULL if the way of @p wt and what belongs to it can be removed, why not otherwise ("": no reason)
+	static const char *check_tile( const grund_t *gr, waytype_t wt, player_t *player );
 	char const* get_tooltip(player_t const*) const OVERRIDE;
 	image_id get_icon(player_t*) const OVERRIDE;
 	bool is_init_network_safe() const OVERRIDE { return true; }
@@ -508,6 +534,29 @@ public:
 	void set_look_toolbar() { look_toolbar = true; }
 	bool is_init_network_safe() const OVERRIDE { return true; }
 	waytype_t get_waytype() const OVERRIDE;
+};
+
+/**
+ * The route search over existing ways of the way object and road sign tools: route_t::calc_route
+ * with steps of cost 1 (way_checker_t). @p unmasked: leave tiles in the directions closed by signs
+ * too (get_weg_ribi_unmasked); route_t still does not enter a tile against its one-way sign.
+ */
+bool calc_route_on_ways( route_t &route, const koord3d &start, const koord3d &end, waytype_t wt, bool unmasked = false );
+
+/**
+ * Builds a way object on given tiles (command_x.build_wayobj_on_route), unlike tool_build_wayobj_t,
+ * which searches the route between two tiles itself. Called at the first tile, default_param
+ * "<flags>,<steps>,<way object>": flags 1 also replaces faster way objects (ctrl), steps from encode_route.
+ */
+class tool_build_wayobj_route_t : public tool_t {
+public:
+	tool_build_wayobj_route_t() : tool_t(TOOL_BUILD_WAYOBJ_ROUTE | GENERAL_TOOL) {}
+	bool is_init_network_safe() const OVERRIDE { return true; }
+	char const* work(player_t*, koord3d) OVERRIDE;
+	/// appends the steps from each tile to the next, @returns false if two tiles are no neighbours
+	static bool encode_route( cbuffer_t &buf, const vector_tpl<koord3d> &tiles );
+	/// the check of tool_build_wayobj_t::is_valid_pos: a way for @p desc that @p player may use
+	static bool is_valid_tile( player_t *player, const koord3d &pos, const way_obj_desc_t *desc );
 };
 
 class tool_remove_wayobj_t : public tool_build_wayobj_t {
@@ -582,11 +631,32 @@ private:
 	void mark_tiles(player_t*, koord3d const&, koord3d const&) OVERRIDE;
 	uint8 is_valid_pos(player_t*, koord3d const&, char const*&, koord3d const&) OVERRIDE;
 
-	/// save direction of new signs
-	vector_tpl< ribi_t::ribi > directions;
+	/// scripts: current is set before init(), which must not take the player's values then
+	bool keep_current;
+	/// scripts: the direction of the sign of one click (0: as placing it again and again turns it)
+	ribi_t::ribi sign_dir;
 
 public:
-	tool_build_roadsign_t() : two_click_tool_t(TOOL_BUILD_ROADSIGN | GENERAL_TOOL), desc() {}
+	tool_build_roadsign_t() : two_click_tool_t(TOOL_BUILD_ROADSIGN | GENERAL_TOOL), desc(), keep_current(false), sign_dir(ribi_t::none) {}
+
+	/// a sign that do_work() places (dir != 0) or removes (dir == 0) on a route
+	struct sign_step_t {
+		koord3d pos;
+		ribi_t::ribi dir;
+	};
+	/// where do_work() places and removes signs on @p route (the order of mark_tiles), and the cost estimate of mark_tiles (positive)
+	void plan_signs( player_t *player, const route_t &route, vector_tpl<sign_step_t> &steps, sint64 &cost );
+	/// for scripts: the route of the two clicks, false if there is none
+	bool calc_sign_route( route_t &route, player_t *player, const koord3d &start, const koord3d &to );
+	/// for scripts: the values of the window (signal_spacing_frame_t), the direction of one click (0: none)
+	void set_script_values( uint8 spacing, bool remove, bool replace, bool two_ways, ribi_t::ribi dir ) {
+		current.spacing = spacing;
+		current.remove_intermediate = remove;
+		current.replace_other = replace;
+		current.two_ways = two_ways;
+		sign_dir = dir;
+		keep_current = true;
+	}
 
 	char const* get_tooltip(player_t const*) const OVERRIDE;
 	bool init(player_t*) OVERRIDE;
@@ -599,6 +669,9 @@ public:
 	void draw_after(scr_coord, bool dirty) const OVERRIDE;
 	void rdwr_custom_data(memory_rw_t*) OVERRIDE;
 	waytype_t get_waytype() const OVERRIDE;
+
+	/// @p start and @p to are neighbours on ways of @p wt, but @p route (between them) goes around: no signs then
+	static bool is_detour_of_neighbour( const route_t &route, const koord3d &start, const koord3d &to, waytype_t wt );
 };
 
 class tool_build_depot_t : public tool_t {
@@ -823,8 +896,10 @@ private:
 	void mark_tiles(player_t*, koord3d const&, koord3d const&) OVERRIDE;
 	uint8 is_valid_pos(player_t*, koord3d const&, char const*&, koord3d const&) OVERRIDE { return 2; }
 	image_id get_marker_image() const OVERRIDE;
-	bool calc_route(route_t&, player_t*, koord3d const&, koord3d const&);
 	bool remove_signal(player_t*, koord3d const&);
+public:
+	/// the route of the two clicks (not with ctrl)
+	bool calc_route(route_t&, player_t*, koord3d const&, koord3d const&);
 };
 
 // removes station or stop from tile
@@ -976,6 +1051,10 @@ public:
 	tool_undo_t() : tool_t(TOOL_UNDO | SIMPLE_TOOL) {}
 	char const* get_tooltip(player_t const*) const OVERRIDE { return translator::translate("Undo last ways construction"); }
 	bool init(player_t *player ) OVERRIDE;
+	const char *get_init_error() const OVERRIDE { return failed ? "cannot undo" : NULL; }
+private:
+	/// the last init() could not undo (player_t::undo failed)
+	bool failed = false;
 };
 
 /* switch to next player
@@ -1633,6 +1712,8 @@ public:
 	void rdwr_custom_data(memory_rw_t *packet) OVERRIDE;
 
 	void set_vehicle_offset(sint8 v) { vehicle_offset = (sint8)((v << 1) | (vehicle_offset & 1)); }
+	/// for scripts: packed as in tool_build_way_t
+	void set_packed_vehicle_offset(sint8 v) { vehicle_offset = v; }
 	sint8 get_vehicle_offset() const { return vehicle_offset >> 1; }
 	void set_vehicle_offset_mode(bool m) { m ? vehicle_offset |= 1 : vehicle_offset &= ~1; }
 	bool get_vehicle_offset_mode() const { return vehicle_offset & 1; }

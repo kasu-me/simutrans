@@ -126,9 +126,22 @@ public:
 	 * @param pos the start of the bridge.
 	 * @param desc Description of the bridge to build
 	 * @param overtaking_mode condition of overtaking. This is applied only to road.
+	 * @param high_bridge the highest bridge to the end, as find_end_pos
 	 * @return NULL on success or error message otherwise
 	 */
-	static const char *build( player_t *player, const koord3d pos, const bridge_desc_t *desc, overtaking_mode_t overtaking_mode, uint8 street_flag, sint8 vehicle_offset);
+	static const char *build( player_t *player, const koord3d pos, const bridge_desc_t *desc, overtaking_mode_t overtaking_mode, uint8 street_flag, sint8 vehicle_offset, bool high_bridge = false);
+
+	/**
+	 * The checks of build(): where and how high the bridge from @p pos would be built.
+	 * @return NULL if it can be built, the error of build() otherwise
+	 */
+	static const char *plan( player_t *player, const koord3d pos, const bridge_desc_t *desc, bool high_bridge, koord3d &end, koord &zv, sint8 &bridge_height, const way_desc_t *&way_desc );
+
+	/**
+	 * What build_bridge() books for this bridge (1/100 credits, positive), with the way it builds on the
+	 * next tile to connect a single way at an end (if @p player is given).
+	 */
+	static sint64 calc_costs( player_t *player, const koord3d start, const koord3d end, koord zv, sint8 bridge_height, const bridge_desc_t *desc, const way_desc_t *way_desc );
 
 	/**
 	 * Removes a bridge

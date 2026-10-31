@@ -19,6 +19,7 @@
 #include "../../dataobj/environment.h"
 #include "../../script/script.h"
 #include "../../descriptor/bridge_desc.h"
+#include "../../descriptor/tunnel_desc.h"
 #include "../../descriptor/building_desc.h"
 #include "../../descriptor/roadsign_desc.h"
 #include "../../descriptor/way_obj_desc.h"
@@ -32,6 +33,16 @@
 #include "../../obj/signal.h"
 #include "../../player/finance.h"
 #include "../../player/simplay.h"
+#include "../../bauer/wegbauer.h"
+#include "../../bauer/brueckenbauer.h"
+#include "../../bauer/tunnelbauer.h"
+#include "../../boden/wege/strasse.h"
+#include "../../obj/wayobj.h"
+#include "../../obj/leitung2.h"
+#include "../../dataobj/route.h"
+#include "../../dataobj/scenario.h"
+#include "../../simintr.h"
+#include "../../sys/simsys.h"
 
 #include <memory> // auto_ptr
 
@@ -53,7 +64,7 @@ static const struct {
 	{ TOOL_CHANGE_HALT          | SIMPLE_TOOL, "cpmwl" },
 	{ TOOL_HALT_PERMISSION      | SIMPLE_TOOL, NULL },
 	{ TOOL_CHANGE_FACTORY       | SIMPLE_TOOL, "ds" },
-	{ TOOL_CHANGE_PLAYER        | SIMPLE_TOOL, "c$" },
+	{ TOOL_CHANGE_PLAYER        | SIMPLE_TOOL, "c$nd" },
 	{ TOOL_RECOLOUR_TOOL        | SIMPLE_TOOL, "12" },
 	{ TOOL_SENDING_MONEY        | SIMPLE_TOOL, NULL },
 	{ TOOL_MERGE_PLAYER         | SIMPLE_TOOL, NULL },
@@ -151,13 +162,15 @@ SQInteger param<call_tool_init>::push(HSQUIRRELVM vm, call_tool_init v)
 	uint32 callback_id = suspended_scripts_t::get_unique_key(tool);
 	tool->callback_id = callback_id;
 
+	const char *init_error = NULL;
 	// HACK call karte_t::set_tool
 	{
 		// a tool of an MCP script that runs at once is reported to it (in network games: nwc_tool_t::do_command)
 		live_changes_t::tool_op_t op(player);
 		welt->set_tool(tool, player);
 		if (!env_t::networkmode  &&  script_vm_t::is_mcp(vm)) {
-			op.done(vm, tool->get_id(), tool->get_default_param(), NULL);
+			init_error = tool->get_init_error();
+			op.done(vm, tool->get_id(), tool->get_default_param(), init_error);
 		}
 	}
 	// in networkmode, call is suspended
@@ -170,6 +183,9 @@ SQInteger param<call_tool_init>::push(HSQUIRRELVM vm, call_tool_init v)
 	}
 	else if (script_vm_t::is_mcp(vm)) {
 		// null on success, as in network games (nwc_tool_t::do_command)
+		if (init_error) {
+			return param<const char*>::push(vm, script_vm_t::with_error_word(vm, init_error));
+		}
 		return 0;
 	}
 	else {
@@ -408,6 +424,40 @@ static const char *exec_check_player(char cmd, const char *p, player_t *player)
 {
 	int nr = -1, a = 0, b = 0;
 	const int count = sscanf(p, "%*c,%i,%i,%i", &nr, &a, &b);
+	if (cmd == 'n') {
+		// see karte_t::change_player_tool
+		if (count < 2) {
+			return "invalid: expected n,<player>,<type>";
+		}
+		if (player != welt->get_public_player()) {
+			return "permission: only the public player can create players";
+		}
+		if (nr < 2  ||  nr >= PLAYER_UNOWNED) {
+			return "invalid: the player number is 2 to 14";
+		}
+		if (welt->get_player((uint8)nr)) {
+			return "invalid: there is a player with this number";
+		}
+		if (a < player_t::HUMAN  ||  a >= player_t::MAX_AI) {
+			return "invalid: the type is 1 (human), 2 (goods AI), 3 (passenger AI) or 4 (scripted AI)";
+		}
+		return NULL;
+	}
+	if (cmd == 'd') {
+		if (count < 1) {
+			return "invalid: expected d,<player>";
+		}
+		if (player_of(nr) == NULL  ||  nr >= PLAYER_UNOWNED) {
+			return "not_found: no player with this number";
+		}
+		if (player_of(nr) == welt->get_public_player()) {
+			return "invalid: the public player cannot be removed";
+		}
+		if (player != welt->get_public_player()  &&  player_of(nr) != player) {
+			return "permission: only the public player or the player itself can remove a player";
+		}
+		return NULL;
+	}
 	if (count < (cmd == 'c' ? 3 : 2)) {
 		return cmd == 'c' ? "invalid: expected c,<player>,<colour 1>,<colour 2>" : "invalid: expected $,<player>,<amount>";
 	}
@@ -761,6 +811,56 @@ const char* is_available(const obj_desc_timelined_t* desc)
 }
 
 
+/// the player of a preview, as param<call_tool_work>::push takes it
+static player_t *preview_player(HSQUIRRELVM vm, player_t *pl)
+{
+	player_t *player = get_my_player(vm);
+	return player ? player : pl;
+}
+
+/// pushes [x, y, z] (script coordinates), null for koord3d::invalid
+static void push_pos(HSQUIRRELVM vm, koord3d pos)
+{
+	if (pos == koord3d::invalid) {
+		sq_pushnull(vm);
+		return;
+	}
+	koord k = pos.get_2d();
+	coordinate_transform_t::koord_w2sq(k);
+	const sint64 xyz[3] = { k.x, k.y, pos.z };
+	sq_newarray(vm, 0);
+	for (int i = 0; i < 3; i++) {
+		param<sint64>::push(vm, xyz[i]);
+		sq_arrayappend(vm, -2);
+	}
+}
+
+/// a new tool with id, default_param and flags (scripted) for a preview or to be called by param<call_tool_work>::push
+template<class T> static T *new_tool(uint16 id, const char *default_param, uint8 flags)
+{
+	T *tool = dynamic_cast<T*>(create_tool(id));
+	assert(tool);
+	tool->set_default_param(default_param);
+	tool->flags = flags;
+	return tool;
+}
+
+/// the spacing at @p index (if there), as wayobj_spacing_frame_t: 1 to 50
+static const char *get_wayobj_spacing(HSQUIRRELVM vm, SQInteger index, uint8 &spacing)
+{
+	spacing = 1;
+	if (index > sq_gettop(vm)  ||  sq_gettype(vm, index) == OT_NULL) {
+		return NULL;
+	}
+	const sint64 v = param<sint64>::get(vm, index);
+	if (v < 1  ||  v > 50) {
+		return "invalid: the spacing is 1 to 50";
+	}
+	spacing = (uint8)v;
+	return NULL;
+}
+
+
 struct build_way_args_t {
 	bool keep_city_roads;
 	sint8 overtaking_mode;
@@ -772,6 +872,15 @@ struct build_way_args_t {
 		: keep_city_roads(keep_city_roads), overtaking_mode(overtaking_mode), street_flag(street_flag), height_offset(height_offset), vehicle_offset(vehicle_offset) {}
 };
 
+/// the default_param of tool_build_way_t
+static const char *build_way_param(const way_desc_t* way, const build_way_args_t &args)
+{
+	static cbuffer_t buf;
+	buf.clear();
+	buf.printf("%s,%d,%d,%d,%d", way->get_name(), args.overtaking_mode, args.street_flag, args.height_offset, args.vehicle_offset);
+	return buf;
+}
+
 call_tool_work build_way(player_t* pl, koord3d start, koord3d end, const way_desc_t* way, bool straight, build_way_args_t args)
 {
 	if (way == NULL) {
@@ -780,10 +889,7 @@ call_tool_work build_way(player_t* pl, koord3d start, koord3d end, const way_des
 	if (const char* err = is_available(way)) {
 		return call_tool_work(err);
 	}
-	static cbuffer_t buf;
-	buf.clear();
-	buf.printf("%s,%d,%d,%d,%d", way->get_name(), args.overtaking_mode, args.street_flag, args.height_offset, args.vehicle_offset);
-	return call_tool_work(TOOL_BUILD_WAY | GENERAL_TOOL, buf, (straight ? 2 : 0) + (args.keep_city_roads ? 1 : 0), pl, start, end);
+	return call_tool_work(TOOL_BUILD_WAY | GENERAL_TOOL, build_way_param(way, args), (straight ? 2 : 0) + (args.keep_city_roads ? 1 : 0), pl, start, end);
 }
 
 
@@ -805,6 +911,40 @@ SQInteger command_build_way(HSQUIRRELVM vm)
 	return param<call_tool_work>::push(vm, build_way(pl, start, end, way, straight, args));
 }
 
+/// the arguments of build_road at @p index: a table, or keep_city_roads alone
+static build_way_args_t get_build_way_args(HSQUIRRELVM vm, SQInteger index)
+{
+	bool keep_city_roads = false;
+	sint8 overtaking_mode = 1 /*twoway_mode*/;
+	uint8 street_flag = 0;
+	sint8 height_offset = 0;
+	sint8 vehicle_offset = 0;
+
+	if (sq_gettype(vm, index) == OT_TABLE) {
+		get_slot(vm, "keep_city_roads", keep_city_roads, index);
+		sint32 mode = 1;
+		if (SQ_SUCCEEDED(get_slot(vm, "overtaking_mode", mode, index))) {
+			overtaking_mode = (sint8)mode;
+		}
+		sint32 flag = 0;
+		if (SQ_SUCCEEDED(get_slot(vm, "street_flag", flag, index))) {
+			street_flag = (uint8)flag;
+		}
+		sint32 ho = 0;
+		if (SQ_SUCCEEDED(get_slot(vm, "height_offset", ho, index))) {
+			height_offset = (sint8)ho;
+		}
+		sint32 vo = 0;
+		if (SQ_SUCCEEDED(get_slot(vm, "vehicle_offset", vo, index))) {
+			vehicle_offset = (sint8)vo;
+		}
+	}
+	else {
+		keep_city_roads = param<bool>::get(vm, index);
+	}
+	return build_way_args_t(keep_city_roads, overtaking_mode, street_flag, height_offset, vehicle_offset);
+}
+
 SQInteger command_build_road(HSQUIRRELVM vm)
 {
 	player_t* pl = param<player_t*>::get(vm, 2);
@@ -813,48 +953,307 @@ SQInteger command_build_road(HSQUIRRELVM vm)
 	const way_desc_t* way = param<const way_desc_t*>::get(vm, 5);
 	bool straight = param<bool>::get(vm, 6);
 
-	bool keep_city_roads = false;
-	sint8 overtaking_mode = 1 /*twoway_mode*/;
-	uint8 street_flag = 0;
-	sint8 height_offset = 0;
-	sint8 vehicle_offset = 0;
-
-	if (sq_gettype(vm, 7) == OT_TABLE) {
-		get_slot(vm, "keep_city_roads", keep_city_roads, 7);
-		sint32 mode = 1;
-		if (SQ_SUCCEEDED(get_slot(vm, "overtaking_mode", mode, 7))) {
-			overtaking_mode = (sint8)mode;
-		}
-		sint32 flag = 0;
-		if (SQ_SUCCEEDED(get_slot(vm, "street_flag", flag, 7))) {
-			street_flag = (uint8)flag;
-		}
-		sint32 ho = 0;
-		if (SQ_SUCCEEDED(get_slot(vm, "height_offset", ho, 7))) {
-			height_offset = (sint8)ho;
-		}
-		sint32 vo = 0;
-		if (SQ_SUCCEEDED(get_slot(vm, "vehicle_offset", vo, 7))) {
-			vehicle_offset = (sint8)vo;
-		}
-	}
-	else {
-		keep_city_roads = param<bool>::get(vm, 7);
-	}
-	build_way_args_t args(keep_city_roads, overtaking_mode, street_flag, height_offset, vehicle_offset);
-	return param<call_tool_work>::push(vm, build_way(pl, start, end, way, straight, args));
+	return param<call_tool_work>::push(vm, build_way(pl, start, end, way, straight, get_build_way_args(vm, 7)));
 }
 
 
-call_tool_work build_wayobj(player_t* pl, koord3d start, koord3d end, const way_obj_desc_t* wayobj)
+/// no sync steps (INT_CHECK in the route searches) while a preview is calculated: the world stays as it is
+struct intr_pause_t {
+	bool was_enabled;
+	intr_pause_t() : was_enabled(intr_is_enabled()) { intr_disable(); }
+	~intr_pause_t() { if (was_enabled) { intr_enable(); } }
+};
+
+/// appends [x, y, z, extra...] (script coordinates) to the array on top of the stack
+static void append_tile(HSQUIRRELVM vm, koord3d pos, const sint64 *extra, int n)
 {
+	koord k = pos.get_2d();
+	coordinate_transform_t::koord_w2sq(k);
+	const sint64 xyz[3] = { k.x, k.y, pos.z };
+	sq_newarray(vm, 0);
+	for (int i = 0; i < 3 + n; i++) {
+		param<sint64>::push(vm, i < 3 ? xyz[i] : extra[i - 3]);
+		sq_arrayappend(vm, -2);
+	}
+	sq_arrayappend(vm, -2);
+}
+
+static ribi_t::ribi ribi_to_script(ribi_t::ribi r)
+{
+	coordinate_transform_t::ribi_w2sq(r);
+	return r;
+}
+
+
+SQInteger command_calc_way(HSQUIRRELVM vm)
+{
+	const uint32 t0 = dr_time();
+	player_t* pl = param<player_t*>::get(vm, 2);
+	koord3d start = param<koord3d>::get(vm, 3);
+	koord3d end = param<koord3d>::get(vm, 4);
+	const way_desc_t* way = param<const way_desc_t*>::get(vm, 5);
+	bool straight = param<bool>::get(vm, 6);
+	build_way_args_t args = get_build_way_args(vm, 7);
+	sint32 max_steps = 0;
+	if (sq_gettype(vm, 7) == OT_TABLE) {
+		get_slot(vm, "max_steps", max_steps, 7);
+	}
+
+	// the checks of build_way and param<call_tool_work>::push (raised there, so without the word of the tool errors)
+	player_t *player = get_my_player(vm);
+	const bool scenario_checks = player != NULL;
+	if (player == NULL) {
+		player = pl;
+	}
+	const char *err = NULL;
+	bool tool_error = false;
+	if (way == NULL) {
+		err = "No way provided";
+	}
+	else if (const char *e = is_available(way)) {
+		err = e;
+	}
+	else if (player == NULL) {
+		err = "Called tool with player == null";
+	}
+
+	way_builder_t bauigel(player);
+	bool reversed = false;
+	if (err == NULL) {
+		std::unique_ptr<tool_t> tool(create_tool(TOOL_BUILD_WAY | GENERAL_TOOL));
+		tool->set_default_param(build_way_param(way, args));
+		tool->flags = (straight ? tool_t::WFL_CTRL : 0) | (args.keep_city_roads ? tool_t::WFL_SHIFT : 0) | tool_t::WFL_SCRIPT;
+		const uint8 flags = tool->flags;
+		if (!tool->init(player)) {
+			err = "Error during initializing tool";
+		}
+		tool->flags = flags;
+		if (err == NULL) {
+			tool_error = true;
+			// the checks of the scenario at both clicks (karte_t::call_work)
+			scenario_t *scen = welt->get_scenario();
+			if (scenario_checks  &&  scen->is_scripted()) {
+				if (!scen->is_tool_allowed(player, tool->get_id(), tool->get_waytype())) {
+					err = "";
+				}
+				else if ((err = scen->is_work_allowed_here(player, tool->get_id(), tool->get_waytype(), start)) == NULL) {
+					err = scen->is_work_allowed_here(player, tool->get_id(), tool->get_waytype(), end);
+				}
+			}
+		}
+		if (err == NULL) {
+			bauigel.set_max_steps(max_steps > 0 ? max_steps : 0);
+			bauigel.set_quiet(true);
+			intr_pause_t pause;
+			err = static_cast<tool_build_way_t*>(tool.get())->calc_preview_route(player, start, end, bauigel, reversed);
+		}
+	}
+	if (err  &&  tool_error) {
+		err = script_vm_t::with_error_word(vm, err);
+	}
+
+	vector_tpl<way_builder_t::preview_tile_t> tiles;
+	vector_tpl<way_builder_t::preview_structure_t> structures;
+	way_builder_t::cost_breakdown_t parts;
+	sint64 estimate = 0;
+	if (bauigel.get_count() > 0) {
+		bauigel.calc_preview(tiles, structures, parts);
+		estimate = bauigel.calc_costs();
+	}
+
+	sq_newtable(vm);
+	create_slot<bool>(vm, "ok", err == NULL);
+	create_slot<const char*>(vm, "error", err);
+	create_slot<bool>(vm, "aborted", err != NULL  &&  bauigel.get_count() == 0  &&  bauigel.is_search_aborted());
+	create_slot<bool>(vm, "reversed", reversed);
+	create_slot<uint32>(vm, "length", bauigel.get_count());
+	// from start to end
+	sq_pushstring(vm, "tiles", -1);
+	sq_newarray(vm, 0);
+	for (uint32 i = 0; i < tiles.get_count(); i++) {
+		const way_builder_t::preview_tile_t &t = tiles[reversed ? tiles.get_count() - 1 - i : i];
+		const sint64 extra[2] = { ribi_to_script(t.ribi), t.flags };
+		append_tile(vm, t.pos, extra, 2);
+	}
+	sq_newslot(vm, -3, false);
+	for (int tunnel = 0; tunnel < 2; tunnel++) {
+		sq_pushstring(vm, tunnel ? "tunnels" : "bridges", -1);
+		sq_newarray(vm, 0);
+		FOR(vector_tpl<way_builder_t::preview_structure_t>, const& st, structures) {
+			if (st.tunnel == (tunnel != 0)) {
+				koord k1 = st.start.get_2d(), k2 = st.end.get_2d();
+				coordinate_transform_t::koord_w2sq(k1);
+				coordinate_transform_t::koord_w2sq(k2);
+				const sint64 v[6] = { k1.x, k1.y, st.start.z, k2.x, k2.y, st.end.z };
+				sq_newarray(vm, 0);
+				for (int i = 0; i < 6; i++) {
+					param<sint64>::push(vm, v[i]);
+					sq_arrayappend(vm, -2);
+				}
+				param<const char*>::push(vm, st.name);
+				sq_arrayappend(vm, -2);
+				sq_arrayappend(vm, -2);
+			}
+		}
+		sq_newslot(vm, -3, false);
+	}
+	// what build_road books, and the estimate of the game's tool tip (it differs on some kept or replaced tiles)
+	create_slot<sint64>(vm, "cost", parts.total());
+	create_slot<sint64>(vm, "estimate", estimate);
+	sq_pushstring(vm, "breakdown", -1);
+	sq_newtable(vm);
+	create_slot<sint64>(vm, "fresh", parts.fresh);
+	create_slot<sint64>(vm, "replace", parts.replace);
+	create_slot<sint64>(vm, "trees", parts.trees);
+	create_slot<sint64>(vm, "groundobj", parts.groundobj);
+	create_slot<sint64>(vm, "bridge", parts.bridge);
+	create_slot<sint64>(vm, "tunnel", parts.tunnel);
+	sq_newslot(vm, -3, false);
+	// only rivers draw random numbers in the route search (way_builder_t::is_allowed_step), and the way tools build no rivers
+	create_slot<bool>(vm, "random", false);
+	create_slot<uint32>(vm, "ms", dr_time() - t0);
+	return 1;
+}
+
+
+SQInteger command_calc_route_on_ways(HSQUIRRELVM vm)
+{
+	const uint32 t0 = dr_time();
+	koord3d start = param<koord3d>::get(vm, 3);
+	koord3d end = param<koord3d>::get(vm, 4);
+	const waytype_t wt = param<waytype_t>::get(vm, 5);
+	const uint32 flags = param<uint32>::get(vm, 6);
+	const bool unmasked = flags & 1;
+
+	// the waytype of tool_build_wayobj_t::calc_route and tool_build_roadsign_t::calc_route
+	waytype_t search_wt = wt == tram_wt ? track_wt : wt;
+	const char *err = NULL;
+	grund_t *gr = welt->lookup(start);
+	if (gr == NULL  ||  welt->lookup(end) == NULL) {
+		err = "invalid: no ground at the start or the end";
+	}
+	else if (search_wt == any_wt) {
+		if (weg_t *w = gr->get_weg(wt)) {
+			search_wt = w->get_waytype();
+		}
+		else {
+			err = "invalid: no way at the start";
+		}
+	}
+
+	route_t route;
+	bool blocked_by_masks = false;
+	if (err == NULL) {
+		intr_pause_t pause;
+		bool ok = calc_route_on_ways(route, start, end, search_wt, unmasked);
+		if (ok  &&  (flags & 2)  &&  start != end  &&  tool_build_roadsign_t::is_detour_of_neighbour(route, start, end, wt)) {
+			ok = false;
+		}
+		if (!ok) {
+			if (!unmasked) {
+				route_t route_unmasked;
+				blocked_by_masks = calc_route_on_ways(route_unmasked, start, end, search_wt, true);
+			}
+			route.clear();
+			err = script_vm_t::with_error_word(vm, "Ways not connected");
+		}
+	}
+
+	sq_newtable(vm);
+	create_slot<bool>(vm, "ok", err == NULL);
+	create_slot<const char*>(vm, "error", err);
+	sq_pushstring(vm, "tiles", -1);
+	sq_newarray(vm, 0);
+	for (uint32 i = 0; i < route.get_count(); i++) {
+		const sint64 extra[1] = { ribi_to_script(route.get_route().get_ribi(i)) };
+		append_tile(vm, route.at(i), extra, 1);
+	}
+	sq_newslot(vm, -3, false);
+	create_slot<bool>(vm, "blocked_by_masks", blocked_by_masks);
+	create_slot<uint32>(vm, "ms", dr_time() - t0);
+	return 1;
+}
+
+
+SQInteger command_build_wayobj(HSQUIRRELVM vm)
+{
+	player_t* pl = param<player_t*>::get(vm, 2);
+	koord3d start = param<koord3d>::get(vm, 3);
+	koord3d end = param<koord3d>::get(vm, 4);
+	const way_obj_desc_t* wayobj = param<const way_obj_desc_t*>::get(vm, 5);
 	if (wayobj == NULL) {
-		return call_tool_work("No wayobj provided");
+		return sq_raise_error(vm, "No wayobj provided");
 	}
 	if (const char* err = is_available(wayobj)) {
-		return call_tool_work(err);
+		return sq_raise_error(vm, "%s", err);
 	}
-	return call_tool_work(TOOL_BUILD_WAYOBJ | GENERAL_TOOL, wayobj->get_name(), 0, pl, start, end);
+	uint8 spacing;
+	if (const char *err = get_wayobj_spacing(vm, 6, spacing)) {
+		return sq_raise_error(vm, "%s", err);
+	}
+	std::unique_ptr<tool_build_wayobj_t> tool(new_tool<tool_build_wayobj_t>(TOOL_BUILD_WAYOBJ | GENERAL_TOOL, wayobj->get_name(), 0));
+	tool->set_spacing(spacing);
+	return param<call_tool_work>::push(vm, call_tool_work(tool.get(), pl, start, end));
+}
+
+
+SQInteger command_build_wayobj_on_route(HSQUIRRELVM vm)
+{
+	player_t* pl = param<player_t*>::get(vm, 2);
+	const way_obj_desc_t* wayobj = param<const way_obj_desc_t*>::get(vm, 4);
+	const uint32 flags = param<uint32>::get(vm, 5);
+	if (wayobj == NULL) {
+		return sq_raise_error(vm, "No wayobj provided");
+	}
+	if (const char* err = is_available(wayobj)) {
+		return sq_raise_error(vm, "%s", err);
+	}
+	// the tiles [[x, y, z, ...], ...], further entries (the ribi and flags of calc_way) are ignored
+	const SQInteger count = sq_getsize(vm, 3);
+	if (count < 1  ||  count > 2000) {
+		return sq_raise_error(vm, "invalid: expected 1 to 2000 tiles");
+	}
+	vector_tpl<koord3d> tiles(count);
+	for (SQInteger i = 0; i < count; i++) {
+		sq_pushinteger(vm, i);
+		sq_get(vm, 3);
+		SQInteger v[3];
+		bool ok = sq_gettype(vm, -1) == OT_ARRAY  &&  sq_getsize(vm, -1) >= 3;
+		for (int j = 0; ok  &&  j < 3; j++) {
+			sq_pushinteger(vm, j);
+			ok = SQ_SUCCEEDED(sq_get(vm, -2))  &&  SQ_SUCCEEDED(sq_getinteger(vm, -1, &v[j]));
+			sq_pop(vm, 1);
+		}
+		sq_pop(vm, 1);
+		if (!ok) {
+			return sq_raise_error(vm, "invalid: tile %d is no [x, y, z]", (int)i);
+		}
+		koord k((sint16)v[0], (sint16)v[1]);
+		coordinate_transform_t::koord_sq2w(k);
+		tiles.append(koord3d(k, (sint8)v[2]));
+	}
+	uint8 spacing;
+	if (const char *err = get_wayobj_spacing(vm, 6, spacing)) {
+		return sq_raise_error(vm, "%s", err);
+	}
+	static cbuffer_t buf;
+	buf.clear();
+	buf.printf("%u,", (flags & 1) | (spacing > 1 ? spacing << 1 : 0));
+	if (!tool_build_wayobj_route_t::encode_route(buf, tiles)) {
+		return sq_raise_error(vm, "invalid: the tiles are no neighbours one after another");
+	}
+	buf.printf(",%s", wayobj->get_name());
+	// the check of tool_build_wayobj_t::is_valid_pos on every tile, the tool does it again (silently)
+	player_t *player = get_my_player(vm);
+	if (player == NULL) {
+		player = pl;
+	}
+	for (uint32 i = 0; i < tiles.get_count(); i++) {
+		if (!tool_build_wayobj_route_t::is_valid_tile(player, tiles[i], wayobj)) {
+			return sq_raise_error(vm, "invalid: no way for %s of this player at tile %d (%s)", wayobj->get_name(), (int)i, tiles[i].get_str());
+		}
+	}
+	return param<call_tool_work>::push(vm, call_tool_work(TOOL_BUILD_WAYOBJ_ROUTE | GENERAL_TOOL, buf, 0, pl, tiles[0]));
 }
 
 
@@ -910,26 +1309,579 @@ call_tool_work build_depot(player_t* pl, koord3d pos, const building_desc_t* bui
 	return call_tool_work(TOOL_BUILD_DEPOT | GENERAL_TOOL, building->get_name(), 0, pl, pos);
 }
 
-call_tool_work build_bridge(player_t* pl, koord3d start, koord3d end, const bridge_desc_t* bridge)
+/// the settings of bridges and tunnels: the arguments of build_road, and high (bridges)
+struct structure_args_t {
+	sint8 overtaking_mode;
+	uint8 street_flag;
+	sint8 vehicle_offset;
+	sint8 high; ///< -1: not given
+	structure_args_t() : overtaking_mode(twoway_mode), street_flag(0), vehicle_offset(0), high(-1) {}
+};
+
+/// the arguments at @p index (if there): a table, a bool (high) or null; error if they do not fit
+static const char *get_structure_args(HSQUIRRELVM vm, SQInteger index, structure_args_t &args)
 {
-	if (bridge == NULL) {
-		return call_tool_work("No bridge provided");
+	if (index > sq_gettop(vm)) {
+		return NULL;
 	}
-	if (const char* err = is_available(bridge)) {
-		return call_tool_work(err);
+	switch (sq_gettype(vm, index)) {
+		case OT_NULL:
+			return NULL;
+		case OT_BOOL:
+			args.high = param<bool>::get(vm, index) ? 1 : 0;
+			return NULL;
+		case OT_TABLE: {
+			bool high = false;
+			if (SQ_SUCCEEDED(get_slot(vm, "high", high, index))) {
+				args.high = high ? 1 : 0;
+			}
+			sint32 mode = twoway_mode, flag = 0, vo = 0;
+			get_slot(vm, "overtaking_mode", mode, index);
+			get_slot(vm, "street_flag", flag, index);
+			get_slot(vm, "vehicle_offset", vo, index);
+			// the values of overtaking_mode_frame_t
+			if (mode < halt_mode  ||  mode > inverted_mode) {
+				return "invalid: the overtaking mode is -1 to 4";
+			}
+			if (flag < 0  ||  flag > 255  ||  vo < -128  ||  vo > 127) {
+				return "invalid: the street flag is 0 to 255, the vehicle offset -128 to 127";
+			}
+			args.overtaking_mode = (sint8)mode;
+			args.street_flag = (uint8)flag;
+			args.vehicle_offset = (sint8)vo;
+			return NULL;
+		}
+		default:
+			return "invalid: the arguments are a table, a bool (high) or null";
 	}
-	return call_tool_work(TOOL_BUILD_BRIDGE | GENERAL_TOOL, bridge->get_name(), 2, pl, start, end);
 }
 
-call_tool_work build_bridge_at(player_t* pl, koord3d start, const bridge_desc_t* bridge)
+/// the bridge (last but one or last parameter) and whether an end (parameter 4) is given
+static const bridge_desc_t *get_bridge_param(HSQUIRRELVM vm, SQInteger &desc_index, bool &with_end)
 {
+	// (pl, start, bridge [, args]) or (pl, start, end, bridge [, args]): the descriptor is an instance, args are not
+	desc_index = sq_gettop(vm) >= 5  &&  sq_gettype(vm, 5) == OT_INSTANCE ? 5 : 4;
+	with_end = desc_index == 5;
+	return param<const bridge_desc_t*>::get(vm, desc_index);
+}
+
+SQInteger command_build_bridge(HSQUIRRELVM vm, bool with_end)
+{
+	player_t* pl = param<player_t*>::get(vm, 2);
+	koord3d start = param<koord3d>::get(vm, 3);
+	koord3d end = with_end ? param<koord3d>::get(vm, 4) : koord3d::invalid;
+	const SQInteger desc_index = with_end ? 5 : 4;
+	const bridge_desc_t* bridge = param<const bridge_desc_t*>::get(vm, desc_index);
 	if (bridge == NULL) {
-		return call_tool_work("No bridge provided");
+		return sq_raise_error(vm, "No bridge provided");
 	}
 	if (const char* err = is_available(bridge)) {
-		return call_tool_work(err);
+		return sq_raise_error(vm, "%s", err);
 	}
-	return call_tool_work(TOOL_BUILD_BRIDGE | GENERAL_TOOL, bridge->get_name(), 0, pl, start);
+	structure_args_t args;
+	if (const char *err = get_structure_args(vm, desc_index + 1, args)) {
+		return sq_raise_error(vm, "%s", err);
+	}
+	// two clicks: ctrl for the first one to set the start only (the bridge is as high as possible then, if high is not given)
+	std::unique_ptr<tool_build_bridge_t> tool(new_tool<tool_build_bridge_t>(TOOL_BUILD_BRIDGE | GENERAL_TOOL, bridge->get_name(), with_end ? tool_t::WFL_CTRL : 0));
+	tool->set_script_values((overtaking_mode_t)args.overtaking_mode, args.street_flag, args.vehicle_offset, args.high);
+	if (with_end) {
+		return param<call_tool_work>::push(vm, call_tool_work(tool.get(), pl, start, end));
+	}
+	return param<call_tool_work>::push(vm, call_tool_work(tool.get(), pl, start));
+}
+
+SQInteger command_build_bridge_to(HSQUIRRELVM vm) { return command_build_bridge(vm, true); }
+SQInteger command_build_bridge_at(HSQUIRRELVM vm) { return command_build_bridge(vm, false); }
+
+
+SQInteger command_calc_bridge(HSQUIRRELVM vm)
+{
+	player_t* pl = param<player_t*>::get(vm, 2);
+	koord3d start = param<koord3d>::get(vm, 3);
+	SQInteger desc_index;
+	bool with_end;
+	const bridge_desc_t* bridge = get_bridge_param(vm, desc_index, with_end);
+	koord3d end = with_end ? param<koord3d>::get(vm, 4) : koord3d::invalid;
+	structure_args_t args;
+	const char *err = get_structure_args(vm, desc_index + 1, args);
+	if (err == NULL  &&  bridge == NULL) {
+		err = "No bridge provided";
+	}
+	if (err == NULL) {
+		err = is_available(bridge);
+	}
+	player_t *player = preview_player(vm, pl);
+	if (err == NULL  &&  player == NULL) {
+		err = "Called tool with player == null";
+	}
+	sint8 height = 0;
+	sint64 cost = 0;
+	if (err == NULL) {
+		// as build_bridge(_at): the same flags and values
+		std::unique_ptr<tool_build_bridge_t> tool(new_tool<tool_build_bridge_t>(TOOL_BUILD_BRIDGE | GENERAL_TOOL, bridge->get_name(), (with_end ? tool_t::WFL_CTRL : 0) | tool_t::WFL_SCRIPT));
+		tool->set_script_values((overtaking_mode_t)args.overtaking_mode, args.street_flag, args.vehicle_offset, args.high);
+		const uint8 flags = tool->flags;
+		if (!tool->init(player)) {
+			err = "Error during initializing tool";
+		}
+		else {
+			tool->flags = flags;
+			intr_pause_t pause;
+			err = script_vm_t::with_error_word(vm, tool->calc_preview(player, start, end, height, cost));
+		}
+	}
+	if (err) {
+		end = koord3d::invalid;
+	}
+	sq_newtable(vm);
+	create_slot<bool>(vm, "ok", err == NULL);
+	create_slot<const char*>(vm, "error", err);
+	sq_pushstring(vm, "end", -1);
+	push_pos(vm, end);
+	sq_newslot(vm, -3, false);
+	create_slot<uint32>(vm, "length", err ? 0 : koord_distance(start, end) + 1);
+	create_slot<sint32>(vm, "height", err ? 0 : height);
+	create_slot<sint64>(vm, "cost", cost);
+	return 1;
+}
+
+
+/// the tunnel and whether an end is given, as get_bridge_param
+static const tunnel_desc_t *get_tunnel_param(HSQUIRRELVM vm, SQInteger &desc_index, bool &with_end)
+{
+	const SQInteger top = sq_gettop(vm);
+	desc_index = top >= 5  &&  sq_gettype(vm, 5) == OT_INSTANCE ? 5 : 4;
+	with_end = desc_index == 5;
+	return param<const tunnel_desc_t*>::get(vm, desc_index);
+}
+
+SQInteger command_build_tunnel(HSQUIRRELVM vm)
+{
+	player_t* pl = param<player_t*>::get(vm, 2);
+	koord3d start = param<koord3d>::get(vm, 3);
+	SQInteger desc_index;
+	bool with_end;
+	const tunnel_desc_t* tunnel = get_tunnel_param(vm, desc_index, with_end);
+	koord3d end = with_end ? param<koord3d>::get(vm, 4) : koord3d::invalid;
+	if (tunnel == NULL) {
+		return sq_raise_error(vm, "No tunnel provided");
+	}
+	if (const char* err = is_available(tunnel)) {
+		return sq_raise_error(vm, "%s", err);
+	}
+	structure_args_t args;
+	if (const char *err = get_structure_args(vm, desc_index + 1, args)) {
+		return sq_raise_error(vm, "%s", err);
+	}
+	// one click at a slope: the tunnel through the hill (high: the portal only, as with ctrl);
+	// two clicks from a tunnel: the way under ground to end
+	// (ctrl: one click builds the portal only; two clicks would replace faster ways with it)
+	std::unique_ptr<tool_build_tunnel_t> tool(new_tool<tool_build_tunnel_t>(TOOL_BUILD_TUNNEL | GENERAL_TOOL, tunnel->get_name(), args.high > 0  &&  !with_end ? tool_t::WFL_CTRL : 0));
+	tool->set_script_values((overtaking_mode_t)args.overtaking_mode, args.street_flag, args.vehicle_offset);
+	if (with_end) {
+		return param<call_tool_work>::push(vm, call_tool_work(tool.get(), pl, start, end));
+	}
+	return param<call_tool_work>::push(vm, call_tool_work(tool.get(), pl, start));
+}
+
+
+SQInteger command_calc_tunnel(HSQUIRRELVM vm)
+{
+	player_t* pl = param<player_t*>::get(vm, 2);
+	koord3d start = param<koord3d>::get(vm, 3);
+	const tunnel_desc_t* tunnel = param<const tunnel_desc_t*>::get(vm, 4);
+	structure_args_t args;
+	const char *err = get_structure_args(vm, 5, args);
+	if (err == NULL  &&  tunnel == NULL) {
+		err = "No tunnel provided";
+	}
+	if (err == NULL) {
+		err = is_available(tunnel);
+	}
+	player_t *player = preview_player(vm, pl);
+	if (err == NULL  &&  player == NULL) {
+		err = "Called tool with player == null";
+	}
+	koord3d end = koord3d::invalid;
+	sint64 cost = 0;
+	bool terraform = false;
+	if (err == NULL) {
+		std::unique_ptr<tool_build_tunnel_t> tool(new_tool<tool_build_tunnel_t>(TOOL_BUILD_TUNNEL | GENERAL_TOOL, tunnel->get_name(), (args.high > 0 ? tool_t::WFL_CTRL : 0) | tool_t::WFL_SCRIPT));
+		const uint8 flags = tool->flags;
+		if (!tool->init(player)) {
+			err = "Error during initializing tool";
+		}
+		else {
+			tool->flags = flags;
+			intr_pause_t pause;
+			err = script_vm_t::with_error_word(vm, tool->calc_preview(player, start, end, cost, terraform));
+		}
+	}
+	if (err) {
+		end = koord3d::invalid;
+	}
+	sq_newtable(vm);
+	create_slot<bool>(vm, "ok", err == NULL);
+	create_slot<const char*>(vm, "error", err);
+	sq_pushstring(vm, "end", -1);
+	push_pos(vm, end);
+	sq_newslot(vm, -3, false);
+	create_slot<uint32>(vm, "length", err ? 0 : koord_distance(start, end) + 1);
+	create_slot<sint32>(vm, "height", 0);
+	create_slot<sint64>(vm, "cost", cost);
+	create_slot<bool>(vm, "terraform", terraform);
+	return 1;
+}
+
+
+/// the settings of the window of the signal tool (signal_spacing_frame_t)
+struct sign_args_t {
+	uint8 spacing;
+	bool remove_intermediate, replace_other, two_ways;
+	sign_args_t() : spacing(2), remove_intermediate(true), replace_other(true), two_ways(false) {}
+};
+
+static const char *get_sign_args(HSQUIRRELVM vm, SQInteger index, sign_args_t &args)
+{
+	if (index > sq_gettop(vm)  ||  sq_gettype(vm, index) == OT_NULL) {
+		return NULL;
+	}
+	if (sq_gettype(vm, index) != OT_TABLE) {
+		return "invalid: the arguments are a table or null";
+	}
+	sint32 spacing = args.spacing;
+	get_slot(vm, "spacing", spacing, index);
+	get_slot(vm, "remove_intermediate", args.remove_intermediate, index);
+	get_slot(vm, "replace_other", args.replace_other, index);
+	get_slot(vm, "two_ways", args.two_ways, index);
+	// (the window takes up to 255, but the tool counts twice the spacing in a byte)
+	if (spacing < 1  ||  spacing > 127) {
+		return "invalid: the spacing is 1 to 127";
+	}
+	args.spacing = (uint8)spacing;
+	return NULL;
+}
+
+SQInteger command_build_sign_at(HSQUIRRELVM vm)
+{
+	player_t* pl = param<player_t*>::get(vm, 2);
+	koord3d pos = param<koord3d>::get(vm, 3);
+	const roadsign_desc_t* sign = param<const roadsign_desc_t*>::get(vm, 4);
+	if (sign == NULL) {
+		return sq_raise_error(vm, "No sign provided");
+	}
+	if (const char* err = is_available(sign)) {
+		return sq_raise_error(vm, "%s", err);
+	}
+	ribi_t::ribi dir = ribi_t::none;
+	if (sq_gettop(vm) >= 5  &&  sq_gettype(vm, 5) != OT_NULL) {
+		dir = param<my_ribi_t>::get(vm, 5);
+		// the directions the sign can have here (tool_build_roadsign_t::place_sign_intern)
+		const grund_t *gr = welt->lookup(pos);
+		const weg_t *weg = gr ? gr->get_weg(sign->get_wtyp() != tram_wt ? sign->get_wtyp() : track_wt) : NULL;
+		if (weg == NULL) {
+			return sq_raise_error(vm, "invalid: no way for this sign here");
+		}
+		const ribi_t::ribi way_dir = weg->get_ribi_unmasked();
+		bool ok;
+		if (sign->is_signal_type()) {
+			ok = ribi_t::is_twoway(way_dir)  &&  (dir == way_dir  ||  (ribi_t::is_single(dir)  &&  (dir & way_dir) == dir));
+		}
+		else if (sign->is_single_way()  ||  sign->is_choose_sign()) {
+			ok = dir != ribi_t::none  &&  (dir & ~way_dir) == 0;
+		}
+		else {
+			ok = dir == way_dir;
+		}
+		if (!ok) {
+			return sq_raise_error(vm, "invalid: the sign cannot have this direction here");
+		}
+	}
+	std::unique_ptr<tool_build_roadsign_t> tool(new_tool<tool_build_roadsign_t>(TOOL_BUILD_ROADSIGN | GENERAL_TOOL, sign->get_name(), 0));
+	if (dir) {
+		sign_args_t args;
+		tool->set_script_values(args.spacing, args.remove_intermediate, args.replace_other, args.two_ways, dir);
+	}
+	return param<call_tool_work>::push(vm, call_tool_work(tool.get(), pl, pos));
+}
+
+/// build_signs_on_route and calc_signs_on_route
+static SQInteger signs_on_route(HSQUIRRELVM vm, bool build)
+{
+	player_t* pl = param<player_t*>::get(vm, 2);
+	koord3d start = param<koord3d>::get(vm, 3);
+	koord3d end = param<koord3d>::get(vm, 4);
+	const roadsign_desc_t* sign = param<const roadsign_desc_t*>::get(vm, 5);
+	sign_args_t args;
+	const char *err = get_sign_args(vm, 6, args);
+	if (err == NULL  &&  sign == NULL) {
+		err = "No sign provided";
+	}
+	if (err == NULL) {
+		err = is_available(sign);
+	}
+	if (build) {
+		if (err) {
+			return sq_raise_error(vm, "%s", err);
+		}
+		// two clicks: ctrl for the first one to set the start only (it would place a sign otherwise)
+		std::unique_ptr<tool_build_roadsign_t> tool(new_tool<tool_build_roadsign_t>(TOOL_BUILD_ROADSIGN | GENERAL_TOOL, sign->get_name(), tool_t::WFL_CTRL));
+		tool->set_script_values(args.spacing, args.remove_intermediate, args.replace_other, args.two_ways, ribi_t::none);
+		return param<call_tool_work>::push(vm, call_tool_work(tool.get(), pl, start, end));
+	}
+
+	player_t *player = preview_player(vm, pl);
+	if (err == NULL  &&  player == NULL) {
+		err = "Called tool with player == null";
+	}
+	vector_tpl<tool_build_roadsign_t::sign_step_t> steps;
+	sint64 cost = 0;
+	if (err == NULL) {
+		std::unique_ptr<tool_build_roadsign_t> tool(new_tool<tool_build_roadsign_t>(TOOL_BUILD_ROADSIGN | GENERAL_TOOL, sign->get_name(), tool_t::WFL_CTRL | tool_t::WFL_SCRIPT));
+		tool->set_script_values(args.spacing, args.remove_intermediate, args.replace_other, args.two_ways, ribi_t::none);
+		const uint8 flags = tool->flags;
+		if (!tool->init(player)) {
+			err = "Error during initializing tool";
+		}
+		else {
+			tool->flags = flags;
+			route_t route;
+			intr_pause_t pause;
+			if (!tool->calc_sign_route(route, player, start, end)) {
+				err = script_vm_t::with_error_word(vm, "Ways not connected");
+			}
+			else {
+				tool->plan_signs(player, route, steps, cost);
+			}
+		}
+	}
+	sq_newtable(vm);
+	create_slot<bool>(vm, "ok", err == NULL);
+	create_slot<const char*>(vm, "error", err);
+	sq_pushstring(vm, "tiles", -1);
+	sq_newarray(vm, 0);
+	FOR(vector_tpl<tool_build_roadsign_t::sign_step_t>, const& st, steps) {
+		if (st.dir) {
+			const sint64 extra[1] = { ribi_to_script(st.dir) };
+			append_tile(vm, st.pos, extra, 1);
+		}
+	}
+	sq_newslot(vm, -3, false);
+	sq_pushstring(vm, "remove", -1);
+	sq_newarray(vm, 0);
+	FOR(vector_tpl<tool_build_roadsign_t::sign_step_t>, const& st, steps) {
+		if (!st.dir) {
+			append_tile(vm, st.pos, NULL, 0);
+		}
+	}
+	sq_newslot(vm, -3, false);
+	create_slot<sint64>(vm, "cost", cost);
+	return 1;
+}
+
+SQInteger command_build_signs_on_route(HSQUIRRELVM vm) { return signs_on_route(vm, true); }
+SQInteger command_calc_signs_on_route(HSQUIRRELVM vm) { return signs_on_route(vm, false); }
+
+
+SQInteger command_change_way_settings(HSQUIRRELVM vm)
+{
+	player_t* pl = param<player_t*>::get(vm, 2);
+	koord3d start = param<koord3d>::get(vm, 3);
+	koord3d end = param<koord3d>::get(vm, 4);
+	const sint64 mode = param<sint64>::get(vm, 5);
+	const sint64 flag = sq_gettop(vm) >= 6 ? param<sint64>::get(vm, 6) : 0;
+	if (mode < halt_mode  ||  mode > inverted_mode) {
+		return sq_raise_error(vm, "invalid: the overtaking mode is -1 to 4");
+	}
+	if (flag < 0  ||  flag > 255) {
+		return sq_raise_error(vm, "invalid: the street flag is 0 to 255");
+	}
+	std::unique_ptr<tool_change_way_settings_t> tool(new_tool<tool_change_way_settings_t>(TOOL_CHANGE_WAY_SETTINGS | GENERAL_TOOL, "", 0));
+	tool->set_overtaking_mode((overtaking_mode_t)mode);
+	tool->set_street_flag((uint8)flag);
+	return param<call_tool_work>::push(vm, call_tool_work(tool.get(), pl, start, end));
+}
+
+SQInteger command_change_way_offset(HSQUIRRELVM vm)
+{
+	player_t* pl = param<player_t*>::get(vm, 2);
+	koord3d start = param<koord3d>::get(vm, 3);
+	koord3d end = param<koord3d>::get(vm, 4);
+	const sint64 vo = param<sint64>::get(vm, 5);
+	if (vo < -128  ||  vo > 127) {
+		return sq_raise_error(vm, "invalid: the vehicle offset is -128 to 127");
+	}
+	// the waytype of the first click: given, else the first way there
+	static cbuffer_t buf;
+	buf.clear();
+	if (sq_gettop(vm) >= 6  &&  sq_gettype(vm, 6) != OT_NULL) {
+		buf.printf("%d", (int)param<waytype_t>::get(vm, 6));
+	}
+	std::unique_ptr<tool_change_way_offset_t> tool(new_tool<tool_change_way_offset_t>(TOOL_CHANGE_WAY_OFFSET | GENERAL_TOOL, buf, 0));
+	tool->set_packed_vehicle_offset((sint8)vo);
+	return param<call_tool_work>::push(vm, call_tool_work(tool.get(), pl, start, end));
+}
+
+
+SQInteger command_calc_remove(HSQUIRRELVM vm)
+{
+	player_t* pl = param<player_t*>::get(vm, 2);
+	koord3d start = param<koord3d>::get(vm, 3);
+	koord3d end = param<koord3d>::get(vm, 4);
+	const char *kind = param<const char*>::get(vm, 5);
+	waytype_t wt = sq_gettop(vm) >= 6  &&  sq_gettype(vm, 6) != OT_NULL ? param<waytype_t>::get(vm, 6) : invalid_wt;
+	player_t *player = preview_player(vm, pl);
+
+	const char *err = NULL;
+	route_t route;
+	// the tiles and why they are refused, as the tools check them
+	vector_tpl<koord3d> tiles;
+	vector_tpl<sint64> remaining;
+	vector_tpl<koord3d> refused;
+	vector_tpl<const char*> reasons;
+	intr_pause_t pause;
+	if (player == NULL) {
+		err = "Called tool with player == null";
+	}
+	else if (welt->lookup(start) == NULL  ||  welt->lookup(end) == NULL) {
+		err = "invalid: no ground at the start or the end";
+	}
+	else if (kind  &&  strcmp(kind, "way") == 0) {
+		// tool_wayremover_t: is_valid_pos at both clicks, calc_route, do_work
+		static cbuffer_t buf;
+		buf.clear();
+		buf.printf("%d", (int)wt);
+		std::unique_ptr<tool_wayremover_t> tool(new_tool<tool_wayremover_t>(TOOL_WAYREMOVER | GENERAL_TOOL, buf, tool_t::WFL_SCRIPT));
+		const waytype_t route_wt = wt == tram_wt ? track_wt : wt;
+		const grund_t *gs = welt->lookup(start), *ge = welt->lookup(end);
+		if (wt == invalid_wt  ||  wt == any_wt) {
+			err = "invalid: a waytype is needed";
+		}
+		else if ((wt == powerline_wt ? gs->get_leitung() == NULL : gs->get_weg(route_wt) == NULL)  ||  (wt == powerline_wt ? ge->get_leitung() == NULL : ge->get_weg(route_wt) == NULL)) {
+			err = "invalid: no way of this waytype at the start or the end";
+		}
+		else if (gs->get_depot()  ||  ge->get_depot()) {
+			err = script_vm_t::with_error_word(vm, "No suitable ground!");
+		}
+		else if (!tool->find_route(route, player, start, end)) {
+			err = script_vm_t::with_error_word(vm, "Ways not connected");
+		}
+		else {
+			for (uint32 i = 0; i < route.get_count(); i++) {
+				const grund_t *gr = welt->lookup(route.at(i));
+				if (const char *e = tool_wayremover_t::check_tile(gr, wt, player)) {
+					refused.append(route.at(i));
+					reasons.append(*e ? e : "Ways not connected");
+				}
+				else {
+					// the directions that stay (do_work): none if start = end
+					const ribi_t::ribi rem = route.get_count() <= 1 ? 0 : 15 ^ route.get_route().get_ribi(i);
+					const ribi_t::ribi have = wt == powerline_wt ? gr->get_leitung()->get_ribi() : gr->get_weg_ribi_unmasked(route_wt);
+					tiles.append(route.at(i));
+					remaining.append(ribi_to_script(have & rem));
+				}
+			}
+		}
+	}
+	else if (kind  &&  strcmp(kind, "wayobj") == 0) {
+		// tool_remove_wayobj_t (tool_build_wayobj_t without build): calc_route_on_ways
+		const grund_t *gs = welt->lookup(start);
+		if (wt == invalid_wt) {
+			err = "invalid: a waytype is needed";
+		}
+		else if (gs->get_weg(wt) == NULL) {
+			err = "invalid: no way of this waytype at the start";
+		}
+		else {
+			waytype_t route_wt = wt == tram_wt ? track_wt : wt;
+			if (route_wt == any_wt) {
+				route_wt = gs->get_weg(wt)->get_waytype();
+			}
+			if (!calc_route_on_ways(route, start, end, route_wt)) {
+				err = script_vm_t::with_error_word(vm, "Ways not connected");
+			}
+			else {
+				for (uint32 i = 0; i < route.get_count(); i++) {
+					const grund_t *gr = welt->lookup(route.at(i));
+					for (uint8 n = 0; n < gr->get_top(); n++) {
+						wayobj_t *wo = obj_cast<wayobj_t>(gr->obj_bei(n));
+						if (wo  &&  wo->get_waytype() == wt) {
+							if (const char *e = wo->is_deletable(player)) {
+								refused.append(route.at(i));
+								reasons.append(*e ? e : "the tool failed");
+							}
+							else {
+								tiles.append(route.at(i));
+								remaining.append(0);
+							}
+							break;
+						}
+					}
+				}
+			}
+		}
+	}
+	else if (kind  &&  strcmp(kind, "signal") == 0) {
+		// tool_remove_signal_t: the waytype of the signal at the start (wt is not used), signals only (not signs)
+		std::unique_ptr<tool_remove_signal_t> tool(new_tool<tool_remove_signal_t>(TOOL_REMOVE_SIGNAL | GENERAL_TOOL, "", tool_t::WFL_SCRIPT));
+		if (!tool->calc_route(route, player, start, end)) {
+			err = script_vm_t::with_error_word(vm, "Ways not connected");
+		}
+		else {
+			for (uint32 i = 0; i < route.get_count(); i++) {
+				const grund_t *gr = welt->lookup(route.at(i));
+				if (signal_t *sig = gr ? gr->find<signal_t>() : NULL) {
+					if (const char *e = sig->is_deletable(player)) {
+						refused.append(route.at(i));
+						reasons.append(*e ? e : "the tool failed");
+					}
+					else {
+						tiles.append(route.at(i));
+						remaining.append(0);
+					}
+				}
+			}
+		}
+	}
+	else {
+		err = "invalid: kind is way, wayobj or signal";
+	}
+	const bool way = kind  &&  strcmp(kind, "way") == 0;
+	if (err == NULL  &&  !refused.empty()  &&  way) {
+		// the way remover refuses everything then
+		err = script_vm_t::with_error_word(vm, reasons[0]);
+	}
+
+	sq_newtable(vm);
+	create_slot<bool>(vm, "ok", err == NULL);
+	create_slot<const char*>(vm, "error", err);
+	sq_pushstring(vm, "tiles", -1);
+	sq_newarray(vm, 0);
+	for (uint32 i = 0; i < tiles.get_count(); i++) {
+		const sint64 extra[1] = { remaining[i] };
+		append_tile(vm, tiles[i], extra, way ? 1 : 0);
+	}
+	sq_newslot(vm, -3, false);
+	sq_pushstring(vm, "refused", -1);
+	sq_newarray(vm, 0);
+	for (uint32 i = 0; i < refused.get_count(); i++) {
+		koord k = refused[i].get_2d();
+		coordinate_transform_t::koord_w2sq(k);
+		sq_newarray(vm, 0);
+		param<sint64>::push(vm, k.x);
+		sq_arrayappend(vm, -2);
+		param<sint64>::push(vm, k.y);
+		sq_arrayappend(vm, -2);
+		param<sint64>::push(vm, refused[i].z);
+		sq_arrayappend(vm, -2);
+		// the reason, with the word of the tool errors
+		param<const char*>::push(vm, script_vm_t::with_error_word(vm, reasons[i]));
+		sq_arrayappend(vm, -2);
+		sq_arrayappend(vm, -2);
+	}
+	sq_newslot(vm, -3, false);
+	return 1;
 }
 
 call_tool_work set_slope(player_t* pl, koord3d start, my_slope_t slope)
@@ -957,17 +1909,6 @@ const char* can_set_slope(player_t* pl, koord3d pos, my_slope_t slope)
 sint64 set_slope_get_price(my_slope_t slope)
 {
 	return slope == RESTORE_SLOPE ? -welt->get_settings().cst_alter_land : -welt->get_settings().cst_set_slope;
-}
-
-call_tool_work build_sign_at(player_t* pl, koord3d start, const roadsign_desc_t* sign)
-{
-	if (sign == NULL) {
-		return call_tool_work("No sign provided");
-	}
-	if (const char* err = is_available(sign)) {
-		return call_tool_work(err);
-	}
-	return call_tool_work(TOOL_BUILD_ROADSIGN | GENERAL_TOOL, sign->get_name(), 0, pl, start);
 }
 
 call_tool_init set_signal_stop_before_check(player_t* pl, koord3d pos, int val)
@@ -1113,7 +2054,8 @@ void export_commands(HSQUIRRELVM vm)
 	 * - tool_change_halt "<command>,<halt id>": c p m w l
 	 * - tool_halt_permission "<halt id>,<permission bits>"
 	 * - tool_change_factory "<command>,<x>,<y>[,<value>]": d s
-	 * - tool_change_player "<command>,<player>,...": c $
+	 * - tool_change_player "<command>,<player>,...": c $ n d ("n,<player>,<type>" creates a player,
+	 *   the public player only; "d,<player>" removes it with all it has, the public player or the player itself)
 	 * - tool_recolour "<1|2><player>,<colour>"
 	 * - tool_sending_money "<amount>" (1/100 credits), with the receiving player as third parameter
 	 * - tool_merge_player "<merged player>,<merging player>" (the public player only)
@@ -1177,6 +2119,42 @@ void export_commands(HSQUIRRELVM vm)
 	 */
 	STATIC register_function(vm, command_build_road, "build_road", 7, ".xt|x|yt|x|yt|x|yb.", true /* static */);
 	/**
+	 * What build_road with the same arguments would build now, without changing anything (a preview).
+	 * The checks, the route and the costs are those of the game's way tool.
+	 * @param pl player to pay for the work
+	 * @param start coordinate, where work begins
+	 * @param end   coordinate, where work ends
+	 * @param way type of way to be built
+	 * @param straight as build_road (control key)
+	 * @param args as build_road, and max_steps: the most steps of the route search (default and
+	 *        upper limit: max_route_steps of the settings)
+	 * @returns table {ok, error (as build_road would return it, or null), aborted (the search ran out
+	 *          of steps), reversed (the route was searched from the end), length, ms,
+	 *          tiles: [[x, y, z, ribi, flags], ...] from start to end (ribi: existing | route directions;
+	 *          flags: 1 new, 2 replaced, 4 kept, 8 crossing, 32 trees removed, 64 bridge, 128 tunnel,
+	 *          256 city road kept, 512 the owner changes), bridges, tunnels: [[x1, y1, z1, x2, y2, z2, name], ...]
+	 *          added by the way builder, cost (what the building books, in 1/100 credits, positive: costs),
+	 *          breakdown of cost {fresh, replace, trees, groundobj, bridge, tunnel}, estimate (the
+	 *          estimate of the game's tool tip, way_builder_t::calc_costs), random (false)}
+	 * @typemask table(player_x,coord3d,coord3d,way_desc_x,bool,table)
+	 */
+	STATIC register_function(vm, command_calc_way, "calc_way", 7, ".xt|x|yt|x|yt|x|yb.", true /* static */);
+	/**
+	 * The route over existing ways that the way object and signal tools search between two tiles
+	 * (steps of equal cost), without changing anything.
+	 * @param pl player (not used)
+	 * @param start coordinate, where the route begins
+	 * @param end   coordinate, where the route ends
+	 * @param waytype waytype of the ways (tram: track, any: the way at the start)
+	 * @param flags 1: ignore the directions closed by signs (but the route never enters a tile
+	 *        against its one-way sign), 2: fail as the signal tool does if start and end are
+	 *        neighbours but the route goes around
+	 * @returns table {ok, error, tiles: [[x, y, z, ribi], ...], blocked_by_masks (no route because of
+	 *          closed directions, without flag 1), ms}
+	 * @typemask table(player_x,coord3d,coord3d,way_types,int)
+	 */
+	STATIC register_function(vm, command_calc_route_on_ways, "calc_route_on_ways", 6, ".xt|x|yt|x|yii", true /* static */);
+	/**
 	 * Build a depot.
 	 * @param pl player to pay for the work
 	 * @param pos position to place the depot
@@ -1201,8 +2179,12 @@ void export_commands(HSQUIRRELVM vm)
 	 * @param start coordinate, where bridge begins
 	 * @param end   coordinate, where bridge ends
 	 * @param bridge type of bridge to be built
+	 * @param args (optional) table {high, overtaking_mode, street_flag, vehicle_offset} (as build_road), or
+	 *        high alone. high: true the highest bridge to this end (as with ctrl in the game), false the lowest.
+	 *        Without it, the bridge is the highest (as before).
+	 * @typemask string(player_x,coord3d,coord3d,bridge_desc_x,table)
 	 */
-	STATIC register_method(vm, build_bridge, "build_bridge", false, true);
+	STATIC register_function(vm, command_build_bridge_to, "build_bridge", -5, ".xt|x|yt|x|yt|x|y", true /* static */);
 	/**
 	 * Build a bridge.
 	 * Similar to one click with mouse on suitable start tile: program will figure out bridge span itself.
@@ -1210,7 +2192,45 @@ void export_commands(HSQUIRRELVM vm)
 	 * @param start coordinate, where bridge begins, the end point will be automatically determined
 	 * @param bridge type of bridge to be built
 	 */
-	STATIC register_method(vm, build_bridge_at, "build_bridge_at", false, true);
+	STATIC register_function(vm, command_build_bridge_at, "build_bridge_at", -4, ".xt|x|yt|x|y", true /* static */);
+	/**
+	 * Where and how build_bridge (with end) or build_bridge_at (without) would build a bridge now,
+	 * without changing anything.
+	 * @param pl player to pay for the work
+	 * @param start coordinate, where bridge begins
+	 * @param end (optional) coordinate, where bridge ends
+	 * @param bridge type of bridge
+	 * @param args as build_bridge
+	 * @returns table {ok, error, end [x, y, z], length (tiles from start to end), height (above start),
+	 *          cost (what building books, in 1/100 credits, positive; without a way that the game adds
+	 *          to connect a single way at the ends)}
+	 * @typemask table(player_x,coord3d,coord3d,bridge_desc_x,table)
+	 */
+	STATIC register_function(vm, command_calc_bridge, "calc_bridge", -4, ".xt|x|yt|x|y", true /* static */);
+	/**
+	 * Build a tunnel.
+	 * One click at a slope: the tunnel through the hill (args.high: only the portal, as with ctrl; not used with end).
+	 * Two clicks from a tunnel tile: the tunnel under ground to end.
+	 * Fails with the reason if there can be no tunnel.
+	 * @param pl player to pay for the work
+	 * @param start coordinate, where the tunnel begins
+	 * @param end (optional) coordinate, where the tunnel ends
+	 * @param tunnel type of tunnel
+	 * @param args (optional) table {high, overtaking_mode, street_flag, vehicle_offset} (as build_road)
+	 * @typemask string(player_x,coord3d,coord3d,tunnel_desc_x,table)
+	 */
+	STATIC register_function(vm, command_build_tunnel, "build_tunnel", -4, ".xt|x|yt|x|y", true /* static */);
+	/**
+	 * Where build_tunnel (one click) would build a tunnel now, without changing anything.
+	 * @param pl player to pay for the work
+	 * @param start coordinate, where the tunnel begins
+	 * @param tunnel type of tunnel
+	 * @param args (optional) as build_tunnel
+	 * @returns table {ok, error, end [x, y, z], length, height (0), cost (1/100 credits, positive, without
+	 *          changing the ground at the end), terraform (the ground at the end is changed)}
+	 * @typemask table(player_x,coord3d,tunnel_desc_x,table)
+	 */
+	STATIC register_function(vm, command_calc_tunnel, "calc_tunnel", -4, ".xt|x|yt|x|y", true /* static */);
 	/**
 	 * Modify the slope of one tile.
 	 * @param pl player to pay for the work
@@ -1242,8 +2262,31 @@ void export_commands(HSQUIRRELVM vm)
 	 * @param pl player to pay for the work
 	 * @param pos position of tile
 	 * @param sign type of road-sign or signal to be built
+	 * @param dir (optional) the direction of the sign (sign_x::get_dir): signals one direction of the way or both
+	 *        (the way's directions), one-way and choose signs some directions of the way, other signs the
+	 *        directions of the way. Without it, an existing sign turns.
+	 * @typemask string(player_x,coord3d,sign_desc_x,dir)
 	 */
-	STATIC register_method(vm, build_sign_at, "build_sign_at", false, true);
+	STATIC register_function(vm, command_build_sign_at, "build_sign_at", -4, ".xt|x|yt|x|y", true /* static */);
+	/**
+	 * Build signals / road-signs on the route between start and end, as dragging the game's sign tool.
+	 * @param pl player to pay for the work
+	 * @param start coordinate, where the route begins
+	 * @param end coordinate, where the route ends
+	 * @param sign type of road-sign or signal to be built
+	 * @param args (optional) table {spacing (1 to 127, default 2), remove_intermediate (default true),
+	 *        replace_other (default true), two_ways (default false)}, the settings of the tool's window
+	 * @returns null upon success, an error string otherwise (calc_signs_on_route tells the places)
+	 * @typemask string(player_x,coord3d,coord3d,sign_desc_x,table)
+	 */
+	STATIC register_function(vm, command_build_signs_on_route, "build_signs_on_route", -5, ".xt|x|yt|x|yt|x|y", true /* static */);
+	/**
+	 * Where build_signs_on_route would place and remove signs now, without changing anything.
+	 * @returns table {ok, error, tiles: [[x, y, z, dir], ...] the signs placed (dir as sign_x::get_dir),
+	 *          remove: [[x, y, z], ...] the signs removed between, cost (the estimate of the tool, 1/100 credits)}
+	 * @typemask table(player_x,coord3d,coord3d,sign_desc_x,table)
+	 */
+	STATIC register_function(vm, command_calc_signs_on_route, "calc_signs_on_route", -5, ".xt|x|yt|x|yt|x|y", true /* static */);
 	/**
 	 * Set or clear the "stop before check" flag on a rail signal.
 	 * Applicable to simple signals, longblock signals and choose signals.
@@ -1337,8 +2380,55 @@ void export_commands(HSQUIRRELVM vm)
 	 * @param start coordinate, where work begins
 	 * @param end   coordinate, where work ends
 	 * @param wayobj type of wayobj to be built
+	 * @param spacing (optional) on every n-th tile only (1 to 50, default 1), as in the tool's window
+	 * @typemask string(player_x,coord3d,coord3d,way_obj_desc_x,int)
 	 */
-	STATIC register_method(vm, build_wayobj, "build_wayobj", false, true);
+	STATIC register_function(vm, command_build_wayobj, "build_wayobj", -5, ".xt|x|yt|x|yt|x|y", true /* static */);
+	/**
+	 * Build way-object on the given tiles, without a route search (unlike build_wayobj).
+	 * @param pl player to pay for the work
+	 * @param tiles [[x, y, z], ...] neighbours one after another with ways for the way object, at most 2000
+	 * @param wayobj type of wayobj to be built
+	 * @param flags 1: replace faster way objects too (control key)
+	 * @param spacing (optional) on every n-th of the tiles only (1 to 50, default 1)
+	 * @typemask string(player_x,array,way_obj_desc_x,int,int)
+	 */
+	STATIC register_function(vm, command_build_wayobj_on_route, "build_wayobj_on_route", -5, ".xat|x|yi", true /* static */);
+	/**
+	 * Change the overtaking mode and the street flags of the roads on the route between start and end
+	 * (the game's tool, tool_change_way_settings). One-way modes (0, -1) make them one-way from start to end
+	 * (street_x::get_oneway_ribi), the others two-way. Roads of other players stay as they are.
+	 * @param pl player to pay for the work
+	 * @param start coordinate, where the route begins
+	 * @param end coordinate, where the route ends
+	 * @param overtaking_mode -1 to 4 (as build_road)
+	 * @param street_flag (optional) as build_road, default 0
+	 * @typemask string(player_x,coord3d,coord3d,int,int)
+	 */
+	STATIC register_function(vm, command_change_way_settings, "change_way_settings", -5, ".xt|x|yt|x|yi", true /* static */);
+	/**
+	 * Change the vehicle offset of the ways on the route between start and end (tool_change_way_offset).
+	 * @param pl player to pay for the work
+	 * @param start coordinate, where the route begins
+	 * @param end coordinate, where the route ends
+	 * @param vehicle_offset as build_road
+	 * @param waytype (optional) the ways to change, default the first way at start
+	 * @typemask string(player_x,coord3d,coord3d,int,way_types)
+	 */
+	STATIC register_function(vm, command_change_way_offset, "change_way_offset", -5, ".xt|x|yt|x|yi", true /* static */);
+	/**
+	 * What the removing tools would remove between start and end now, without changing anything.
+	 * @param pl player to pay for the work
+	 * @param start coordinate, where the route begins
+	 * @param end coordinate, where the route ends
+	 * @param kind "way" (tool_remove_way), "wayobj" (tool_remove_wayobj) or "signal" (tool_remove_signal, signals only)
+	 * @param waytype the waytype of the ways or way objects (not used for signals)
+	 * @returns table {ok, error, tiles: [[x, y, z(, ribi)], ...] the tiles where things are removed (way: ribi
+	 *          the directions that stay, 0 the way goes), refused: [[x, y, z, reason], ...]}. A way is removed
+	 *          only if no tile is refused; way objects and signals are removed on the other tiles.
+	 * @typemask table(player_x,coord3d,coord3d,string,way_types)
+	 */
+	STATIC register_function(vm, command_calc_remove, "calc_remove", -5, ".xt|x|yt|x|ys", true /* static */);
 	/**
 	 * Change climate of tile
 	 * @param pl player to pay for the work

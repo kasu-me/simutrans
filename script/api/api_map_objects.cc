@@ -316,6 +316,23 @@ static SQInteger get_overtaking_mode(HSQUIRRELVM vm)
 	return param<sint8>::push(vm, twoway_mode);
 }
 
+// the directions a one-way road can be left in, rotated
+static SQInteger get_oneway_ribi(HSQUIRRELVM vm)
+{
+	strasse_t *w = param<strasse_t*>::get(vm, 1);
+	ribi_t::ribi ribi = ribi_t::none;
+	if (w  &&  w->get_overtaking_mode() <= oneway_mode) {
+		ribi = w->get_ribi_unmasked() & ~w->get_ribi_mask_oneway();
+	}
+	return param<my_ribi_t>::push(vm, ribi);
+}
+
+static SQInteger get_oneway_mask(HSQUIRRELVM vm)
+{
+	strasse_t *w = param<strasse_t*>::get(vm, 1);
+	return param<my_ribi_t>::push(vm, w ? w->get_active_ribi_mask_oneway() : (ribi_t::ribi)ribi_t::none);
+}
+
 static SQInteger get_street_flags(HSQUIRRELVM vm)
 {
 	strasse_t *w = param<strasse_t*>::get(vm, 1);
@@ -394,6 +411,11 @@ bool roadsign_can_pass(const roadsign_t* rs, player_t* player)
 sint32 roadsign_get_state(roadsign_t* rs)
 {
 	return (sint32)rs->get_state();
+}
+
+my_ribi_t roadsign_get_dir(roadsign_t* rs)
+{
+	return rs->get_dir();
 }
 
 // depot
@@ -1377,6 +1399,17 @@ void export_map_objects(HSQUIRRELVM vm)
 	 * @return street flags
 	 */
 	register_function(vm, &get_street_flags, "get_street_flags", 1, "x");
+	/**
+	 * The directions a one-way road (overtaking mode oneway_mode or halt_mode) can be left in: from
+	 * start to end of the tool that made it one-way. A dead end has none.
+	 * @return the directions, 0 if the road is not one-way
+	 */
+	register_function(vm, &get_oneway_ribi, "get_oneway_ribi", 1, "x");
+	/**
+	 * The directions a one-way road cannot be left in (the reverse ones).
+	 * @return the directions, 0 if the road is not one-way
+	 */
+	register_function(vm, &get_oneway_mask, "get_oneway_mask", 1, "x");
 	end_class(vm);
 
 	/**
@@ -1426,6 +1459,13 @@ void export_map_objects(HSQUIRRELVM vm)
 	 * @returns signal state: 0 = red, 1 = green, 2 = yellow
 	 */
 	register_method(vm, &roadsign_get_state, "get_state", true);
+
+	/**
+	 * Get the direction of the sign (signals: the direction they face, see command_x::build_sign_at; one-way
+	 * signs: the directions that can be passed; other signs: the directions of the way).
+	 * @returns direction
+	 */
+	register_method(vm, &roadsign_get_dir, "get_dir", true);
 
 	/**
 	 * Get "stop before check" flag of a signal.
