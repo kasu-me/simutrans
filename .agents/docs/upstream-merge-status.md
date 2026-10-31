@@ -103,7 +103,7 @@
 | FIX-19 | バグ修正 | 複数タイルの建物が道・停留所・他の建物と重なって建つ/壊れた断片が残る | 取り込み済み |
 | FIX-20 | バグ修正 | 編成が載っているタイルを経路に補う処理 (`insert_route_convoy_on()`) が同じタイルを再探索して無限ループする | 取り込み済み |
 | FIX-21 | バグ修正 | ロード時に記述子が見つからなかった建物を削除する際の異常終了 | 取り込み済み |
-| FIX-22 | バグ修正 | 連結編成の発車時刻枠 (departure slot) の予約・解放の不整合 | 未取り込み |
+| FIX-22 | バグ修正 | 連結編成の発車時刻枠 (departure slot) の予約・解放の不整合 | 一部取り込み |
 | FIX-23 | バグ修正 | 編成の停車駅一覧で車庫エントリに停車長を表示する/現在の停車駅番号が範囲外のとき異常終了する | 取り込み済み |
 | FIX-24 | バグ修正 | 航空機が長い停留所から前進/横向きに出発しても押し戻し (pushback) 扱いになる | 取り込み済み |
 | MISC-01 | その他 | 本家バージョン番号のインクリメント (v59〜v62_5) | 取り込み不要 |
@@ -190,7 +190,11 @@
     「他編成に発車許可を出すまで待つ」側のフラグが分離された (通過駅には設定不可)。
   - `5461ae2d2` は `allow_depart_line_selector` の未選択時の表示を `<no line>` から
     「発車許可を出す路線を指定」(`Select Line Allow Departure`) に変更するだけの表記修正。
-- **取り込み時の注意**: `schedule_entry_t` にフラグとフィールドが増えるため、スケジュールのセーブ形式に影響する。
+- **取り込み時の注意**:
+  - `schedule_entry_t` にフラグとフィールドが増えるため、スケジュールのセーブ形式に影響する。
+  - **FIX-22 の残りを合わせて適用すること。** FIX-22 は FEAT-02 依存部分を除いて取り込み済みで、
+    `next_stop_button_pressed()` の `set_waiting_for_departure_make_another_convoy_depart(false)` が未適用
+    (FEAT-18 も取り込む場合は `board_carrier()` 側にも1行ある)。詳細は FIX-22 の「未取り込み分」を参照。
 - **develop-kasumi 側コミット**: —
 - **備考**: `develop-kasumi` にはスケジュールのインポート/エクスポート機能 (`dbe156c0b` ほか) があるため、
   `schedule_entry_t` の変更を取り込む場合は入出力側の追従が必要。
@@ -835,7 +839,10 @@
   - 動作には pakset 側に航送用ダミー貨物が必要 (MISC-05 参照)。
   - `simconvoi.cc` への追加が 1100 行規模。単独 cherry-pick の難度は高い。
   - `cd625b481` で切り出された `check_departure_conditions()` は FEAT-02 の発車許可の判定を含む。
-    また FIX-22 (`f9ad42b26`) は `board_carrier()` を前提にした変更を含むため、FIX-22 を取り込む場合は本項目との順序に注意。
+  - **FIX-22 の残りを合わせて適用すること。** FIX-22 (`f9ad42b26`) は `board_carrier()` の hunk を除いて取り込み済み
+    (2026-10-31)。`board_carrier()` の連結列ループで枠の返却 (`release_departure_slot()`) 等を行う変更が未適用なので、
+    本項目を取り込むときに FIX-22 の「未取り込み分」に書いたコードを `board_carrier()` へ入れる。
+    そのうち `waiting_for_departure_make_another_convoy_depart` のリセットは FEAT-02 も必要。
   - `cd625b481` で追加された表示文字列 `Not allowed while the convoy is aboard another convoy.` は
     `ja.OTRP.tab` に未登録 (2026-10-27 時点)。
 - **develop-kasumi 側コミット**: —
@@ -1270,7 +1277,7 @@
 ### FIX-22: 連結編成の発車時刻枠 (departure slot) の予約・解放の不整合
 
 - **分類**: バグ修正
-- **状態**: 未取り込み
+- **状態**: 一部取り込み
 - **概要**: 発車時刻指定 (発車枠) と編成の連結が組み合わさった場合に、子編成が枠を取ってしまう、
   親子で別々に枠を取る、発車しなかった枠が返却されない、短いホームで枠の持ち主が駅にいないと判定されて枠が消える、等の不具合を修正する。
 - **上流コミット**:
@@ -1299,10 +1306,47 @@
     (`release_departure_slot()` を引数なしで独自に追加)。本家は逆に「子が取った枠を列の枠として残す」方式で、
     方針が異なり、同名関数のシグネチャも異なる。取り込む場合はどちらの方式にするかを決めてから統合すること。
     また `a750cd86a`「ticksリセット時に発車時刻指定が乱れる問題の修正」も `simhalt.cc` の発車枠処理を触っている。
+    → 2026-10-31 に**本家の方式へ統一**して取り込んだ (下記「取り込み内容」)。
   - セーブ形式への影響なし。
-- **develop-kasumi 側コミット**: —
+- **取り込み内容 (2026-10-31)**:
+  - `simhalt.{h,cc}` の変更は全部。`a750cd86a` との衝突はない (`is_departure_booked()` の `i->cnv.is_bound()` は develop-kasumi に既にあった)。
+  - `simconvoi.{h,cc}` は、`release_departure_slot(halthandle_t)` / `is_staying_at()` の追加、`step()` のスケジュール変更時の返却、
+    `can_depart()` の親以外の早期 return、`hat_gehalten()` の holder 処理、`next_stop_button_pressed()` の `loading_halt` と枠の返却。
+  - `bfa2be8b7` の独自修正は本家版で置き換えた。`hat_gehalten()` の `!is_coupled()` 判定は本家にも同じものがあるので残り、
+    `couple_convoi()` で子の枠を返却する処理は削除した (本家は子の枠を列の枠として残すため)。
+    独自版の `release_departure_slot()` (引数なし) は本家版 (引数省略可) に置き換わっている。
+- **未取り込み分 (FEAT-02 / FEAT-18 依存)**: 該当機能が develop-kasumi に無いため除外した。
+  それぞれの項目を取り込むときに、以下を合わせて適用すること (FEAT-02 / FEAT-18 の「取り込み時の注意」からもここを参照している)。
+  - **FEAT-02 と一緒に取り込む分**: `convoi_t::next_stop_button_pressed()` の `if(  c->is_loading()  )` 内に
+    `c->set_waiting_for_departure_make_another_convoy_depart(false);` を追加する。
+    develop-kasumi では同じ場所に `set_waiting_for_departure_allowance_by_other_convoy(false)` と合わせて
+    「本家 FEAT-02 (発車待ち合わせ) 未取り込みのため省略」という `NOTE` コメントを残してあるので、それを目印に両方を戻す。
+  - **FEAT-18 と一緒に取り込む分**: `convoi_t::board_carrier()` の連結列ループ (`while(  k.is_bound()  )`) の先頭で、
+    `state = SHIPPED` にする前に以下を行う (本家 `f9ad42b26` の `board_carrier()` の hunk そのもの)。
+    ```cpp
+    // the per-stop flags and the departure slot are already cleared above
+    k->push_goods_waiting_time_if_needed();
+    k->push_convoy_stopping_time();
+    // the convoy is still on the map, so the halt is found from its position.
+    k->release_departure_slot();
+    k->unset_convoi_coupling_in_progress();
+    k->loading_limit = 0;
+    k->loading_waiting_time = 0;
+    ```
+    (`loading_limit` / `loading_waiting_time` の代入は `state = SHIPPED` の後ろから前へ移動したもの。)
+    同じループの `k->waiting_for_departure_allowance_by_other_convoy = false;` の後ろに
+    `k->waiting_for_departure_make_another_convoy_depart = false;` も追加されているが、これは FEAT-02 も必要。
+    なお `next_stop_button_pressed()` 冒頭の `|| self->is_shipped()` は FIX-22 ではなく FEAT-18 (`cd625b481`) の変更。
+- **develop-kasumi 側コミット**: `d6fa870c1` (FEAT-02 / FEAT-18 依存部分を除く)
 - **備考**: 状態確認用の識別子は `simhalt.h` の `is_same_departure_slot_group`、または `simconvoi.h` の `is_staying_at`
   (`release_departure_slot` は develop-kasumi の独自版と同名のため識別子には使えない)。
+  識別子があっても上記「未取り込み分」が残っているため、FEAT-02 と FEAT-18 の両方を取り込んで
+  未取り込み分を適用するまでは `一部取り込み` のままとする。
+  - 動作確認 (2026-10-31): 自動テストマップで、`1Diesellokomotive` 単機を3編成使った一時テストを実施。
+    (a) 親 (`flags=1|16`, spacing 4) に子 (`flags=2`) が連結 → 連結列は親の枠どおりに発車する。
+    (b) 戻ってきた連結列の先頭側に3編成目が連結して列が反転 (旧子が親、枠を持つ旧親が子) → 新しい親は
+    発車時刻指定を持たないが、旧親の枠 (holder) に乗ってその時刻に発車する (本家方式で変わる挙動)。
+    既存テスト `test_schedule_entry_spacing` ほか関連5件も通過。
 
 ### MISC-01: 本家バージョン番号のインクリメント
 
