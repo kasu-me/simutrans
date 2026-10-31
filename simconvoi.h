@@ -1224,11 +1224,19 @@ public:
 	uint32 get_sum_speed_limit() const { return sum_speed_limit; }
 	void reset_departure_time() { scheduled_departure_time = 0; }
 	/**
-	 * Cancel the departure slot booked at the halt this convoy is standing on
-	 * and reset scheduled_departure_time.
-	 * Used when this convoy stops departing by itself, e.g. when it becomes a coupled convoy.
+	 * Give the booked departure slot back to the halt and forget it.
+	 * Use this when the convoy leaves the stop WITHOUT departing in its slot (next stop button,
+	 * schedule change, boarding a carrier). A normal departure must keep the slot booked
+	 * until it expires, so that a delayed convoy cannot take the same slot again.
+	 * If halt is unbound, the halt at the current position is used.
 	 */
-	void release_departure_slot();
+	void release_departure_slot(halthandle_t halt = halthandle_t());
+	/**
+	 * true while the whole convoy (judged by the most parent convoy) stays at halt for loading.
+	 * Judged by the state and the schedule entry, not by the tile of the front vehicle:
+	 * when the platform is shorter than the convoy, the front vehicle may stand on a non-platform tile.
+	 */
+	bool is_staying_at(halthandle_t halt) const;
 	uint32 get_coupling_delay_tolerance() const { return scheduled_coupling_delay_tolerance; }
 
 	// register journey time to the current schedule entry
