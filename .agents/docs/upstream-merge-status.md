@@ -15,7 +15,7 @@
 | 起点コミット (base) | `d01a02edf26e0faf1c3542d4d854fe6ce52cc9f8` (v58_3) |
 | 追跡済み最新コミット (head) | `f491c6adf7132f399696c62ecbd695065759e907` (increment OTRP_VERSION_MINOR / v62_5) |
 | 対象コミット数 | 130 |
-| 最終更新 | 2026-10-27 |
+| 最終更新 | 2026-10-31 |
 
 > `head` より新しい本家コミットが増えた場合は skill `update-upstream-status` で追記する。
 
@@ -101,11 +101,11 @@
 | FIX-17 | バグ修正 | シンプルツール番号のずれ (`TOOL_HALT_PERMISSION` を enum 末尾へ移動) | 取り込み済み |
 | FIX-18 | バグ修正 | ズーム時・坂の境界で地面画像が隣接タイルの道を上書きする描画不具合 | 取り込み済み |
 | FIX-19 | バグ修正 | 複数タイルの建物が道・停留所・他の建物と重なって建つ/壊れた断片が残る | 取り込み済み |
-| FIX-20 | バグ修正 | 編成が載っているタイルを経路に補う処理 (`insert_route_convoy_on()`) が同じタイルを再探索して無限ループする | 未取り込み |
-| FIX-21 | バグ修正 | ロード時に記述子が見つからなかった建物を削除する際の異常終了 | 未取り込み |
+| FIX-20 | バグ修正 | 編成が載っているタイルを経路に補う処理 (`insert_route_convoy_on()`) が同じタイルを再探索して無限ループする | 取り込み済み |
+| FIX-21 | バグ修正 | ロード時に記述子が見つからなかった建物を削除する際の異常終了 | 取り込み済み |
 | FIX-22 | バグ修正 | 連結編成の発車時刻枠 (departure slot) の予約・解放の不整合 | 未取り込み |
-| FIX-23 | バグ修正 | 編成の停車駅一覧で車庫エントリに停車長を表示する/現在の停車駅番号が範囲外のとき異常終了する | 未取り込み |
-| FIX-24 | バグ修正 | 航空機が長い停留所から前進/横向きに出発しても押し戻し (pushback) 扱いになる | 未取り込み |
+| FIX-23 | バグ修正 | 編成の停車駅一覧で車庫エントリに停車長を表示する/現在の停車駅番号が範囲外のとき異常終了する | 取り込み済み |
+| FIX-24 | バグ修正 | 航空機が長い停留所から前進/横向きに出発しても押し戻し (pushback) 扱いになる | 取り込み済み |
 | MISC-01 | その他 | 本家バージョン番号のインクリメント (v59〜v62_5) | 取り込み不要 |
 | MISC-02 | その他 | 日本語訳 `ja.OTRP.tab` の更新 (v59〜v62_2分) | 未取り込み |
 | MISC-03 | その他 | SDL3 バックエンド対応と CI のビルド構成更新 (Ubuntu 分は後に削除) | 未取り込み |
@@ -1267,47 +1267,6 @@
 - **develop-kasumi 側コミット**: —
 - **備考**: 状態確認用の識別子は `gui/signal_info.cc` の `gui_divider_t`。
 
-### FIX-20: 編成が載っているタイルを経路に補う処理が同じタイルを再探索して無限ループする
-
-- **分類**: バグ修正
-- **状態**: 未取り込み
-- **概要**: `convoi_t::insert_route_convoy_on()` (編成の車両が載っているタイルを経路の先頭側に補う処理) が、
-  既に経路へ追加したタイルを再び探索して同じタイルを追加し続け、終わらなくなる問題を修正する。
-- **上流コミット**:
-  - `4fc0d6958` BUG FIX: do not search same tile again (#775)
-  - `7bee9265f` BUG FIX: crash null building (#776) — 後続修正 (**コミットの一部のみ**。`simconvoi.cc` の分。残りは FIX-21)
-- **主な変更箇所**:
-  - `simconvoi.{h,cc}` — `search_next_convoy_tile()` に `const vector_tpl<koord3d>* searched_tiles = NULL` 引数を追加。
-    `insert_route_convoy_on()` は開始タイルと追加したタイルを `searched_tiles` に記録し、探索ではそれらに入らない。
-    隣接タイルの取得を再帰の前に行うよう移動 (`4fc0d6958`)
-  - `simconvoi.cc` — `search_next_convoy_tile()` / `insert_route_to_draw_diagonal()` / `find_tiles_convoy_on()` で、
-    `get_neighbour()` が失敗時に出力引数を書き換えないことを踏まえ、ポインタを NULL で初期化して戻り値で判定する (`7bee9265f`)
-- **詳細**: 従来の探索は直前のタイルへ戻る方向 (`back_dir`) だけを除外していたため、配線によっては既に追加済みのタイルに
-  再び行き着き、同じタイルを経路に追加し続けていた。
-  `7bee9265f` 分は、`get_neighbour()` 失敗時に未初期化のポインタを参照しうる箇所の修正
-  (`4fc0d6958` で追加した判定にも同じ問題があった)。
-- **取り込み時の注意**: 対象の関数群は v58_3 時点から存在し、develop-kasumi にも同じコードがある。セーブ形式への影響なし。
-- **develop-kasumi 側コミット**: —
-- **備考**: 状態確認用の識別子は `simconvoi.h` の `search_next_convoy_tile(..., const vector_tpl<koord3d>* searched_tiles)`。
-  `7bee9265f` は FIX-21 と同一コミットのため、cherry-pick する場合は両項目をまとめて扱うこと。
-
-### FIX-21: ロード時に記述子が見つからなかった建物を削除する際の異常終了
-
-- **分類**: バグ修正
-- **状態**: 未取り込み
-- **概要**: セーブのロード時に pakset に記述子が無かった建物 (`tile == NULL`) を削除するとき、
-  市からの登録解除で記述子を参照して落ちる問題を修正する。
-- **上流コミット**:
-  - `7bee9265f` BUG FIX: crash null building (#776) (**コミットの一部のみ**。`obj/gebaeude.cc` の分。残りは FIX-20)
-- **主な変更箇所**:
-  - `obj/gebaeude.cc` — `gebaeude_t::~gebaeude_t()` の `remove_gebaeude_from_stadt()` 呼び出し条件を
-    `if(get_stadt())` から `if(tile  &&  get_stadt())` に変更
-- **詳細**: そのような建物は市に登録されていないため、登録解除自体が不要。同じデストラクタ内の観光地判定には既に `tile` の NULL チェックがある。
-- **取り込み時の注意**: v58_3 時点から存在するコードで、develop-kasumi にも同じコードがある。セーブ形式への影響なし。
-- **develop-kasumi 側コミット**: —
-- **備考**: 状態確認用の識別子は `obj/gebaeude.cc` の `if(tile  &&  get_stadt())`。
-  コミット本文の前半は FIX-20 (`4fc0d6958`) のブランチ履歴。
-
 ### FIX-22: 連結編成の発車時刻枠 (departure slot) の予約・解放の不整合
 
 - **分類**: バグ修正
@@ -1344,45 +1303,6 @@
 - **develop-kasumi 側コミット**: —
 - **備考**: 状態確認用の識別子は `simhalt.h` の `is_same_departure_slot_group`、または `simconvoi.h` の `is_staying_at`
   (`release_departure_slot` は develop-kasumi の独自版と同名のため識別子には使えない)。
-
-### FIX-23: 編成の停車駅一覧で車庫エントリに停車長を表示する/現在の停車駅番号が範囲外のとき異常終了する
-
-- **分類**: バグ修正
-- **状態**: 未取り込み
-- **概要**: 編成情報の停車駅一覧 (`convoi_stops_list_t`) で、車庫のエントリにも停車長 `[x.xx]` を計算・表示していたのを止め、
-  スケジュールが空/短くなった場合に現在の停車駅番号で範囲外参照して落ちる問題を修正する。
-- **上流コミット**:
-  - `70ed2eb20` BUG FIX: do not calculate stop length when stop is depot (#777)
-- **主な変更箇所**:
-  - `gui/convoi_stops_list_t.cc` — `update_label()` で、エントリ位置に車庫があれば停車長を書かない (`lookup()` が NULL の場合も考慮)。
-    `update_schedule()` / `draw()` で `get_current_stop()` が `entries` の範囲内かを確認してから参照し、
-    範囲外 (かつスケジュールが空でない) なら一覧を作り直す
-- **詳細**: —
-- **取り込み時の注意**: 対象コードは v58_3 時点から存在する。`draw()` の直後の `update_whole_route_overlay()` は FEAT-09 の追加分なので、
-  FEAT-09 未取り込みの develop-kasumi では文脈が合わない (手作業で当てる)。セーブ形式への影響なし。
-- **develop-kasumi 側コミット**: —
-- **備考**: 状態確認用の識別子は `gui/convoi_stops_list_t.cc` の `gr->get_depot()`。
-
-### FIX-24: 航空機が長い停留所から前進/横向きに出発しても押し戻し扱いになる
-
-- **分類**: バグ修正
-- **状態**: 未取り込み
-- **概要**: 航空機は停留所を発つとき常に押し戻し (pushback = 反転) 扱いにされていたため、
-  複数タイルの直線・斜めの停留所から前進や横向きで出発できる場合にも向きがおかしくなる問題を修正する。
-  併せて、停留所の建物情報にそのタイルのホーム長を表示する。
-- **上流コミット**:
-  - `f462f5194` fix: usual straight tile or diagonal tile stop of air_vehicle (#782)
-- **主な変更箇所**:
-  - `simconvoi.cc` — `vorfahren()` で、航空機かつ進行方向が変わらない (`go_same_direction`) なら `reversed = false` にする
-    (`hat_gehalten()` が航空機の出発時に一律 `reversed = true` を立てるのを打ち消す)
-  - `obj/gebaeude.cc` — `gebaeude_t::info()` で、交通施設の建物なら同じタイルの way (水路以外、最大2本) ごとに
-    `append_platform_length_string_if_needed()` でホーム長を追記する
-  - `boden/wege/weg.h` — `append_platform_length_string_if_needed()` の宣言を公開
-- **詳細**: —
-- **取り込み時の注意**: 対象コード (`hat_gehalten()` の `reversed = true`、`append_platform_length_string_if_needed()`) は v58_3 時点から存在する。
-  `vorfahren()` の挿入位置の直後は FEAT-08 (`reversing_lane_hold`) の追加分なので文脈が合わない場合がある。セーブ形式への影響なし。
-- **develop-kasumi 側コミット**: —
-- **備考**: 状態確認用の識別子は `simconvoi.cc` の `front()->get_waytype()==air_wt  &&  go_same_direction`。
 
 ### MISC-01: 本家バージョン番号のインクリメント
 
