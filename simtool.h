@@ -114,8 +114,10 @@ public:
 	/**
 	 * work() is only called when not dragging
 	 * if work() is called with is_dragging==true then is_dragging is reset
+	 * An area (start set by dragging with ctrl) changes the map and must be sent over network,
+	 * even if is_dragging is still set (drag released outside the map, or ctrl pressed while dragging).
 	 */
-	bool is_work_network_safe() const OVERRIDE { return is_dragging;}
+	bool is_work_network_safe() const OVERRIDE { return is_dragging  &&  is_first_click(); }
 
 	/**
 	 * @return true if this tool operates over the grid, not the map tiles.

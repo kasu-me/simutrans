@@ -1209,7 +1209,13 @@ const char *tool_raise_lower_base_t::do_work( player_t *player, const koord3d &s
 			for(  k.y=start.y;  k.y!=(end.y+dy) && is_flat;  k.y+=dy  ) {
 				if(  grund_t *gr=welt->lookup_kartenboden(k)  ) {
 					if(gr->get_pos().z != start.z){is_flat = false;}
-					if(gr->get_top()!=0){is_flat = false;}
+					// markers exist only on one client and clouds are not saved: they must not change the result
+					for(  uint8 i=0;  i<gr->get_top()  &&  is_flat;  i++  ) {
+						const obj_t::typ typ = gr->obj_bei(i)->get_typ();
+						if(  typ!=obj_t::zeiger  &&  typ!=obj_t::wolke  &&  typ!=obj_t::sync_wolke  &&  typ!=obj_t::async_wolke  ) {
+							is_flat = false;
+						}
+					}
 				}
 			}
 		}
