@@ -432,6 +432,31 @@
 - **develop-kasumi 側コミット**: `6c7b58822`
 - **備考**: 状態確認用の識別子は `simmain.cc` の `check_pakset_checksum`。
 
+### FIX-14: 編成の譲渡・会社統合で会社ごとの編成数統計が更新されない
+
+- **分類**: バグ修正
+- **状態**: 取り込み済み
+- **概要**: 編成を他社へ譲渡 (`trade_convoi()`) した際に、旧所有者・新所有者の編成数の統計が増減しない問題を修正する。
+  後続コミットで、会社統合時の増減と、旧セーブに残った誤った値の再集計を追加する。
+- **上流コミット**:
+  - `d0d7ec16e` BUG FIX: convoi count when trade convoi (#760)
+  - `6af88343f` BUG FIX: recalculate convoy numbers (#769) — 後続修正 (旧セーブの再集計と会社統合時の増減)
+- **主な変更箇所**:
+  - `simconvoi.cc` — `convoi_t::trade_convoi()` で、所有者変更前に `owner->book_convoi_number(-1)`、
+    変更後に新所有者で `owner->book_convoi_number(1)` を呼ぶ
+  - `player/finance.cc` — `finance_t::rdwr()` で OTRP v63 未満のセーブの当年・当月の `ATC_ALL_CONVOIS` を読み捨てる (`6af88343f`)
+  - `simconvoi.cc` — `convoi_t::rdwr()` で OTRP v63 未満のセーブなら、ロードした編成ごとに `book_convoi_number(1)` で数え直す (`6af88343f`)
+  - `simtool.cc` — `tool_merge_player_t::init()` で編成を移すときに両社の編成数を増減する (`6af88343f`)
+- **詳細**: `6af88343f` のコミット本文の前半は `d0d7ec16e` のブランチ履歴。
+- **取り込み時の注意**:
+  - `d0d7ec16e` はセーブ形式への影響なし (財務統計の値が正しくなるだけ)。2行の追加のみ。
+  - `6af88343f` はファイル形式を変えない。`develop-kasumi` にそのまま当たった。
+    判定が `get_OTRP_version()<63` なので、OTRP v58 の `develop-kasumi` では常に真になり、ロードのたびに数え直す
+    (保存時もこの項目には実際の値ではなく `dummy` を書くが、読むときに使わないので問題ない)。バージョンを上げなくても動く。
+- **develop-kasumi 側コミット**: `a9f1ae415` (`d0d7ec16e`), `1c615ec6e` (`6af88343f`)
+- **備考**: 動作確認 (2026-11-04): MCP で会社統合の前後と、保存して再ロードした後の統計値を編成の実数と比較し、すべて一致した (再ロードで二重に数えていない)。実際のサーバーセーブ (`server13353-network-20261004152026-repaired`、全1451編成) でも全社で一致した。修正前のバイナリとの比較と自動テストの追加はしていない。
+  `6af88343f` の状態確認用の識別子は `simtool.cc` の `merged_player->book_convoi_number`。
+
 ### FIX-15: 車庫の車両名フィルタ文字列のコピー長の誤り
 
 - **分類**: バグ修正
@@ -674,3 +699,26 @@
     航空機の `reversed = false` の分岐だけを当て、FEAT-08 の行は入れていない。
 - **develop-kasumi 側コミット**: `f62fe46a6`
 - **備考**: 状態確認用の識別子は `simconvoi.cc` の `front()->get_waytype()==air_wt  &&  go_same_direction`。
+
+### FIX-25: 発車条件を満たすまで待った編成が、到着時刻を基準にした過去の発車枠を予約してすぐ発車する
+
+- **分類**: バグ修正
+- **状態**: 取り込み済み
+- **概要**: 発車枠を到着時刻から求めていたため、積込や連結などを待っている間に枠が過ぎると、過去の枠を予約して条件が揃った瞬間に発車していた。
+  枠を探す基準を、条件が揃って最初に予約を試みた時刻に変える。
+- **上流コミット**:
+  - `1764fb965` BUG FIX: departure slot booking after waiting for departure conditions (#793)
+- **主な変更箇所**:
+  - `simconvoi.cc` — `can_depart()` の枠の計算を `arrived_time` から `slot_search_time` (`world()->get_ticks()`) に変更
+  - `tests/automated-tests/tests/test_loading_departure_slot.nut` (新規), `tests/automated-tests/all_tests.nut`
+- **詳細**: `arrived_time` は待ち時間の上限・統計・予約の識別のために残す。一度取った枠は `hat_gehalten()` が保持するので、毎ステップ計算し直されることはない。
+- **取り込み時の注意**:
+  - セーブ形式への影響なし。
+  - **`develop-kasumi` では同じ計算を独自に修正しており、そのままでは当たらない** (`e171f922a`「発車枠の計算が符号や 0 によって 1 tick ずれる問題の修正」)。
+    本家は `sint64` と負値の分岐、`develop-kasumi` は `uint32` のラップ計算で、方式が異なる。
+    → 独自の `uint32` の計算を残して、起点の `arrived_time` だけを `slot_search_time` へ置き換えた。
+  - テストのうち `test_departure_slot_allowance_timeout` は FEAT-02 の `WAIT_FOR_OTHER_CONVOY` を使うので除外した。FEAT-02 の取り込み時に戻す (FEAT-02 の「取り込み時の注意」参照)。
+  - 発車タイミングが変わるので、修正の有無が混在するとデシンクする。本番へはバイナリを揃えて入れること。
+- **develop-kasumi 側コミット**: `72fcbf310` (テスト1件を除く)
+- **備考**: 状態確認用の識別子は `simconvoi.cc` の `slot_search_time`。関連: FIX-22 (発車枠の別の不具合)。
+  動作確認 (2026-11-04): 登録した6件はすべて成功。起点を `arrived_time` に戻して比較すると、`after_long_wait` / `wait_timeout` / `coupling_timeout` の3件が失敗する (残り3件は修正の有無によらず成功)。全テストは未実行。
