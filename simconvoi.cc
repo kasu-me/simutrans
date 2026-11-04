@@ -1492,9 +1492,9 @@ bool convoi_t::drive_to()
 				}
 
 				// set next schedule target position if next is a waypoint
-				if(  is_waypoint(schedule->get_current_entry()) && !schedule->at(current_stop).is_reverse_convoi_coupling()  ) {
-					schedule_target = ziel;
-				}
+				// Otherwise this route has no waypoint ahead. A target left from an older route must not stay:
+				// passing over that tile would advance the schedule once more.
+				schedule_target = (  is_waypoint(schedule->get_current_entry()) && !schedule->at(current_stop).is_reverse_convoi_coupling()  ) ? ziel : koord3d::invalid;
 
 				// continue route search until the destination is a station
 				while(  is_waypoint(schedule->get_current_entry()) && !schedule->get_current_entry().is_reverse_convoi_coupling()  ) {

@@ -5705,6 +5705,12 @@ bool air_vehicle_t::find_route_to_stop_position()
 		return true; // already searched with success
 	}
 
+	// A waypoint is still ahead, and the route through it to the stop is already calculated.
+	// Searching the nearest free position would replace that route and skip the waypoint.
+	if(  cnv->get_schedule_target()!=koord3d::invalid  ) {
+		return true;
+	}
+
 	// check for skipping circle
 	route_t *rt=cnv->access_route();
 
