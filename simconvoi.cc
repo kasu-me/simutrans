@@ -4215,18 +4215,24 @@ bool can_depart(convoihandle_t cnv, halthandle_t halt, uint32 arrived_time, uint
 			cnv->set_arrived_time(arrived_time);
 			dbg->warning("can_depart", "%s: arrived time is not registered. replaced to %u", cnv->get_name(), arrived_time);
 		}
+		// Search from the first booking attempt, after all reservation conditions
+		// are satisfied (loading, coupling, or resuming service).
+		// Arrival-based slots may already be long past after waiting for any of these.
+		// Keep arrived_time for waiting limits, statistics and the booking identity;
+		// hat_gehalten() retains the booked slot instead of recalculating it each step.
+		const uint32 slot_search_time = world()->get_ticks();
 		// consider spacing
 		// subtract wait_lock (time_to_load) from spacing_shift
 		const sint64 spacing_shift = (sint64)current_entry.spacing_shift * world()->ticks_per_world_month / world()->get_settings().get_spacing_shift_divisor();
 		// NOTE: Treating spacing as int causes numerical error due to decimal amount.
 		// const sint32 spacing = world()->ticks_per_world_month / current_entry.spacing;
 		const uint64 delay_tolerance = (uint64)current_entry.delay_tolerance * world()->ticks_per_world_month / world()->get_settings().get_spacing_shift_divisor();
-		// slot = (arrived_time - delay_tolerance - spacing_shift) / spacing + 1
+		// slot = (slot_search_time - delay_tolerance - spacing_shift + time_to_load) / spacing + 1
 		// This is calculated in uint32 even if the value wraps around 0. ticks_per_world_month divides 2^32,
 		// so the slots repeat every 2^32 ticks and the wrapped value gives exactly the same slot.
 		// (With a signed value, a negative one is rounded differently and gives a slot 1 tick later.)
-		const uint32 calibrated_arrived_time = arrived_time - (uint32)delay_tolerance - (uint32)spacing_shift + time_to_load;
-		uint64 slot = (uint64)calibrated_arrived_time * current_entry.spacing / world()->ticks_per_world_month + 1;
+		const uint32 calibrated_search_time = slot_search_time - (uint32)delay_tolerance - (uint32)spacing_shift + time_to_load;
+		uint64 slot = (uint64)calibrated_search_time * current_entry.spacing / world()->ticks_per_world_month + 1;
 		// go_on_ticks = slot * spacing + spacing_shift
 		// go_on_ticks=0 means this cannot reserve slot! Use 1 instead also for the booking so that the booked slot can be erased.
 		const auto calc_go_on_ticks = [&](uint64 s) {
