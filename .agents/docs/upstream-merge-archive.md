@@ -432,21 +432,6 @@
 - **develop-kasumi 側コミット**: `6c7b58822`
 - **備考**: 状態確認用の識別子は `simmain.cc` の `check_pakset_checksum`。
 
-### FIX-14: 編成の譲渡で会社ごとの編成数統計が更新されない
-
-- **分類**: バグ修正
-- **状態**: 取り込み済み
-- **概要**: 編成を他社へ譲渡 (`trade_convoi()`) した際に、旧所有者・新所有者の編成数の統計が増減しない問題を修正する。
-- **上流コミット**:
-  - `d0d7ec16e` BUG FIX: convoi count when trade convoi (#760)
-- **主な変更箇所**:
-  - `simconvoi.cc` — `convoi_t::trade_convoi()` で、所有者変更前に `owner->book_convoi_number(-1)`、
-    変更後に新所有者で `owner->book_convoi_number(1)` を呼ぶ
-- **詳細**: —
-- **取り込み時の注意**: セーブ形式への影響なし (財務統計の値が正しくなるだけ)。2行の追加のみ。
-- **develop-kasumi 側コミット**: `a9f1ae415`
-- **備考**: —
-
 ### FIX-15: 車庫の車両名フィルタ文字列のコピー長の誤り
 
 - **分類**: バグ修正
